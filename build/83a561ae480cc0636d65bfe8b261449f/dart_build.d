@@ -1,0 +1,1 @@
+ C:\\Users\\filip\\Desktop\\ATR\\build\\83a561ae480cc0636d65bfe8b261449f\\dart_build_result.json:  C:\\Users\\filip\\Desktop\\ATR\\.dart_tool\\package_config.json C:\\Users\\filip\\Desktop\\ATR\\pubspec.yaml C:\\flutter\\bin\\cache\\dart-sdk\\version c:\\users\\filip\\desktop\\atr\\.dart_tool\\package_config.json

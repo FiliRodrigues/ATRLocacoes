@@ -44,14 +44,36 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
                 if (isCompact) ...[
                   _buildProfile(context, v, isDark),
                   const SizedBox(height: 24),
+                  _buildComplianceHub(context, v, isDark, width),
+                  const SizedBox(height: 24),
+                  _buildAssetIntelligence(context, v, isDark),
+                  const SizedBox(height: 24),
                   _buildMaintenanceHistory(context, v, isDark),
                 ] else ...[
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(flex: 3, child: _buildProfile(context, v, isDark)),
+                      Expanded(
+                        flex: 3, 
+                        child: Column(
+                          children: [
+                            _buildProfile(context, v, isDark),
+                            const SizedBox(height: 24),
+                            _buildComplianceHub(context, v, isDark, width),
+                          ],
+                        )
+                      ),
                       const SizedBox(width: 24),
-                      Expanded(flex: 4, child: _buildMaintenanceHistory(context, v, isDark)),
+                      Expanded(
+                        flex: 4, 
+                        child: Column(
+                          children: [
+                            _buildAssetIntelligence(context, v, isDark),
+                            const SizedBox(height: 24),
+                            _buildMaintenanceHistory(context, v, isDark),
+                          ],
+                        )
+                      ),
                     ],
                   ),
                 ],
@@ -154,25 +176,39 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
   }
 
   Widget _buildKPIs(BuildContext context, VehicleData v, double width) {
-    return Wrap(
-      spacing: 20,
-      runSpacing: 20,
+    if (width < 1100) {
+      return Wrap(
+        spacing: 20,
+        runSpacing: 20,
+        children: [
+          _kpi(context, 'KM Rodados', formatKm(v.kmAtual), '${v.kmPorMes.toInt()} km/mês', LucideIcons.gauge, AppColors.statusInfo, 0, width),
+          _kpi(context, 'Revisões', '${v.totalRevisoes}', 'a cada 10.000 km', LucideIcons.wrench, AppColors.atrOrange, 100, width),
+          _kpi(context, 'Custo Manutenção', formatCurrency(v.custoTotalManutencao), '${v.totalRevisoes} revisões', LucideIcons.receipt, AppColors.statusError, 200, width),
+          _kpi(context, 'Próx. Revisão em', formatKm(v.kmParaProxRevisao), '~${(v.kmParaProxRevisao / v.kmPorMes).toStringAsFixed(1)} meses', LucideIcons.calendarClock, AppColors.statusSuccess, 300, width),
+        ],
+      );
+    }
+
+    return Row(
       children: [
-        _kpi(context, 'KM Rodados', formatKm(v.kmAtual), '${v.kmPorMes.toInt()} km/mês', LucideIcons.gauge, AppColors.statusInfo, 0, width),
-        _kpi(context, 'Revisões', '${v.totalRevisoes}', 'a cada 10.000 km', LucideIcons.wrench, AppColors.atrOrange, 100, width),
-        _kpi(context, 'Custo Manutenção', formatCurrency(v.custoTotalManutencao), '${v.totalRevisoes} revisões', LucideIcons.receipt, AppColors.statusError, 200, width),
-        _kpi(context, 'Próx. Revisão em', formatKm(v.kmParaProxRevisao), '~${(v.kmParaProxRevisao / v.kmPorMes).toStringAsFixed(1)} meses', LucideIcons.calendarClock, AppColors.statusSuccess, 300, width),
+        Expanded(child: _kpi(context, 'KM Rodados', formatKm(v.kmAtual), '${v.kmPorMes.toInt()} km/mês', LucideIcons.gauge, AppColors.statusInfo, 0, width, useExpanded: true)),
+        const SizedBox(width: 20),
+        Expanded(child: _kpi(context, 'Revisões', '${v.totalRevisoes}', 'a cada 10.000 km', LucideIcons.wrench, AppColors.atrOrange, 100, width, useExpanded: true)),
+        const SizedBox(width: 20),
+        Expanded(child: _kpi(context, 'Custo Manutenção', formatCurrency(v.custoTotalManutencao), '${v.totalRevisoes} revisões', LucideIcons.receipt, AppColors.statusError, 200, width, useExpanded: true)),
+        const SizedBox(width: 20),
+        Expanded(child: _kpi(context, 'Próx. Revisão em', formatKm(v.kmParaProxRevisao), '~${(v.kmParaProxRevisao / v.kmPorMes).toStringAsFixed(1)} meses', LucideIcons.calendarClock, AppColors.statusSuccess, 300, width, useExpanded: true)),
       ],
     );
   }
 
-  Widget _kpi(BuildContext context, String title, String value, String sub, IconData icon, Color color, int delay, double width) {
+  Widget _kpi(BuildContext context, String title, String value, String sub, IconData icon, Color color, int delay, double width, {bool useExpanded = false}) {
     double itemWidth = (width - 64 - 60) / 4;
-    if (width < 1200) itemWidth = (width - 64 - 20) / 2;
+    if (width < 1100) itemWidth = (width - 64 - 20) / 2;
     if (width < 600) itemWidth = width - 32;
 
     return SizedBox(
-      width: itemWidth,
+      width: useExpanded ? null : itemWidth,
       child: BentoCard(
         animationDelay: delay,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -336,7 +372,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
                     Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(LucideIcons.calendar, size: 11, color: AppColors.textSecondaryLight),
                       const SizedBox(width: 4),
-                      Text(m.data, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+                      Text(formatDate(m.data), style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
                     ]),
                     Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(LucideIcons.gauge, size: 11, color: AppColors.textSecondaryLight),
@@ -401,6 +437,107 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
           FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: color))),
         ],
       ),
+    );
+  }
+
+  Widget _buildComplianceHub(BuildContext context, VehicleData v, bool isDark, double width) {
+    return BentoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.shieldCheck, color: AppColors.statusSuccess, size: 18),
+              const SizedBox(width: 10),
+              Text('Compliance Hub', style: Theme.of(context).textTheme.titleLarge),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _docRow(context, 'IPVA 2026', v.vencimentoIPVA, isDark),
+          _docRow(context, 'Seguro Auto', v.vencimentoSeguro, isDark),
+          _docRow(context, 'Licenciamento', v.vencimentoLicenciamento, isDark),
+        ],
+      ),
+    );
+  }
+
+  Widget _docRow(BuildContext context, String label, DateTime data, bool isDark) {
+    final hoje = DateTime.now();
+    final dias = data.difference(hoje).inDays;
+    final color = dias < 15 ? AppColors.statusError : (dias < 30 ? AppColors.statusWarning : AppColors.statusSuccess);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+          Text(formatDate(data), style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black54)),
+          const SizedBox(width: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+            child: Text(dias < 0 ? 'Vencido' : (dias == 0 ? 'Vence Hoje' : '$dias dias'), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 10)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssetIntelligence(BuildContext context, VehicleData v, bool isDark) {
+    return BentoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.brainCircuit, color: AppColors.atrOrange, size: 20),
+              const SizedBox(width: 10),
+              Text('Inteligência de Ativos', style: Theme.of(context).textTheme.titleLarge),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              _intelStat(context, 'ROI Real', '${v.roi.toStringAsFixed(1)}%', 'Retorno s/ Investimento'),
+              const SizedBox(width: 24),
+              _intelStat(context, 'Lucro Gerado', formatCurrency(v.lucroAbsoluto), 'Receita - Custos'),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.atrOrange.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.atrOrange.withOpacity(0.1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('ANÁLISE DE SAÚDE OPERACIONAL ATR', style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.atrOrange, fontSize: 10, letterSpacing: 1)),
+                const SizedBox(height: 8),
+                Text(v.sugestaoVenda, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 4),
+                Text(
+                  'Baseado na depreciação acumulada vs custos de manutenção do período.',
+                  style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black45)
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _intelStat(BuildContext context, String label, String value, String sub) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppColors.statusSuccess)),
+        Text(sub, style: const TextStyle(fontSize: 9, color: AppColors.textSecondaryLight)),
+      ],
     );
   }
 }

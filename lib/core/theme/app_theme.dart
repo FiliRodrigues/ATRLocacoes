@@ -14,12 +14,12 @@ class AppTheme {
         surface: AppColors.surfaceLight,
         error: AppColors.statusError,
       ),
-      textTheme: GoogleFonts.plusJakartaSansTextTheme().copyWith(
-        displayLarge: const TextStyle(color: AppColors.textPrimaryLight, fontWeight: FontWeight.w800, fontSize: 32, letterSpacing: -1.2, height: 1.1),
-        titleLarge: const TextStyle(color: AppColors.textPrimaryLight, fontWeight: FontWeight.w700, fontSize: 20, letterSpacing: -0.5),
+      textTheme: GoogleFonts.outfitTextTheme().copyWith(
+        displayLarge: const TextStyle(color: AppColors.textPrimaryLight, fontWeight: FontWeight.w800, fontSize: 32, letterSpacing: -0.5, height: 1.1),
+        titleLarge: const TextStyle(color: AppColors.textPrimaryLight, fontWeight: FontWeight.w700, fontSize: 22, letterSpacing: -0.2),
         titleMedium: const TextStyle(color: AppColors.textPrimaryLight, fontWeight: FontWeight.w600, fontSize: 16),
         bodyLarge: const TextStyle(color: AppColors.textPrimaryLight, fontSize: 16, fontWeight: FontWeight.w500),
-        bodyMedium: const TextStyle(color: AppColors.textSecondaryLight, fontSize: 14, fontWeight: FontWeight.w500),
+        bodyMedium: const TextStyle(color: AppColors.textSecondaryLight, fontSize: 14, fontWeight: FontWeight.w400),
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.backgroundLight,
@@ -61,12 +61,12 @@ class AppTheme {
         surface: AppColors.surfaceDark,
         error: AppColors.statusError,
       ),
-      textTheme: GoogleFonts.plusJakartaSansTextTheme().copyWith(
-        displayLarge: const TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w800, fontSize: 32, letterSpacing: -1.2, height: 1.1),
-        titleLarge: const TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700, fontSize: 20, letterSpacing: -0.5),
+      textTheme: GoogleFonts.outfitTextTheme().copyWith(
+        displayLarge: const TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w800, fontSize: 32, letterSpacing: -0.5, height: 1.1),
+        titleLarge: const TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w700, fontSize: 22, letterSpacing: -0.2),
         titleMedium: const TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.w600, fontSize: 16),
         bodyLarge: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 16, fontWeight: FontWeight.w500),
-        bodyMedium: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 14, fontWeight: FontWeight.w500),
+        bodyMedium: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 14, fontWeight: FontWeight.w400),
       ),
       cardTheme: CardThemeData(
         color: AppColors.surfaceDark,

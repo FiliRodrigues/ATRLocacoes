@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/widgets/app_sidebar.dart';
@@ -19,11 +20,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   String _selectedMonth = 'Abr/26';
 
+  // State caches para performance
+  double lucroMes = 0;
+  double receitaReal = 0;
+  double parcelasReal = 0;
+  double manutencaoMes = 0;
 
   @override
   void initState() {
     super.initState();
+    _updateMetrics();
     _simulateLoading();
+  }
+
+  void _updateMetrics() {
+    final monthsMap = {'Jan': 1, 'Fev': 2, 'Mar': 3, 'Abr': 4};
+    final monthNum = monthsMap[_selectedMonth.split('/').first] ?? 4;
+
+    receitaReal = frota.length * 2000.0;
+    parcelasReal = veiculosFinanciados.fold(0.0, (s, v) => s + (v.financiamento?.valorParcela ?? 0));
+    manutencaoMes = frota.expand((v) => v.manutencoes)
+        .where((m) => m.data.month == monthNum && m.data.year == 2026)
+        .fold(0.0, (s, m) => s + m.custo);
+        
+    lucroMes = receitaReal - parcelasReal - manutencaoMes;
   }
 
   Future<void> _simulateLoading() async {
@@ -34,58 +54,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final alerts = frotaAlertas;
-    final events = proximosEventos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final width = MediaQuery.of(context).size.width;
     final isCompact = width < 1100;
 
     return AppSidebar(
       child: Scaffold(
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(width < 600 ? 16.0 : 32.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(context),
-                const SizedBox(height: 32),
-                
-                if (_isLoading) ...[
-                  _buildLoadingState(width, isCompact)
-                ] else ...[
-                  if (alerts.isNotEmpty) ...[
-                    _buildCompactAlerts(context, alerts),
-                    const SizedBox(height: 24),
-                  ],
-                  _buildMetricsGrid(context, width, isDark, _selectedMonth),
-                  const SizedBox(height: 32),
-                  _buildMainChartCard(context, isDark),
-                  const SizedBox(height: 32),
-                  
-                  // Novos 3 Cards de Eventos Detalhados
-                  if (isCompact) ...[
-                    _buildRevisionCard(context, events, isDark),
-                    const SizedBox(height: 24),
-                    _buildInstallmentCard(context, events, isDark),
-                    const SizedBox(height: 24),
-                    _buildExpensesCard(context, isDark, _selectedMonth),
-                  ] else ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _buildRevisionCard(context, events, isDark)),
-                        const SizedBox(width: 24),
-                        Expanded(child: _buildInstallmentCard(context, events, isDark)),
-                        const SizedBox(width: 24),
-                        Expanded(child: _buildExpensesCard(context, isDark, _selectedMonth)),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: isDark 
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.backgroundDark, AppColors.atrNavyDarker, AppColors.backgroundDark],
+                  stops: const [0, 0.5, 1],
+                )
+              : null,
+            color: isDark ? null : AppColors.backgroundLight,
+          ),
+          child: SafeArea(
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator(color: AppColors.atrOrange))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(context),
+                      const SizedBox(height: 32),
+                      if (alerts.isNotEmpty) ...[
+                        _buildCompactAlerts(context, alerts),
+                        const SizedBox(height: 24),
                       ],
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                  _buildFleetOverview(context, width, isDark),
-                ],
-              ],
-            ),
+                      _buildMetricsGrid(context, width, isDark, _selectedMonth),
+                      const SizedBox(height: 32),
+                      _buildMainChartCard(context, isDark),
+                      const SizedBox(height: 32),
+                      
+                      // Operacional Cards
+                      if (isCompact) ...[
+                        _buildRevisionCard(context, isDark),
+                        const SizedBox(height: 24),
+                        _buildInstallmentCard(context, isDark),
+                        const SizedBox(height: 24),
+                        _buildExpensesCard(context, isDark, _selectedMonth),
+                      ] else ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: _buildRevisionCard(context, isDark)),
+                            const SizedBox(width: 24),
+                            Expanded(child: _buildInstallmentCard(context, isDark)),
+                            const SizedBox(width: 24),
+                            Expanded(child: _buildExpensesCard(context, isDark, _selectedMonth)),
+                          ],
+                        ),
+                      ],
+                      
+                      const SizedBox(height: 32),
+                      _buildFleetOverview(context, width, isDark),
+                    ],
+                  ),
+                ),
           ),
         ),
       ),
@@ -129,7 +159,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         PopupMenuButton<String>(
-          onSelected: (val) => setState(() => _selectedMonth = val),
+          onSelected: (val) {
+            setState(() {
+              _selectedMonth = val;
+              _updateMetrics();
+            });
+          },
           offset: const Offset(0, 45),
           itemBuilder: (ctx) => dadosMensais.where((d) => d.mes.contains('26')).map((d) => PopupMenuItem(value: d.mes, child: Text(d.mes))).toList(),
           child: Container(
@@ -191,19 +226,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMetricsGrid(BuildContext context, double width, bool isDark, String selectedMonth) {
-    // Cálculos Operação Mês Selecionado (Baseado em Dados Reais da Frota)
-    final monthsMap = {'Jan': '01', 'Fev': '02', 'Mar': '03', 'Abr': '04'};
-    final monthPart = selectedMonth.split('/').first;
-    final monthNum = monthsMap[monthPart] ?? '04';
-
-    final receitaReal = frota.length * 2000.0;
-    final parcelasReal = veiculosFinanciados.fold(0.0, (s, v) => s + (v.financiamento?.valorParcela ?? 0));
-    final manutencaoMes = frota.expand((v) => v.manutencoes)
-        .where((m) => m.data.contains('/$monthNum/2026'))
-        .fold(0.0, (s, m) => s + m.custo);
-        
-    final lucroMes = receitaReal - parcelasReal - manutencaoMes;
-    
     return Wrap(
       spacing: 16,
       runSpacing: 16,
@@ -293,13 +315,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: months.map((d) {
                       // Calcula valores reais para o gráfico baseando-se na frota para bater com os KPIs
-                      final monthsMap = {'Jan': '01', 'Fev': '02', 'Mar': '03', 'Abr': '04'};
-                      final mNum = monthsMap[d.mes.split('/').first] ?? '04';
+                      final monthsMap = {'Jan': 1, 'Fev': 2, 'Mar': 3, 'Abr': 4};
+                      final mNum = monthsMap[d.mes.split('/').first] ?? 4;
                       
                       final rMonth = frota.fold(0.0, (s, v) => s + 2000.0); // 4 * 2000 = 8000
                       final fMonth = veiculosFinanciados.fold(0.0, (s, v) => s + (v.financiamento?.valorParcela ?? 0));
                       final mMonth = frota.expand((v) => v.manutencoes)
-                          .where((m) => m.data.contains('/$mNum/2026'))
+                          .where((m) => m.data.month == mNum && m.data.year == 2026)
                           .fold(0.0, (s, m) => s + m.custo);
                       
                       final hRec = (rMonth / maxVal).clamp(0.0, 1.0);
@@ -368,122 +390,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
   }
 
-  Widget _buildRevisionCard(BuildContext context, List<UpcomingEvent> events, bool isDark) {
-    final revisions = events.where((e) => e.tipo == 'maintenance').toList();
-    return BentoCard(
-      height: 300,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            const Icon(LucideIcons.wrench, color: AppColors.atrOrange, size: 18),
-            const SizedBox(width: 10),
-            Text('Próximas Revisões', style: Theme.of(context).textTheme.titleMedium),
-          ]),
-          const SizedBox(height: 20),
-          Expanded(child: ListView.separated(
-            itemCount: revisions.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (ctx, i) {
-              final e = revisions[i];
-              return _eventItem(ctx, e.titulo, e.descricao, e.prazo, AppColors.atrOrange, isDark);
-            },
-          )),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInstallmentCard(BuildContext context, List<UpcomingEvent> events, bool isDark) {
-    final payments = events.where((e) => e.tipo == 'payment').toList();
-    return BentoCard(
-      height: 300,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            const Icon(LucideIcons.landmark, color: AppColors.statusInfo, size: 18),
-            const SizedBox(width: 10),
-            Text('Próximas Parcelas', style: Theme.of(context).textTheme.titleMedium),
-          ]),
-          const SizedBox(height: 20),
-          Expanded(child: ListView.separated(
-            itemCount: payments.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (ctx, i) {
-              final e = payments[i];
-              return _eventItem(ctx, e.titulo, e.descricao, e.prazo, AppColors.statusInfo, isDark);
-            },
-          )),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExpensesCard(BuildContext context, bool isDark, String selectedMonth) {
-    final monthsMap = {'Jan': '01', 'Fev': '02', 'Mar': '03', 'Abr': '04'};
-    final monthPart = selectedMonth.split('/').first;
-    final monthNum = monthsMap[monthPart] ?? '04';
-
-    // Lista de manutenções com referência ao veículo
-    final listItems = frota.expand((v) => v.manutencoes.where((m) => m.data.contains('/$monthNum/2026')).map((m) => {'v': v, 'm': m})).toList();
-
-    return BentoCard(
-      height: 300,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            const Icon(LucideIcons.alertCircle, color: AppColors.statusError, size: 18),
-            const SizedBox(width: 10),
-            Text('Manut. de $selectedMonth', style: Theme.of(context).textTheme.titleMedium),
-          ]),
-          const SizedBox(height: 20),
-          Expanded(child: ListView.separated(
-            itemCount: listItems.isEmpty ? 1 : listItems.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (ctx, i) {
-              if (listItems.isEmpty) return Text('Nenhuma despesa extra lançada em $selectedMonth.', style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black45));
-              final item = listItems[i];
-              final v = item['v'] as VehicleData;
-              final m = item['m'] as MaintenanceEvent;
-              
-              return Row(
-                children: [
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(m.descricao, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                    Text('${m.data} - ${v.placa} (${v.nome})', style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.black54)),
-                  ])),
-                  Text(formatCurrency(m.custo), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.statusError, fontSize: 11)),
-                ],
-              );
-            },
-          )),
-          const Divider(height: 24),
-          Text('+ Lançar despesa em $selectedMonth', style: TextStyle(color: AppColors.statusInfo, fontSize: 10, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-        ],
-      ),
-    );
-  }
-
-  Widget _eventItem(BuildContext context, String title, String desc, String time, Color color, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03), borderRadius: BorderRadius.circular(10)),
-      child: Row(
-        children: [
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-            const SizedBox(height: 2),
-            Text(desc, style: TextStyle(fontSize: 10, color: isDark ? Colors.white60 : Colors.black54)),
-          ])),
-          const SizedBox(width: 10),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)), child: Text(time, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 9))),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFleetOverview(BuildContext context, double width, bool isDark) {
     return BentoCard(
       child: Column(
@@ -515,14 +421,127 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildFleetItem(VehicleData v, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05)),
+  Widget _buildRevisionCard(BuildContext context, bool isDark) {
+    final events = proximosEventos;
+    final revisions = events.where((e) => e.tipo == 'maintenance').toList();
+    return BentoCard(
+      height: 300,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(LucideIcons.wrench, color: AppColors.atrOrange, size: 18),
+            const SizedBox(width: 10),
+            Text('Próximas Revisões', style: Theme.of(context).textTheme.titleMedium),
+          ]),
+          const SizedBox(height: 20),
+          Expanded(child: ListView.separated(
+            itemCount: revisions.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (ctx, i) {
+              final e = revisions[i];
+              return _eventItem(ctx, e.titulo, e.descricao, e.prazo, AppColors.atrOrange, isDark);
+            },
+          )),
+        ],
       ),
+    );
+  }
+
+  Widget _buildInstallmentCard(BuildContext context, bool isDark) {
+    final events = proximosEventos;
+    final payments = events.where((e) => e.tipo == 'payment').toList();
+    return BentoCard(
+      height: 300,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(LucideIcons.landmark, color: AppColors.statusInfo, size: 18),
+            const SizedBox(width: 10),
+            Text('Próximas Parcelas', style: Theme.of(context).textTheme.titleMedium),
+          ]),
+          const SizedBox(height: 20),
+          Expanded(child: ListView.separated(
+            itemCount: payments.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (ctx, i) {
+              final e = payments[i];
+              return _eventItem(ctx, e.titulo, e.descricao, e.prazo, AppColors.statusInfo, isDark);
+            },
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpensesCard(BuildContext context, bool isDark, String selectedMonth) {
+    final monthsMap = {'Jan': 1, 'Fev': 2, 'Mar': 3, 'Abr': 4};
+    final monthPart = selectedMonth.split('/').first;
+    final monthNum = monthsMap[monthPart] ?? 4;
+
+    final listItems = frota.expand((v) => v.manutencoes.where((m) => m.data.month == monthNum && m.data.year == 2026).map((m) => {'v': v, 'm': m})).toList();
+
+    return BentoCard(
+      height: 300,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(LucideIcons.alertCircle, color: AppColors.statusError, size: 18),
+            const SizedBox(width: 10),
+            Text('Manut. de $selectedMonth', style: Theme.of(context).textTheme.titleMedium),
+          ]),
+          const SizedBox(height: 20),
+          Expanded(child: ListView.separated(
+            itemCount: listItems.isEmpty ? 1 : listItems.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (ctx, i) {
+              if (listItems.isEmpty) return Text('Nenhuma despesa extra lançada.', style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black45));
+              final item = listItems[i];
+              final v = item['v'] as VehicleData;
+              final m = item['m'] as MaintenanceEvent;
+              
+              return Row(
+                children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(m.descricao, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                    Text('${formatDate(m.data)} - ${v.placa}', style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.black54)),
+                  ])),
+                  Text(formatCurrency(m.custo), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.statusError, fontSize: 11)),
+                ],
+              );
+            },
+          )),
+          const Divider(height: 24),
+          const Text('+ Lançar despesa', style: TextStyle(color: AppColors.statusInfo, fontSize: 10, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+        ],
+      ),
+    );
+  }
+
+  Widget _eventItem(BuildContext context, String title, String desc, String time, Color color, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03), borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(height: 2),
+            Text(desc, style: TextStyle(fontSize: 10, color: isDark ? Colors.white60 : Colors.black54)),
+          ])),
+          const SizedBox(width: 10),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)), child: Text(time, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 9))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFleetItem(VehicleData v, bool isDark) {
+    return BentoCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      onTap: () => context.go('/vehicles/${v.placa}'),
       child: Column(
         children: [
           Container(
@@ -534,7 +553,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(v.placa, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
           Text(v.nome, style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : AppColors.textSecondaryLight), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 12),
-          StatusBadge(text: v.status, type: BadgeType.success),
+          StatusBadge(
+            text: v.status, 
+            type: v.status == 'EM ROTA' ? BadgeType.success : (v.status == 'EM OFICINA' ? BadgeType.error : BadgeType.warning)
+          ),
         ],
       ),
     );

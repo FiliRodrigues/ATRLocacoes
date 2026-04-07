@@ -189,7 +189,7 @@ class DriversScreen extends StatelessWidget {
                 children: [
                   Text('Vencimento CNH', style: TextStyle(color: AppColors.textSecondaryLight.withOpacity(0.7), fontSize: 10, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(d.vencimentoCNH, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(formatDate(d.vencimentoCNH), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 ],
               ),
               StatusBadge(text: statusLabel, type: bType),

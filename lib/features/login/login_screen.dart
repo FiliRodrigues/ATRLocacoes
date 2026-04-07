@@ -1,9 +1,10 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
+import '../../main.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,7 +18,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   void _login() async {
     setState(() => _loading = true);
     await Future.delayed(const Duration(milliseconds: 800));
-    if (mounted) context.go('/');
+    if (mounted) {
+      context.read<AuthService>().login();
+    }
   }
 
   @override
