@@ -24,32 +24,40 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final width = MediaQuery.of(context).size.width;
+    final isCompact = width < 1100;
 
     return AppSidebar(
       child: Scaffold(
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32.0),
+            padding: EdgeInsets.all(width < 600 ? 16.0 : 32.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildBreadcrumbs(context, v),
                 const SizedBox(height: 8),
-                _buildHeader(context, v),
+                _buildHeader(context, v, width),
                 const SizedBox(height: 32),
-                _buildKPIs(context, v),
+                _buildKPIs(context, v, width),
                 const SizedBox(height: 32),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: _buildProfile(context, v, isDark)),
-                    const SizedBox(width: 24),
-                    Expanded(flex: 4, child: _buildMaintenanceHistory(context, v, isDark)),
-                  ],
-                ),
+                if (isCompact) ...[
+                  _buildProfile(context, v, isDark),
+                  const SizedBox(height: 24),
+                  _buildMaintenanceHistory(context, v, isDark),
+                ] else ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 3, child: _buildProfile(context, v, isDark)),
+                      const SizedBox(width: 24),
+                      Expanded(flex: 4, child: _buildMaintenanceHistory(context, v, isDark)),
+                    ],
+                  ),
+                ],
                 if (v.isFinanciado) ...[
                   const SizedBox(height: 32),
-                  _buildFinancingCard(context, v, isDark),
+                  _buildFinancingCard(context, v, isDark, width),
                 ],
               ],
             ),
@@ -71,7 +79,8 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, VehicleData v) {
+  Widget _buildHeader(BuildContext context, VehicleData v, double width) {
+    final isMobile = width < 600;
     return Row(
       children: [
         Container(
@@ -87,8 +96,8 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                Flexible(child: Text(v.nome, style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24))),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Flexible(child: Text(v.nome, style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: isMobile ? 20 : 24), overflow: TextOverflow.ellipsis)),
                 const SizedBox(width: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -97,7 +106,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
                 ),
               ]),
               const SizedBox(height: 4),
-              Row(children: [
+              Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(LucideIcons.user, size: 13, color: AppColors.textSecondaryLight),
                 const SizedBox(width: 4),
                 Text(v.motorista, style: Theme.of(context).textTheme.bodyMedium),
@@ -109,10 +118,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
             ],
           ),
         ),
-        
-        // Interactive Status Badge (Item 8)
         _buildStatusSelector(context, v),
-
         if (v.isFinanciado) ...[
           const SizedBox(width: 12),
           const StatusBadge(text: 'FINANCIADO', type: BadgeType.info),
@@ -147,31 +153,35 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
      );
   }
 
-  Widget _buildKPIs(BuildContext context, VehicleData v) {
-    return Row(
+  Widget _buildKPIs(BuildContext context, VehicleData v, double width) {
+    return Wrap(
+      spacing: 20,
+      runSpacing: 20,
       children: [
-        _kpi(context, 'KM Rodados', formatKm(v.kmAtual), '${v.kmPorMes.toInt()} km/mês', LucideIcons.gauge, AppColors.statusInfo, 0),
-        const SizedBox(width: 20),
-        _kpi(context, 'Revisões', '${v.totalRevisoes}', 'a cada 10.000 km', LucideIcons.wrench, AppColors.atrOrange, 100),
-        const SizedBox(width: 20),
-        _kpi(context, 'Custo Manutenção', formatCurrency(v.custoTotalManutencao), '${v.totalRevisoes} revisões', LucideIcons.receipt, AppColors.statusError, 200),
-        const SizedBox(width: 20),
-        _kpi(context, 'Próx. Revisão em', formatKm(v.kmParaProxRevisao), '~${(v.kmParaProxRevisao / v.kmPorMes).toStringAsFixed(1)} meses', LucideIcons.calendarClock, AppColors.statusSuccess, 300),
+        _kpi(context, 'KM Rodados', formatKm(v.kmAtual), '${v.kmPorMes.toInt()} km/mês', LucideIcons.gauge, AppColors.statusInfo, 0, width),
+        _kpi(context, 'Revisões', '${v.totalRevisoes}', 'a cada 10.000 km', LucideIcons.wrench, AppColors.atrOrange, 100, width),
+        _kpi(context, 'Custo Manutenção', formatCurrency(v.custoTotalManutencao), '${v.totalRevisoes} revisões', LucideIcons.receipt, AppColors.statusError, 200, width),
+        _kpi(context, 'Próx. Revisão em', formatKm(v.kmParaProxRevisao), '~${(v.kmParaProxRevisao / v.kmPorMes).toStringAsFixed(1)} meses', LucideIcons.calendarClock, AppColors.statusSuccess, 300, width),
       ],
     );
   }
 
-  Widget _kpi(BuildContext context, String title, String value, String sub, IconData icon, Color color, int delay) {
-    return Expanded(
+  Widget _kpi(BuildContext context, String title, String value, String sub, IconData icon, Color color, int delay, double width) {
+    double itemWidth = (width - 64 - 60) / 4;
+    if (width < 1200) itemWidth = (width - 64 - 20) / 2;
+    if (width < 600) itemWidth = width - 32;
+
+    return SizedBox(
+      width: itemWidth,
       child: BentoCard(
         animationDelay: delay,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Flexible(child: Text(title, style: Theme.of(context).textTheme.bodyMedium)),
+            Flexible(child: Text(title, style: Theme.of(context).textTheme.bodyMedium, overflow: TextOverflow.ellipsis)),
             Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 18)),
           ]),
           const SizedBox(height: 12),
-          Text(value, style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24, color: color)),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24, color: color))),
           const SizedBox(height: 4),
           Text(sub, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
         ]),
@@ -317,27 +327,35 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(m.descricao, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13)),
+                Text(m.descricao, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 1),
                 const SizedBox(height: 4),
-                Row(children: [
-                  Icon(LucideIcons.calendar, size: 11, color: AppColors.textSecondaryLight),
-                  const SizedBox(width: 4),
-                  Text(m.data, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
-                  const SizedBox(width: 12),
-                  Icon(LucideIcons.gauge, size: 11, color: AppColors.textSecondaryLight),
-                  const SizedBox(width: 4),
-                  Text('${m.kmNoServico.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (mt) => '${mt[1]}.')} km', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
-                ]),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: [
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(LucideIcons.calendar, size: 11, color: AppColors.textSecondaryLight),
+                      const SizedBox(width: 4),
+                      Text(m.data, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+                    ]),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(LucideIcons.gauge, size: 11, color: AppColors.textSecondaryLight),
+                      const SizedBox(width: 4),
+                      Text('${m.kmNoServico.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (mt) => '${mt[1]}.')} km', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+                    ]),
+                  ],
+                ),
               ],
             ),
           ),
+          const SizedBox(width: 12),
           Text(formatCurrency(m.custo), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.statusError)),
         ],
       ),
     );
   }
 
-  Widget _buildFinancingCard(BuildContext context, VehicleData v, bool isDark) {
+  Widget _buildFinancingCard(BuildContext context, VehicleData v, bool isDark, double width) {
     final f = v.financiamento!;
     return BentoCard(
       animationDelay: 600,
@@ -347,19 +365,21 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Resumo do Financiamento', style: Theme.of(context).textTheme.titleLarge),
+              Flexible(child: Text('Resumo do Financiamento', style: Theme.of(context).textTheme.titleLarge, overflow: TextOverflow.ellipsis)),
               StatusBadge(text: '${(f.progressoFinanciamento * 100).toStringAsFixed(0)}% QUITADO', type: f.progressoFinanciamento > 0.7 ? BadgeType.success : BadgeType.info),
             ],
           ),
           const SizedBox(height: 24),
-          Row(
+          Wrap(
+            spacing: 20,
+            runSpacing: 20,
             children: [
-              _finStat(context, 'Valor Total', formatCurrency(f.valorTotal), AppColors.textSecondaryLight),
-              _finStat(context, 'Entrada', formatCurrency(f.valorEntrada), AppColors.statusWarning),
-              _finStat(context, 'Parcela (Price)', formatCurrency(f.valorParcela), AppColors.statusError),
-              _finStat(context, 'Pagas', '${f.parcelasPagas}/${f.totalParcelas}', AppColors.statusSuccess),
-              _finStat(context, 'Falta Pagar', formatCurrency(f.totalRestante), AppColors.statusWarning),
-              _finStat(context, 'Juros Total', formatCurrency(f.totalJuros), AppColors.statusError),
+              _finStat(context, 'Valor Total', formatCurrency(f.valorTotal), AppColors.textSecondaryLight, width),
+              _finStat(context, 'Entrada', formatCurrency(f.valorEntrada), AppColors.statusWarning, width),
+              _finStat(context, 'Parcela (Price)', formatCurrency(f.valorParcela), AppColors.statusError, width),
+              _finStat(context, 'Pagas', '${f.parcelasPagas}/${f.totalParcelas}', AppColors.statusSuccess, width),
+              _finStat(context, 'Falta Pagar', formatCurrency(f.totalRestante), AppColors.statusWarning, width),
+              _finStat(context, 'Juros Total', formatCurrency(f.totalJuros), AppColors.statusError, width),
             ],
           ),
         ],
@@ -367,13 +387,18 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
     );
   }
 
-  Widget _finStat(BuildContext context, String label, String value, Color color) {
-    return Expanded(
+  Widget _finStat(BuildContext context, String label, String value, Color color, double width) {
+    double itemWidth = (width - 64 - 100) / 6;
+    if (width < 1200) itemWidth = (width - 64 - 40) / 3;
+    if (width < 600) itemWidth = (width - 64 - 20) / 2;
+
+    return SizedBox(
+      width: itemWidth,
       child: Column(
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11)),
+          Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11), textAlign: TextAlign.center),
           const SizedBox(height: 6),
-          Text(value, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: color)),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: color))),
         ],
       ),
     );
