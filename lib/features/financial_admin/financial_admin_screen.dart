@@ -8,9 +8,35 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/data/fleet_data.dart';
 
-class FinancialAdminScreen extends StatelessWidget {
+class FinancialAdminScreen extends StatefulWidget {
   final int? vehicleIndex;
   const FinancialAdminScreen({super.key, this.vehicleIndex});
+
+  @override
+  State<FinancialAdminScreen> createState() => _FinancialAdminScreenState();
+}
+
+class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
+  double totalPago = 0, totalRestante = 0, totalManut = 0, totalRecebido = 0, lucroLiquido = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _calculateTotals();
+  }
+
+  void _calculateTotals() {
+    final financiados = veiculosFinanciados;
+    totalPago = 0; totalRestante = 0; totalManut = 0; totalRecebido = 0;
+    for (final v in financiados) {
+      final f = v.financiamento!;
+      totalPago += f.totalPago + f.valorEntrada;
+      totalRestante += f.totalRestante;
+      totalRecebido += f.recebimentoMensal * f.parcelasPagas;
+    }
+    for (final v in frota) { totalManut += v.custoTotalManutencao; }
+    lucroLiquido = totalRecebido - totalPago - totalManut;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,9 +44,16 @@ class FinancialAdminScreen extends StatelessWidget {
     return AppSidebar(
       child: Scaffold(
         body: SafeArea(
-          child: vehicleIndex == null
-            ? _ListView(financiados: financiados)
-            : _DetailView(veiculo: financiados[vehicleIndex!.clamp(0, financiados.length - 1)]),
+          child: widget.vehicleIndex == null
+            ? _ListView(
+                financiados: financiados,
+                totalPago: totalPago,
+                totalRestante: totalRestante,
+                totalManut: totalManut,
+                totalRecebido: totalRecebido,
+                lucroLiquido: lucroLiquido,
+              )
+            : _DetailView(veiculo: financiados[widget.vehicleIndex!.clamp(0, financiados.length - 1)]),
         ),
       ),
     );
@@ -33,7 +66,20 @@ class FinancialAdminScreen extends StatelessWidget {
 
 class _ListView extends StatelessWidget {
   final List<VehicleData> financiados;
-  const _ListView({required this.financiados});
+  final double totalPago;
+  final double totalRestante;
+  final double totalManut;
+  final double totalRecebido;
+  final double lucroLiquido;
+
+  const _ListView({
+    required this.financiados,
+    required this.totalPago,
+    required this.totalRestante,
+    required this.totalManut,
+    required this.totalRecebido,
+    required this.lucroLiquido,
+  });
 
   void _showMaintenanceModal(BuildContext context) {
     // Coleta TODAS as manutenções de TODOS os veículos
@@ -43,15 +89,11 @@ class _ListView extends StatelessWidget {
         allEvents.add({'veiculo': v.nome, 'placa': v.placa, 'cor': v.cor1, 'evento': m});
       }
     }
-    // Ordena por data (mais recente primeiro)  parse simples dd/mm/yyyy
+    // Ordena por data (mais recente primeiro)
     allEvents.sort((a, b) {
       final ea = a['evento'] as MaintenanceEvent;
       final eb = b['evento'] as MaintenanceEvent;
-      final pa = ea.data.split('/');
-      final pb = eb.data.split('/');
-      final da = DateTime(int.parse(pa[2]), int.parse(pa[1]), int.parse(pa[0]));
-      final db = DateTime(int.parse(pb[2]), int.parse(pb[1]), int.parse(pb[0]));
-      return db.compareTo(da);
+      return eb.data.compareTo(ea.data);
     });
 
     showDialog(
@@ -97,7 +139,7 @@ class _ListView extends StatelessWidget {
                             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Text(m.descricao, style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontSize: 13)),
                               const SizedBox(height: 2),
-                              Text('${item['placa']} - ${m.data} - ${formatKm(m.kmNoServico.toDouble())}', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 11)),
+                              Text('${item['placa']} - ${formatDate(m.data)} - ${formatKm(m.kmNoServico.toDouble())}', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 11)),
                             ])),
                             Text(formatCurrency(m.custo), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.statusError)),
                           ]),
@@ -126,16 +168,6 @@ class _ListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    double totalPago = 0, totalRestante = 0, totalManut = 0, totalRecebido = 0;
-    for (final v in financiados) {
-      final f = v.financiamento!;
-      totalPago += f.totalPago + f.valorEntrada;
-      totalRestante += f.totalRestante;
-      totalRecebido += f.recebimentoMensal * f.parcelasPagas;
-    }
-    for (final v in frota) { totalManut += v.custoTotalManutencao; }
-    final lucroLiquido = totalRecebido - totalPago - totalManut;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
@@ -606,7 +638,7 @@ class _DetailViewState extends State<_DetailView> {
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(m.descricao, style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontSize: 12)),
                   const SizedBox(height: 2),
-                  Text('${m.data} - ${m.kmNoServico.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (mt) => '${mt[1]}.')} km', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 11)),
+                  Text('${formatDate(m.data)} - ${m.kmNoServico.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (mt) => '${mt[1]}.')} km', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 11)),
                 ])),
                 Text(formatCurrency(m.custo), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.statusError)),
               ]),

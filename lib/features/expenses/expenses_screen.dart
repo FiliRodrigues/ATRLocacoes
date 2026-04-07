@@ -30,7 +30,7 @@ class ExpensesScreen extends StatelessWidget {
     for (final v in frota) {
       for (final m in v.manutencoes) {
         despesas.add(ExpenseItem(
-          data: m.data,
+          data: formatDate(m.data),
           tipo: m.tipo,
           veiculo: v.placa,
           motorista: v.motorista,

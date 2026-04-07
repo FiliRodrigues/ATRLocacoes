@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_colors.dart';
@@ -36,8 +37,8 @@ class _BentoCardState extends State<BentoCard> {
         : (isDark ? AppColors.borderDark : AppColors.borderLight);
 
     final surfaceColor = _isHovering
-        ? (isDark ? AppColors.surfaceHoverDark : AppColors.surfaceHoverLight)
-        : (isDark ? AppColors.surfaceDark : AppColors.surfaceLight);
+        ? (isDark ? AppColors.surfaceHoverDark.withOpacity(0.4) : AppColors.surfaceHoverLight.withOpacity(0.6))
+        : (isDark ? AppColors.surfaceDark.withOpacity(0.3) : AppColors.surfaceLight.withOpacity(0.5));
 
     // Otimização: Uso de RepaintBoundary isola o card do restante da árvore durante o build do hover.
     final card = RepaintBoundary(
@@ -48,36 +49,47 @@ class _BentoCardState extends State<BentoCard> {
         child: GestureDetector(
           onTap: widget.onTap,
           child: AnimatedScale(
-            scale: _isHovering ? 1.008 : 1.0, // Scale mais sutil para Web
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-              width: widget.width,
-              height: widget.height,
-              padding: widget.padding,
-              decoration: BoxDecoration(
-                color: surfaceColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: borderColor, width: _isHovering ? 1.5 : 1),
-                boxShadow: [
-                  // Sombras otimizadas com menos blur
-                  if (_isHovering)
-                    BoxShadow(
-                      color: AppColors.atrOrange.withValues(alpha: isDark ? 0.08 : 0.04),
-                      blurRadius: 16,
-                      spreadRadius: -2,
-                    ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.02),
-                    blurRadius: 4,
+          scale: _isHovering ? 1.015 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                width: widget.width,
+                height: widget.height,
+                padding: widget.padding,
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: _isHovering 
+                      ? AppColors.atrOrange.withOpacity(0.4) 
+                      : (isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05)), 
+                    width: _isHovering ? 1.5 : 1
                   ),
-                ],
+                  boxShadow: [
+                    if (_isHovering)
+                      BoxShadow(
+                        color: AppColors.atrOrange.withOpacity(0.12),
+                        blurRadius: 28,
+                        spreadRadius: 2,
+                      ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: widget.child,
               ),
-              child: widget.child,
             ),
           ),
+        ),
         ),
       ),
     );
