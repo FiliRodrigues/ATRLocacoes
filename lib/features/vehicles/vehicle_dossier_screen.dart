@@ -1,0 +1,381 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import '../../core/widgets/app_sidebar.dart';
+import '../../core/widgets/bento_card.dart';
+import '../../core/widgets/status_badge.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/data/fleet_data.dart';
+
+class VehicleDossierScreen extends StatefulWidget {
+  final String plateId;
+  const VehicleDossierScreen({super.key, required this.plateId});
+
+  @override
+  State<VehicleDossierScreen> createState() => _VehicleDossierScreenState();
+}
+
+class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final v = getVehicleByPlate(widget.plateId);
+    if (v == null) {
+      return AppSidebar(child: Scaffold(body: Center(child: Text('Veículo ${widget.plateId} não encontrado'))));
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return AppSidebar(
+      child: Scaffold(
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildBreadcrumbs(context, v),
+                const SizedBox(height: 8),
+                _buildHeader(context, v),
+                const SizedBox(height: 32),
+                _buildKPIs(context, v),
+                const SizedBox(height: 32),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: _buildProfile(context, v, isDark)),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 4, child: _buildMaintenanceHistory(context, v, isDark)),
+                  ],
+                ),
+                if (v.isFinanciado) ...[
+                  const SizedBox(height: 32),
+                  _buildFinancingCard(context, v, isDark),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBreadcrumbs(BuildContext context, VehicleData v) {
+    return Row(
+      children: [
+        Text('Home', style: TextStyle(color: AppColors.textSecondaryLight.withOpacity(0.6), fontSize: 12)),
+        Icon(LucideIcons.chevronRight, size: 12, color: AppColors.textSecondaryLight.withOpacity(0.4)),
+        Text('Veículos', style: TextStyle(color: AppColors.textSecondaryLight.withOpacity(0.6), fontSize: 12)),
+        Icon(LucideIcons.chevronRight, size: 12, color: AppColors.textSecondaryLight.withOpacity(0.4)),
+        Text(v.placa, style: const TextStyle(color: AppColors.atrOrange, fontSize: 12, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, VehicleData v) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [v.cor1, v.cor2]),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Icon(LucideIcons.car, color: Colors.white, size: 22),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Flexible(child: Text(v.nome, style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24))),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: Theme.of(context).dividerTheme.color!)),
+                  child: Text(v.placa, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, letterSpacing: 1)),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Row(children: [
+                Icon(LucideIcons.user, size: 13, color: AppColors.textSecondaryLight),
+                const SizedBox(width: 4),
+                Text(v.motorista, style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(width: 16),
+                Icon(LucideIcons.gauge, size: 13, color: AppColors.textSecondaryLight),
+                const SizedBox(width: 4),
+                Text(formatKm(v.kmAtual), style: Theme.of(context).textTheme.bodyMedium),
+              ]),
+            ],
+          ),
+        ),
+        
+        // Interactive Status Badge (Item 8)
+        _buildStatusSelector(context, v),
+
+        if (v.isFinanciado) ...[
+          const SizedBox(width: 12),
+          const StatusBadge(text: 'FINANCIADO', type: BadgeType.info),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStatusSelector(BuildContext context, VehicleData v) {
+     return PopupMenuButton<String>(
+       onSelected: (String status) {
+         setState(() {
+           v.status = status;
+         });
+       },
+       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+       itemBuilder: (BuildContext context) {
+         return statusOptions.map((String choice) {
+           return PopupMenuItem<String>(
+             value: choice,
+             child: Text(choice, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+           );
+         }).toList();
+       },
+       child: MouseRegion(
+         cursor: SystemMouseCursors.click,
+         child: StatusBadge(
+           text: v.status, 
+           type: v.status == 'EM ROTA' ? BadgeType.success : (v.status == 'EM OFICINA' ? BadgeType.error : BadgeType.warning)
+         ),
+       ),
+     );
+  }
+
+  Widget _buildKPIs(BuildContext context, VehicleData v) {
+    return Row(
+      children: [
+        _kpi(context, 'KM Rodados', formatKm(v.kmAtual), '${v.kmPorMes.toInt()} km/mês', LucideIcons.gauge, AppColors.statusInfo, 0),
+        const SizedBox(width: 20),
+        _kpi(context, 'Revisões', '${v.totalRevisoes}', 'a cada 10.000 km', LucideIcons.wrench, AppColors.atrOrange, 100),
+        const SizedBox(width: 20),
+        _kpi(context, 'Custo Manutenção', formatCurrency(v.custoTotalManutencao), '${v.totalRevisoes} revisões', LucideIcons.receipt, AppColors.statusError, 200),
+        const SizedBox(width: 20),
+        _kpi(context, 'Próx. Revisão em', formatKm(v.kmParaProxRevisao), '~${(v.kmParaProxRevisao / v.kmPorMes).toStringAsFixed(1)} meses', LucideIcons.calendarClock, AppColors.statusSuccess, 300),
+      ],
+    );
+  }
+
+  Widget _kpi(BuildContext context, String title, String value, String sub, IconData icon, Color color, int delay) {
+    return Expanded(
+      child: BentoCard(
+        animationDelay: delay,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Flexible(child: Text(title, style: Theme.of(context).textTheme.bodyMedium)),
+            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 18)),
+          ]),
+          const SizedBox(height: 12),
+          Text(value, style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24, color: color)),
+          const SizedBox(height: 4),
+          Text(sub, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildProfile(BuildContext context, VehicleData v, bool isDark) {
+    return BentoCard(
+      animationDelay: 400,
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          Container(
+            height: 200,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              gradient: v.imagemAsset == null ? LinearGradient(colors: [v.cor1, v.cor2], begin: Alignment.topLeft, end: Alignment.bottomRight) : null,
+              image: v.imagemAsset != null ? DecorationImage(image: AssetImage(v.imagemAsset!), fit: BoxFit.cover) : null,
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                  colors: [isDark ? AppColors.surfaceDark : AppColors.surfaceLight, Colors.transparent],
+                  stops: const [0.0, 0.6],
+                ),
+              ),
+              alignment: Alignment.bottomLeft,
+              padding: const EdgeInsets.all(24),
+              child: v.imagemAsset == null
+                  ? Icon(LucideIcons.car, size: 48, color: Colors.white.withOpacity(0.5))
+                  : null,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(children: [
+              _profileRow(context, 'Veículo', v.nome),
+              _profileRow(context, 'Placa', v.placa),
+              _profileRow(context, 'Motorista', v.motorista),
+              _profileRow(context, 'Telefone', v.telefoneMotorista),
+              _profileRow(context, 'KM Atual', formatKm(v.kmAtual)),
+              _profileRow(context, 'Meses em Serviço', '${v.mesesEmServico} meses'),
+              _profileRow(context, 'Custo Total Manut.', formatCurrency(v.custoTotalManutencao)),
+              if (v.isFinanciado) ...[
+                const SizedBox(height: 8),
+                Divider(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                const SizedBox(height: 8),
+                _profileRow(context, 'Financiado', 'Sim - ${v.financiamento!.totalParcelas}x'),
+                _profileRow(context, 'Parcela', formatCurrency(v.financiamento!.valorParcela)),
+                _profileRow(context, 'Progresso', '${(v.financiamento!.progressoFinanciamento * 100).toStringAsFixed(0)}%'),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final idx = veiculosFinanciados.indexWhere((fv) => fv.placa == v.placa);
+                      if (idx >= 0) context.go('/financial-admin/$idx');
+                    },
+                    icon: const Icon(LucideIcons.landmark, size: 16),
+                    label: const Text('Ver Financiamento'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.atrOrange,
+                      side: BorderSide(color: AppColors.atrOrange.withOpacity(0.3)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          Flexible(child: Text(value, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMaintenanceHistory(BuildContext context, VehicleData v, bool isDark) {
+    return BentoCard(
+      animationDelay: 500,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Histórico de Manutenções', style: Theme.of(context).textTheme.titleLarge),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(color: AppColors.atrOrange.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: Text('${v.totalRevisoes} revisões | ${formatCurrency(v.custoTotalManutencao)}', style: TextStyle(color: AppColors.atrOrange, fontSize: 11, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          ...v.manutencoes.reversed.map((m) => _buildMaintenanceItem(context, m, isDark)),
+          if (v.manutencoes.isEmpty)
+            Center(child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Text('Nenhuma manutenção registrada', style: Theme.of(context).textTheme.bodyMedium),
+            )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMaintenanceItem(BuildContext context, MaintenanceEvent m, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceElevatedDark : AppColors.backgroundLight,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.atrOrange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(LucideIcons.wrench, size: 16, color: AppColors.atrOrange),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(m.descricao, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 13)),
+                const SizedBox(height: 4),
+                Row(children: [
+                  Icon(LucideIcons.calendar, size: 11, color: AppColors.textSecondaryLight),
+                  const SizedBox(width: 4),
+                  Text(m.data, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+                  const SizedBox(width: 12),
+                  Icon(LucideIcons.gauge, size: 11, color: AppColors.textSecondaryLight),
+                  const SizedBox(width: 4),
+                  Text('${m.kmNoServico.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (mt) => '${mt[1]}.')} km', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12)),
+                ]),
+              ],
+            ),
+          ),
+          Text(formatCurrency(m.custo), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.statusError)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinancingCard(BuildContext context, VehicleData v, bool isDark) {
+    final f = v.financiamento!;
+    return BentoCard(
+      animationDelay: 600,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Resumo do Financiamento', style: Theme.of(context).textTheme.titleLarge),
+              StatusBadge(text: '${(f.progressoFinanciamento * 100).toStringAsFixed(0)}% QUITADO', type: f.progressoFinanciamento > 0.7 ? BadgeType.success : BadgeType.info),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              _finStat(context, 'Valor Total', formatCurrency(f.valorTotal), AppColors.textSecondaryLight),
+              _finStat(context, 'Entrada', formatCurrency(f.valorEntrada), AppColors.statusWarning),
+              _finStat(context, 'Parcela (Price)', formatCurrency(f.valorParcela), AppColors.statusError),
+              _finStat(context, 'Pagas', '${f.parcelasPagas}/${f.totalParcelas}', AppColors.statusSuccess),
+              _finStat(context, 'Falta Pagar', formatCurrency(f.totalRestante), AppColors.statusWarning),
+              _finStat(context, 'Juros Total', formatCurrency(f.totalJuros), AppColors.statusError),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _finStat(BuildContext context, String label, String value, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11)),
+          const SizedBox(height: 6),
+          Text(value, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: color)),
+        ],
+      ),
+    );
+  }
+}
