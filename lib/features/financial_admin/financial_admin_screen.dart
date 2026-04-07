@@ -27,9 +27,9 @@ class FinancialAdminScreen extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════
+// 
 // LISTA
-// ═══════════════════════════════════════════════════════
+// 
 
 class _ListView extends StatelessWidget {
   final List<VehicleData> financiados;
@@ -43,7 +43,7 @@ class _ListView extends StatelessWidget {
         allEvents.add({'veiculo': v.nome, 'placa': v.placa, 'cor': v.cor1, 'evento': m});
       }
     }
-    // Ordena por data (mais recente primeiro) — parse simples dd/mm/yyyy
+    // Ordena por data (mais recente primeiro)  parse simples dd/mm/yyyy
     allEvents.sort((a, b) {
       final ea = a['evento'] as MaintenanceEvent;
       final eb = b['evento'] as MaintenanceEvent;
@@ -76,7 +76,7 @@ class _ListView extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text('${allEvents.length} registros • ${frota.length} veículos', style: Theme.of(ctx).textTheme.bodyMedium),
+                  Text('${allEvents.length} registros - ${frota.length} veículos', style: Theme.of(ctx).textTheme.bodyMedium),
                   const SizedBox(height: 16),
                   Expanded(
                     child: ListView.builder(
@@ -97,7 +97,7 @@ class _ListView extends StatelessWidget {
                             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Text(m.descricao, style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontSize: 13)),
                               const SizedBox(height: 2),
-                              Text('${item['placa']} • ${m.data} • ${formatKm(m.kmNoServico.toDouble())}', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 11)),
+                              Text('${item['placa']} - ${m.data} - ${formatKm(m.kmNoServico.toDouble())}', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 11)),
                             ])),
                             Text(formatCurrency(m.custo), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.statusError)),
                           ]),
@@ -127,82 +127,165 @@ class _ListView extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    double totalPago = 0, totalRestante = 0, totalManut = 0;
+    double totalPago = 0, totalRestante = 0, totalManut = 0, totalRecebido = 0;
     for (final v in financiados) {
       final f = v.financiamento!;
       totalPago += f.totalPago + f.valorEntrada;
       totalRestante += f.totalRestante;
+      totalRecebido += f.recebimentoMensal * f.parcelasPagas;
     }
     for (final v in frota) { totalManut += v.custoTotalManutencao; }
+    final lucroLiquido = totalRecebido - totalPago - totalManut;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Adm Financeiro', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28)),
-              const SizedBox(height: 4),
-              Text('Financiamentos, receitas e manutenção da frota.', style: Theme.of(context).textTheme.bodyMedium),
-            ])),
-          ]),
-          const SizedBox(height: 32),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Adm Financeiro', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28)),
+                const SizedBox(height: 4),
+                Text('Financiamentos, receitas e manutenção da frota.', style: Theme.of(context).textTheme.bodyMedium),
+              ])),
+            ]),
+            const SizedBox(height: 32),
 
-          // KPIs — todos clicáveis/flutuantes
-          Row(children: [
-            _kpi(context, 'Financiados', '${financiados.length}', 'em andamento', LucideIcons.car, AppColors.statusInfo, 0),
-            const SizedBox(width: 20),
-            _kpi(context, 'Total Pago', formatCurrency(totalPago), 'entrada + parcelas', LucideIcons.checkCircle, AppColors.statusSuccess, 80),
-            const SizedBox(width: 20),
-            _kpi(context, 'Falta Pagar', formatCurrency(totalRestante), 'parcelas restantes', LucideIcons.clock, AppColors.statusWarning, 160),
-            const SizedBox(width: 20),
-            _kpiClickable(context, 'Manutenção Frota', formatCurrency(totalManut), '${frota.length} veículos', LucideIcons.wrench, AppColors.statusError, 240),
-          ]),
-          const SizedBox(height: 32),
+            // KPIs  todos clicáveis/flutuantes
+            Wrap(spacing: 12, runSpacing: 12, children: [
+              _kpi(context, 'Financiados', '${financiados.length}', 'em andamento', LucideIcons.car, AppColors.statusInfo, 0, width),
+              _kpi(context, 'Total Pago', formatCurrency(totalPago), 'entrada + parcelas', LucideIcons.checkCircle, AppColors.statusSuccess, 80, width),
+              _kpi(context, 'Falta Pagar', formatCurrency(totalRestante), 'parcelas restantes', LucideIcons.clock, AppColors.statusWarning, 160, width),
+              _kpiClickable(context, 'Manutenção Frota', formatCurrency(totalManut), '${frota.length} veículos', LucideIcons.wrench, AppColors.statusError, 240, width),
+              _kpi(context, 'Total Recebido', formatCurrency(totalRecebido), 'desde início das locações', LucideIcons.wallet, AppColors.statusInfo, 320, width),
+              _kpi(context, lucroLiquido >= 0 ? 'Lucro Líquido' : 'Prejuízo', formatCurrency(lucroLiquido), 'recebido - parcelas - manutenção', lucroLiquido >= 0 ? LucideIcons.trendingUp : LucideIcons.trendingDown, lucroLiquido >= 0 ? AppColors.statusSuccess : AppColors.statusError, 400, width),
+            ]),
+            const SizedBox(height: 32),
 
           Text('Veículos Financiados', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 16),
-          ...financiados.asMap().entries.map((e) => Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: _vehicleRow(context, e.value, e.key, isDark),
-          )),
+          Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: financiados.asMap().entries.map((e) {
+              double itemWidth = (width - ((4 - 1) * 16)) / 4;
+              if (width < 1200) itemWidth = (width - 16) / 3;
+              if (width < 900) itemWidth = (width - 16) / 2;
+              if (width < 600) itemWidth = width;
+              return SizedBox(width: itemWidth, child: _vehicleCard(context, e.value, e.key, isDark));
+            }).toList(),
+          ),
           const SizedBox(height: 32),
           _maintenanceTable(context, isDark),
+        ],
+      );
+      }),
+    );
+  }
+
+  Widget _kpi(BuildContext ctx, String title, String value, String sub, IconData icon, Color color, int delay, double width) {
+    double itemWidth = (width - 80) / 6;
+    if (width < 1300) itemWidth = (width - 80) / 4;
+    if (width < 900) itemWidth = (width - 40) / 3;
+    if (width < 700) itemWidth = (width - 20) / 2;
+    if (width < 450) itemWidth = width;
+
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
+    return SizedBox(width: itemWidth, child: BentoCard(animationDelay: delay, padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Flexible(child: Text(title, style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis)),
+        Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)), child: Icon(icon, color: color, size: 12)),
+      ]),
+      const SizedBox(height: 8),
+      FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: Theme.of(ctx).textTheme.displayLarge?.copyWith(fontSize: 16, color: color, fontWeight: FontWeight.bold))),
+      const SizedBox(height: 2),
+      Text(sub, style: Theme.of(ctx).textTheme.bodySmall?.copyWith(fontSize: 9, color: isDark ? Colors.white38 : Colors.black45), overflow: TextOverflow.ellipsis, maxLines: 1),
+    ])));
+  }
+
+  Widget _kpiClickable(BuildContext ctx, String title, String value, String sub, IconData icon, Color color, int delay, double width) {
+    double itemWidth = (width - 80) / 6;
+    if (width < 1300) itemWidth = (width - 80) / 4;
+    if (width < 900) itemWidth = (width - 40) / 3;
+    if (width < 700) itemWidth = (width - 20) / 2;
+    if (width < 450) itemWidth = width;
+
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
+    return SizedBox(width: itemWidth, child: BentoCard(animationDelay: delay, padding: const EdgeInsets.all(12), onTap: () => _showMaintenanceModal(ctx), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Flexible(child: Text(title, style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis)),
+        Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)), child: Icon(icon, color: color, size: 12)),
+      ]),
+      const SizedBox(height: 8),
+      FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: Theme.of(ctx).textTheme.displayLarge?.copyWith(fontSize: 16, color: color, fontWeight: FontWeight.bold))),
+      const SizedBox(height: 2),
+      Row(children: [
+        Flexible(child: Text(sub, style: Theme.of(ctx).textTheme.bodySmall?.copyWith(fontSize: 9, color: isDark ? Colors.white38 : Colors.black45), overflow: TextOverflow.ellipsis)),
+        const SizedBox(width: 4),
+        Icon(LucideIcons.externalLink, size: 8, color: color),
+      ]),
+    ])));
+  }
+
+  Widget _vehicleCard(BuildContext ctx, VehicleData v, int index, bool isDark) {
+    final f = v.financiamento!;
+    return BentoCard(
+      animationDelay: 300 + (index * 80),
+      onTap: () => ctx.go('/financial-admin/$index'),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(gradient: LinearGradient(colors: [v.cor1, v.cor2]), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(LucideIcons.car, color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column( crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(v.placa, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(v.nome, style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : AppColors.textSecondaryLight), overflow: TextOverflow.ellipsis),
+                ]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Progresso', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87)),
+              Text('${(f.progressoFinanciamento * 100).toStringAsFixed(0)}%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: f.progressoFinanciamento > 0.7 ? AppColors.statusSuccess : AppColors.atrOrange)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(
+            value: f.progressoFinanciamento, minHeight: 4,
+            backgroundColor: isDark ? AppColors.borderDark : AppColors.borderLight,
+            valueColor: AlwaysStoppedAnimation(f.progressoFinanciamento > 0.7 ? AppColors.statusSuccess : AppColors.atrOrange),
+          )),
+          const SizedBox(height: 16),
+          _rowInfo('Parcela', formatCurrency(f.valorParcela), AppColors.statusError),
+          const SizedBox(height: 4),
+          _rowInfo('Manut.', formatCurrency(v.custoTotalManutencao), AppColors.statusWarning),
         ],
       ),
     );
   }
 
-  Widget _kpi(BuildContext ctx, String title, String value, String sub, IconData icon, Color color, int delay) {
-    return Expanded(child: BentoCard(animationDelay: delay, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Flexible(child: Text(title, style: Theme.of(ctx).textTheme.bodyMedium)),
-        Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 18)),
-      ]),
-      const SizedBox(height: 12),
-      Text(value, style: Theme.of(ctx).textTheme.displayLarge?.copyWith(fontSize: 24, color: color)),
-      const SizedBox(height: 4),
-      Text(sub, style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-    ])));
-  }
-
-  Widget _kpiClickable(BuildContext ctx, String title, String value, String sub, IconData icon, Color color, int delay) {
-    return Expanded(child: BentoCard(animationDelay: delay, onTap: () => _showMaintenanceModal(ctx), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Flexible(child: Text(title, style: Theme.of(ctx).textTheme.bodyMedium)),
-        Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 18)),
-      ]),
-      const SizedBox(height: 12),
-      Text(value, style: Theme.of(ctx).textTheme.displayLarge?.copyWith(fontSize: 24, color: color)),
-      const SizedBox(height: 4),
-      Row(children: [
-        Flexible(child: Text(sub, style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
-        const SizedBox(width: 8),
-        Icon(LucideIcons.externalLink, size: 12, color: color),
-      ]),
-    ])));
-  }
+  Widget _rowInfo(String l, String v, Color c) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(l, style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryLight)),
+      Text(v, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: c)),
+    ],
+  );
 
   Widget _vehicleRow(BuildContext ctx, VehicleData v, int index, bool isDark) {
     final f = v.financiamento!;
@@ -328,9 +411,9 @@ class _ListView extends StatelessWidget {
   TextStyle _hs() => const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.textSecondaryLight, letterSpacing: 0.5);
 }
 
-// ═══════════════════════════════════════════════════════
+// 
 // DETALHE DO VEÍCULO
-// ═══════════════════════════════════════════════════════
+// 
 
 class _DetailView extends StatefulWidget {
   final VehicleData veiculo;
@@ -488,7 +571,7 @@ class _DetailViewState extends State<_DetailView> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(color: AppColors.statusWarning.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text('${v.totalRevisoes} rev. • ${formatCurrency(v.custoTotalManutencao)}', style: TextStyle(color: AppColors.statusWarning, fontSize: 11, fontWeight: FontWeight.w700)),
+                child: Text('${v.totalRevisoes} rev. - ${formatCurrency(v.custoTotalManutencao)}', style: TextStyle(color: AppColors.statusWarning, fontSize: 11, fontWeight: FontWeight.w700)),
               ),
               const SizedBox(width: 8),
               AnimatedRotation(
@@ -523,7 +606,7 @@ class _DetailViewState extends State<_DetailView> {
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(m.descricao, style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontSize: 12)),
                   const SizedBox(height: 2),
-                  Text('${m.data} • ${m.kmNoServico.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (mt) => '${mt[1]}.')} km', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 11)),
+                  Text('${m.data} - ${m.kmNoServico.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (mt) => '${mt[1]}.')} km', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 11)),
                 ])),
                 Text(formatCurrency(m.custo), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.statusError)),
               ]),
@@ -614,13 +697,13 @@ class _DetailViewState extends State<_DetailView> {
       Text('Resumo Consolidado', style: Theme.of(ctx).textTheme.titleLarge),
       const SizedBox(height: 20),
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(child: _fb(ctx, isDark, LucideIcons.arrowDownCircle, AppColors.statusSuccess, 'Receitas', [
+        Expanded(child: _fb(ctx, isDark, LucideIcons.arrowDownCircle, AppColors.statusSuccess, 'Receitas', 'Total recebido do locatario ate hoje.\n- Recebidos: recebimentoMensal x parcelasPagas\n- Projecao restante: recebimentoMensal x parcelasRestantes\n- Projecao total: recebimentoMensal x totalParcelas', [
           _FI('Recebidos (${f.parcelasPagas} meses)', formatCurrency(f.totalRecebido), AppColors.statusSuccess),
           _FI('Projeção restante', formatCurrency(f.recebimentoMensal * f.parcelasRestantes), AppColors.statusInfo),
           _FI('Projeção total', formatCurrency(f.recebimentoMensal * f.totalParcelas), AppColors.textSecondaryLight),
         ])),
         const SizedBox(width: 20),
-        Expanded(child: _fb(ctx, isDark, LucideIcons.arrowUpCircle, AppColors.statusError, 'Custos', [
+        Expanded(child: _fb(ctx, isDark, LucideIcons.arrowUpCircle, AppColors.statusError, 'Custos', 'Todos os gastos do veiculo.\n- Entrada: valorTotal x percentualEntrada\n- Parcelas pagas: valorParcela x parcelasPagas\n- Restantes: valorParcela x parcelasRestantes\n- Juros total: totalParcelas - valorFinanciado\n- Manutencao: soma de todos os servicos', [
           _FI('Entrada', formatCurrency(f.valorEntrada), AppColors.statusWarning),
           _FI('Parcelas (${f.parcelasPagas}x)', formatCurrency(f.totalPago), AppColors.statusError),
           _FI('Restantes (${f.parcelasRestantes}x)', formatCurrency(f.totalRestante), AppColors.textSecondaryLight),
@@ -628,7 +711,7 @@ class _DetailViewState extends State<_DetailView> {
           _FI('Manutenção (${v.totalRevisoes} rev.)', formatCurrency(v.custoTotalManutencao), AppColors.statusWarning),
         ])),
         const SizedBox(width: 20),
-        Expanded(child: _fb(ctx, isDark, LucideIcons.trendingUp, lucro >= 0 ? AppColors.statusSuccess : AppColors.statusError, 'Balanço', [
+        Expanded(child: _fb(ctx, isDark, LucideIcons.trendingUp, lucro >= 0 ? AppColors.statusSuccess : AppColors.statusError, 'Balanco', 'Resultado financeiro do veiculo.\n- Saldo mensal: recebimentoMensal - valorParcela\n- Lucro acumulado: recebido - entrada - parcelas - manutencao\n  (negativo no inicio e normal ate recuperar a entrada)\n- Projecao lucro total: recebimento total - custo total - manutencao', [
           _FI('Saldo mensal', formatCurrency(f.saldoMensal), f.saldoMensal >= 0 ? AppColors.statusSuccess : AppColors.statusError),
           _FI('Lucro acumulado', formatCurrency(lucro), lucro >= 0 ? AppColors.statusSuccess : AppColors.statusError),
           _FI('Projeção lucro total', formatCurrency((f.recebimentoMensal * f.totalParcelas) - f.custoTotalVeiculo - v.custoTotalManutencao), AppColors.statusInfo),
@@ -637,9 +720,26 @@ class _DetailViewState extends State<_DetailView> {
     ]));
   }
 
-  Widget _fb(BuildContext ctx, bool isDark, IconData icon, Color color, String title, List<_FI> items) {
+  Widget _fb(BuildContext ctx, bool isDark, IconData icon, Color color, String title, String tooltipMsg, List<_FI> items) {
     return Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(color: isDark ? AppColors.surfaceElevatedDark : AppColors.backgroundLight, borderRadius: BorderRadius.circular(14)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Container(padding: const EdgeInsets.all(7), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 16, color: color)), const SizedBox(width: 10), Flexible(child: Text(title, style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontSize: 13)))]),
+      Row(children: [
+        Container(padding: const EdgeInsets.all(7), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 16, color: color)),
+        const SizedBox(width: 10),
+        Flexible(child: Text(title, style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontSize: 13))),
+        const SizedBox(width: 6),
+        Tooltip(
+          message: tooltipMsg,
+          preferBelow: false,
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceElevatedDark : const Color(0xFF1E2435),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withOpacity(0.3)),
+          ),
+          textStyle: const TextStyle(color: Colors.white, fontSize: 12, height: 1.6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Icon(LucideIcons.info, size: 14, color: AppColors.textSecondaryLight.withOpacity(0.6)),
+        ),
+      ]),
       const SizedBox(height: 16),
       ...items.map((i) => Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Flexible(child: Text(i.l, style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 12))), const SizedBox(width: 6), Text(i.v, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: i.c))]))),
     ]));

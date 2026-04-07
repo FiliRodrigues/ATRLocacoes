@@ -96,8 +96,10 @@ class ExpensesScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Wrap(
+      spacing: 16,
+      runSpacing: 16,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,21 +109,24 @@ class ExpensesScreen extends StatelessWidget {
           ],
         ),
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 300,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface, 
-                borderRadius: BorderRadius.circular(12), 
-                border: Border.all(color: Theme.of(context).dividerTheme.color!)
-              ),
-              child: const Row(
-                children: [
-                  Icon(LucideIcons.search, size: 16, color: AppColors.textSecondaryLight),
-                  SizedBox(width: 12),
-                  Expanded(child: TextField(decoration: InputDecoration(isDense: true, hintText: 'Buscar por placa ou motorista...', border: InputBorder.none, filled: false))),
-                ],
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface, 
+                  borderRadius: BorderRadius.circular(12), 
+                  border: Border.all(color: Theme.of(context).dividerTheme.color!)
+                ),
+                child: const Row(
+                  children: [
+                    Icon(LucideIcons.search, size: 16, color: AppColors.textSecondaryLight),
+                    SizedBox(width: 12),
+                    Expanded(child: TextField(decoration: InputDecoration(isDense: true, hintText: 'Buscar por placa ou motorista...', border: InputBorder.none, filled: false))),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 16),

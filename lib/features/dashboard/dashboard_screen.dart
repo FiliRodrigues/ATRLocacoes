@@ -6,56 +6,84 @@ import '../../core/widgets/bento_card.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/widgets/status_badge.dart';
+import '../../core/widgets/bento_shimmer.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isLoading = true;
+  String _selectedMonth = 'Abr/26';
+
+
+  @override
+  void initState() {
+    super.initState();
+    _simulateLoading();
+  }
+
+  Future<void> _simulateLoading() async {
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (mounted) setState(() => _isLoading = false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final alerts = frotaAlertas;
     final events = proximosEventos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final width = MediaQuery.of(context).size.width;
+    final isCompact = width < 1100;
 
     return AppSidebar(
       child: Scaffold(
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32.0),
+            padding: EdgeInsets.all(width < 600 ? 16.0 : 32.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildBreadcrumbs(context),
-                const SizedBox(height: 8),
                 _buildHeader(context),
                 const SizedBox(height: 32),
                 
-                // Alertas Críticos (Item 2)
-                if (alerts.isNotEmpty) ...[
-                  _buildAlertsBanner(context, alerts),
+                if (_isLoading) ...[
+                  _buildLoadingState(width, isCompact)
+                ] else ...[
+                  if (alerts.isNotEmpty) ...[
+                    _buildCompactAlerts(context, alerts),
+                    const SizedBox(height: 24),
+                  ],
+                  _buildMetricsGrid(context, width, isDark, _selectedMonth),
                   const SizedBox(height: 32),
-                ],
-
-                _buildMetricsRow(context),
-                const SizedBox(height: 32),
-                
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Gráfico Principal (Item 1 & 4)
-                    Expanded(
-                      flex: 5,
-                      child: _buildMainChartCard(context, isDark),
-                    ),
-                    const SizedBox(width: 24),
-                    // Próximos Eventos (Item 7)
-                    Expanded(
-                      flex: 3,
-                      child: _buildUpcomingEventsCard(context, events, isDark),
+                  _buildMainChartCard(context, isDark),
+                  const SizedBox(height: 32),
+                  
+                  // Novos 3 Cards de Eventos Detalhados
+                  if (isCompact) ...[
+                    _buildRevisionCard(context, events, isDark),
+                    const SizedBox(height: 24),
+                    _buildInstallmentCard(context, events, isDark),
+                    const SizedBox(height: 24),
+                    _buildExpensesCard(context, isDark, _selectedMonth),
+                  ] else ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _buildRevisionCard(context, events, isDark)),
+                        const SizedBox(width: 24),
+                        Expanded(child: _buildInstallmentCard(context, events, isDark)),
+                        const SizedBox(width: 24),
+                        Expanded(child: _buildExpensesCard(context, isDark, _selectedMonth)),
+                      ],
                     ),
                   ],
-                ),
-                const SizedBox(height: 32),
-                _buildFleetOverview(context),
+                  const SizedBox(height: 32),
+                  _buildFleetOverview(context, width, isDark),
+                ],
               ],
             ),
           ),
@@ -64,146 +92,169 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBreadcrumbs(BuildContext context) {
-    return Row(
+  Widget _buildLoadingState(double width, bool isCompact) {
+    return Column(
       children: [
-        Text('Home', style: TextStyle(color: AppColors.textSecondaryLight.withOpacity(0.6), fontSize: 12)),
-        Icon(LucideIcons.chevronRight, size: 12, color: AppColors.textSecondaryLight.withOpacity(0.4)),
-        const Text('Dashboard Executivo', style: TextStyle(color: AppColors.atrOrange, fontSize: 12, fontWeight: FontWeight.bold)),
+        const BentoShimmer(height: 80, borderRadius: BorderRadius.all(Radius.circular(16))),
+        const SizedBox(height: 32),
+        Wrap(
+          spacing: 24,
+          runSpacing: 24,
+          children: List.generate(3, (i) {
+            double itemWidth = (width - 64 - 48) / 3;
+            if (width < 900) itemWidth = (width - 64 - 24) / 2;
+            if (width < 600) itemWidth = width - 32;
+            return SizedBox(width: itemWidth, child: const BentoCardShimmer());
+          }),
+        ),
+        const SizedBox(height: 32),
+        const BentoShimmer(height: 300, borderRadius: BorderRadius.all(Radius.circular(20))),
       ],
     );
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Wrap(
+      spacing: 16,
+      runSpacing: 12,
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Flexible(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Visão Geral', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28)),
-              const SizedBox(height: 4),
-              Text('Acompanhe os custos e disponibilidade da sua frota.', style: Theme.of(context).textTheme.bodyMedium),
-            ],
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Visão Geral', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28)),
+            const SizedBox(height: 4),
+            Text('Acompanhe os custos e disponibilidade da sua frota.', style: Theme.of(context).textTheme.bodyMedium),
+          ],
         ),
-        const SizedBox(width: 16),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Theme.of(context).dividerTheme.color!),
-          ),
-          child: Row(
-            children: [
-              const Icon(LucideIcons.calendar, size: 16, color: AppColors.atrOrange),
-              const SizedBox(width: 8),
-              const Text('Abril 2026', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(width: 16),
-              Container(width: 1, height: 16, color: AppColors.borderLight),
-              const SizedBox(width: 16),
-              const Icon(LucideIcons.chevronDown, size: 16),
-            ],
+        PopupMenuButton<String>(
+          onSelected: (val) => setState(() => _selectedMonth = val),
+          offset: const Offset(0, 45),
+          itemBuilder: (ctx) => dadosMensais.where((d) => d.mes.contains('26')).map((d) => PopupMenuItem(value: d.mes, child: Text(d.mes))).toList(),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: Theme.of(context).dividerTheme.color!)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.calendar, size: 16, color: AppColors.atrOrange),
+                const SizedBox(width: 8),
+                Text(_selectedMonth, style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(width: 16),
+                const Icon(LucideIcons.chevronDown, size: 16),
+              ],
+            ),
           ),
         )
       ],
     );
   }
 
-  Widget _buildAlertsBanner(BuildContext context, List<AlertItem> alerts) {
-    return Column(
-      children: alerts.take(2).map((alert) {
+  Widget _buildCompactAlerts(BuildContext context, List<AlertItem> alerts) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: alerts.take(3).map((alert) {
         final color = alert.tipo == 'danger' ? AppColors.statusError : (alert.tipo == 'warning' ? AppColors.statusWarning : AppColors.statusInfo);
         return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: color.withOpacity(0.2)),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(alert.tipo == 'danger' ? LucideIcons.alertOctagon : LucideIcons.alertTriangle, color: color, size: 20),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(alert.titulo, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
-                    Text(alert.mensagem, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color.withOpacity(0.8))),
-                  ],
+              Icon(alert.tipo == 'danger' ? LucideIcons.alertOctagon : LucideIcons.alertTriangle, color: color, size: 14),
+              const SizedBox(width: 8),
+              Text(
+                alert.titulo,
+                style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11),
+              ),
+              const SizedBox(width: 6),
+              const Text('|', style: TextStyle(color: Colors.white24, fontSize: 11)),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  alert.mensagem.split(' - ').last, // Resume a mensagem
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color.withOpacity(0.9), fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              TextButton(onPressed: () {}, child: Text('Ver Detalhes', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12))),
             ],
           ),
-        ).animate().slideX(begin: 0.1, end: 0, duration: 400.ms, curve: Curves.easeOutCubic).fadeIn();
+        ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack).fadeIn();
       }).toList(),
     );
   }
 
-  Widget _buildMetricsRow(BuildContext context) {
-    double totalManut = frota.fold(0, (s, v) => s + v.custoTotalManutencao);
-    int emOficina = frota.where((v) => v.status == 'EM OFICINA').length;
+  Widget _buildMetricsGrid(BuildContext context, double width, bool isDark, String selectedMonth) {
+    // Cálculos Operação Mês Selecionado (Baseado em Dados Reais da Frota)
+    final monthsMap = {'Jan': '01', 'Fev': '02', 'Mar': '03', 'Abr': '04'};
+    final monthPart = selectedMonth.split('/').first;
+    final monthNum = monthsMap[monthPart] ?? '04';
 
-    return Row(
+    final receitaReal = frota.length * 2000.0;
+    final parcelasReal = veiculosFinanciados.fold(0.0, (s, v) => s + (v.financiamento?.valorParcela ?? 0));
+    final manutencaoMes = frota.expand((v) => v.manutencoes)
+        .where((m) => m.data.contains('/$monthNum/2026'))
+        .fold(0.0, (s, m) => s + m.custo);
+        
+    final lucroMes = receitaReal - parcelasReal - manutencaoMes;
+    
+    return Wrap(
+      spacing: 16,
+      runSpacing: 16,
       children: [
-        Expanded(child: _buildMetricCard(context, 'Custo Manut. Total', formatCurrency(totalManut), 'Acumulado frota', LucideIcons.wrench, AppColors.statusError, 0)),
-        const SizedBox(width: 24),
-        Expanded(child: _buildMetricCard(context, 'Veículos Ativos', '${frota.length - emOficina}', 'De ${frota.length} totais', LucideIcons.car, AppColors.statusSuccess, 100)),
-        const SizedBox(width: 24),
-        Expanded(child: _buildMetricCard(context, 'Veículos em Oficina', '$emOficina', '${frotaAlertas.where((a)=>a.tipo=='danger').length} avisos críticos', LucideIcons.alertTriangle, AppColors.statusWarning, 200)),
+        _buildMetricCard(context, 'Lucro da Operação', formatCurrency(lucroMes), selectedMonth, LucideIcons.trendingUp, AppColors.statusSuccess, 0, width, isDark: isDark, columns: 6),
+        _buildMetricCard(context, 'Receita Bruta', formatCurrency(receitaReal), '4 carros alugados', LucideIcons.wallet, AppColors.statusInfo, 100, width, isDark: isDark, columns: 6),
+        _buildMetricCard(context, 'Parcelas no Mês', formatCurrency(parcelasReal), '2 carros financ.', LucideIcons.landmark, AppColors.statusError, 200, width, isDark: isDark, columns: 6),
+        _buildMetricCard(context, 'Manut. no Mês', formatCurrency(manutencaoMes), 'Serviços em $selectedMonth', LucideIcons.wrench, AppColors.statusWarning, 300, width, isDark: isDark, columns: 6),
+        _buildMetricCard(context, 'Carros ativos', '4', 'Disponibilidade 100%', LucideIcons.checkCircle, AppColors.statusSuccess, 400, width, isDark: isDark, columns: 6),
+        _buildMetricCard(context, 'Financiados', '${veiculosFinanciados.length}', 'De 4 totais', LucideIcons.fileText, AppColors.atrOrange, 500, width, isDark: isDark, columns: 6),
       ],
     );
   }
 
-  Widget _buildMetricCard(BuildContext context, String title, String value, String subtitle, IconData icon, Color color, int delay) {
-    return BentoCard(
-      animationDelay: delay,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.bodyMedium),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Icon(icon, color: color, size: 20),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(value, style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28, color: color)),
-          const SizedBox(height: 8),
-          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 16),
-          // Sparkline placeholder
-          _buildMiniSparkline(color),
-        ],
-      ),
-    );
-  }
+  Widget _buildMetricCard(BuildContext context, String title, String value, String subtitle, IconData icon, Color color, int delay, double width, {required bool isDark, int columns = 3}) {
+    double itemWidth = (width - 64 - ((columns - 1) * 16)) / columns;
+    if (width < 1200) itemWidth = (width - 64 - 16) / 3;
+    if (width < 900) itemWidth = (width - 64 - 16) / 2;
+    if (width < 600) itemWidth = width - 32;
 
-  Widget _buildMiniSparkline(Color color) {
     return SizedBox(
-      height: 20,
-      width: double.infinity,
-      child: RepaintBoundary(
-        child: CustomPaint(
-          painter: _SparklinePainter(color: color),
+      width: itemWidth,
+      child: BentoCard(
+        animationDelay: delay,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(child: Text(title, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87), overflow: TextOverflow.ellipsis)),
+                Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 16)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 22, color: color, fontWeight: FontWeight.bold))),
+            const SizedBox(height: 6),
+            Text(subtitle, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: isDark ? Colors.white38 : Colors.black45)),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildMainChartCard(BuildContext context, bool isDark) {
+    final months = dadosMensais.where((d) => d.mes.contains('26')).toList();
+    const maxVal = 10000.0;
+    
     return BentoCard(
-      height: 400,
+      height: 520,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -213,33 +264,97 @@ class DashboardScreen extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Evolução Financeira (TCO)', style: Theme.of(context).textTheme.titleLarge),
-                  Text('Custos de manutenção e Parcelas vs Receita', style: Theme.of(context).textTheme.bodySmall),
+                  Text('Evolução 2026', style: Theme.of(context).textTheme.titleLarge),
+                  Text('Receita Mensal vs Custos Operacionais', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: isDark ? Colors.white38 : Colors.black45)),
                 ],
               ),
-              Row(
+              Wrap(
+                spacing: 16,
                 children: [
-                  _chartLegend('Manutenção', AppColors.statusError),
-                  const SizedBox(width: 16),
-                  _chartLegend('Parcelas', AppColors.statusWarning),
-                  const SizedBox(width: 16),
-                  _chartLegend('Receita', AppColors.statusSuccess),
+                  _chartLegend('Receita Bruta', AppColors.atrOrange),
+                  _chartLegend('Custos (Financ. + Manut.)', AppColors.statusError),
+                  _chartLegend('Lucro Líquido', AppColors.statusSuccess),
                 ],
               ),
             ],
           ),
-          const Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(top: 32, bottom: 8),
-              child: RepaintBoundary(child: _FullDashboardChart()),
+          const SizedBox(height: 40),
+          Expanded(
+            child: Stack(
+              children: [
+                // Grid lines
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(4, (i) => Container(height: 1, color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05))),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: months.map((d) {
+                      // Calcula valores reais para o gráfico baseando-se na frota para bater com os KPIs
+                      final monthsMap = {'Jan': '01', 'Fev': '02', 'Mar': '03', 'Abr': '04'};
+                      final mNum = monthsMap[d.mes.split('/').first] ?? '04';
+                      
+                      final rMonth = frota.fold(0.0, (s, v) => s + 2000.0); // 4 * 2000 = 8000
+                      final fMonth = veiculosFinanciados.fold(0.0, (s, v) => s + (v.financiamento?.valorParcela ?? 0));
+                      final mMonth = frota.expand((v) => v.manutencoes)
+                          .where((m) => m.data.contains('/$mNum/2026'))
+                          .fold(0.0, (s, m) => s + m.custo);
+                      
+                      final hRec = (rMonth / maxVal).clamp(0.0, 1.0);
+                      final hCusto = ((fMonth + mMonth) / maxVal).clamp(0.0, 1.0);
+                      final lMonth = rMonth - fMonth - mMonth;
+                      final hLucro = (lMonth / maxVal).clamp(0.0, 1.0);
+                      
+                      return Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                _bar(hRec, AppColors.atrOrange, rMonth),
+                                const SizedBox(width: 4),
+                                _bar(hCusto, AppColors.statusError, fMonth + mMonth),
+                                const SizedBox(width: 4),
+                                _bar(hLucro, AppColors.statusSuccess, lMonth),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(d.mes, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black87)),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
             ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: dadosMensais.map((d) => Text(d.mes, style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryLight))).toList(),
-          ),
+          const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+
+  Widget _bar(double factor, Color color, double val) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        if (factor > 0.05) Text(val > 0 ? 'R\$ ${val.toInt()}' : '', style: TextStyle(fontSize: 8, color: color, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 4),
+        Container(
+          width: 55,
+          height: 250 * factor,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [color, color.withOpacity(0.6)]),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+            boxShadow: [BoxShadow(color: color.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 2))],
+          ),
+        ).animate().scaleY(begin: 0, end: 1, duration: 600.ms, curve: Curves.easeOutCubic),
+      ],
     );
   }
 
@@ -249,193 +364,179 @@ class DashboardScreen extends StatelessWidget {
         Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 6),
         Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-      ],
-    );
+        ],
+      );
   }
 
-  Widget _buildUpcomingEventsCard(BuildContext context, List<UpcomingEvent> events, bool isDark) {
+  Widget _buildRevisionCard(BuildContext context, List<UpcomingEvent> events, bool isDark) {
+    final revisions = events.where((e) => e.tipo == 'maintenance').toList();
     return BentoCard(
-      height: 400,
+      height: 300,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Próximos Eventos', style: Theme.of(context).textTheme.titleLarge),
+          Row(children: [
+            const Icon(LucideIcons.wrench, color: AppColors.atrOrange, size: 18),
+            const SizedBox(width: 10),
+            Text('Próximas Revisões', style: Theme.of(context).textTheme.titleMedium),
+          ]),
           const SizedBox(height: 20),
-          Expanded(
-            child: ListView.separated(
-              itemCount: events.length,
-              separatorBuilder: (_, __) => Divider(color: isDark ? AppColors.borderDark : AppColors.borderLight, height: 24),
-              itemBuilder: (context, index) {
-                final event = events[index];
-                IconData icon;
-                Color color;
-                if (event.tipo == 'maintenance') { icon = LucideIcons.wrench; color = AppColors.atrOrange; }
-                else if (event.tipo == 'payment') { icon = LucideIcons.landmark; color = AppColors.statusInfo; }
-                else { icon = LucideIcons.alertCircle; color = AppColors.statusWarning; }
-
-                return Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                      child: Icon(icon, color: color, size: 16),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(event.titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          Text(event.descricao, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11)),
-                        ],
-                      ),
-                    ),
-                    Text(event.prazo, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11)),
-                  ],
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: const Text('Ver Calendário Completo', style: TextStyle(fontSize: 12)),
-            ),
-          ),
+          Expanded(child: ListView.separated(
+            itemCount: revisions.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (ctx, i) {
+              final e = revisions[i];
+              return _eventItem(ctx, e.titulo, e.descricao, e.prazo, AppColors.atrOrange, isDark);
+            },
+          )),
         ],
       ),
     );
   }
 
-  Widget _buildFleetOverview(BuildContext context) {
+  Widget _buildInstallmentCard(BuildContext context, List<UpcomingEvent> events, bool isDark) {
+    final payments = events.where((e) => e.tipo == 'payment').toList();
+    return BentoCard(
+      height: 300,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(LucideIcons.landmark, color: AppColors.statusInfo, size: 18),
+            const SizedBox(width: 10),
+            Text('Próximas Parcelas', style: Theme.of(context).textTheme.titleMedium),
+          ]),
+          const SizedBox(height: 20),
+          Expanded(child: ListView.separated(
+            itemCount: payments.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (ctx, i) {
+              final e = payments[i];
+              return _eventItem(ctx, e.titulo, e.descricao, e.prazo, AppColors.statusInfo, isDark);
+            },
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpensesCard(BuildContext context, bool isDark, String selectedMonth) {
+    final monthsMap = {'Jan': '01', 'Fev': '02', 'Mar': '03', 'Abr': '04'};
+    final monthPart = selectedMonth.split('/').first;
+    final monthNum = monthsMap[monthPart] ?? '04';
+
+    // Lista de manutenções com referência ao veículo
+    final listItems = frota.expand((v) => v.manutencoes.where((m) => m.data.contains('/$monthNum/2026')).map((m) => {'v': v, 'm': m})).toList();
+
+    return BentoCard(
+      height: 300,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(LucideIcons.alertCircle, color: AppColors.statusError, size: 18),
+            const SizedBox(width: 10),
+            Text('Manut. de $selectedMonth', style: Theme.of(context).textTheme.titleMedium),
+          ]),
+          const SizedBox(height: 20),
+          Expanded(child: ListView.separated(
+            itemCount: listItems.isEmpty ? 1 : listItems.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (ctx, i) {
+              if (listItems.isEmpty) return Text('Nenhuma despesa extra lançada em $selectedMonth.', style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black45));
+              final item = listItems[i];
+              final v = item['v'] as VehicleData;
+              final m = item['m'] as MaintenanceEvent;
+              
+              return Row(
+                children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(m.descricao, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                    Text('${m.data} - ${v.placa} (${v.nome})', style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.black54)),
+                  ])),
+                  Text(formatCurrency(m.custo), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.statusError, fontSize: 11)),
+                ],
+              );
+            },
+          )),
+          const Divider(height: 24),
+          Text('+ Lançar despesa em $selectedMonth', style: TextStyle(color: AppColors.statusInfo, fontSize: 10, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+        ],
+      ),
+    );
+  }
+
+  Widget _eventItem(BuildContext context, String title, String desc, String time, Color color, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03), borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(height: 2),
+            Text(desc, style: TextStyle(fontSize: 10, color: isDark ? Colors.white60 : Colors.black54)),
+          ])),
+          const SizedBox(width: 10),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)), child: Text(time, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 9))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFleetOverview(BuildContext context, double width, bool isDark) {
     return BentoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
            Text('Resumo da Frota', style: Theme.of(context).textTheme.titleLarge),
            const SizedBox(height: 24),
-           Row(
-             children: frota.map((v) => Expanded(
-               child: Container(
-                 margin: const EdgeInsets.only(right: 16),
-                 padding: const EdgeInsets.all(16),
-                 decoration: BoxDecoration(
-                   color: AppColors.surfaceElevatedDark.withOpacity(0.05),
-                   borderRadius: BorderRadius.circular(16),
-                   border: Border.all(color: AppColors.borderDark.withOpacity(0.1)),
-                 ),
-                 child: Column(
-                   children: [
-                     Container(
-                       padding: const EdgeInsets.all(10),
-                       decoration: BoxDecoration(gradient: LinearGradient(colors: [v.cor1, v.cor2]), shape: BoxShape.circle),
-                       child: const Icon(LucideIcons.car, color: Colors.white, size: 16),
-                     ),
-                     const SizedBox(height: 12),
-                     Text(v.placa, style: const TextStyle(fontWeight: FontWeight.bold)),
-                     Text(v.nome.split(' ')[0], style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryLight)),
-                     const SizedBox(height: 8),
-                     StatusBadge(text: v.status, type: BadgeType.success),
-                   ],
-                 ),
-               ),
-             )).toList(),
-           ),
+            if (width > 1100)
+              Row(
+                children: [
+                  for (int i = 0; i < frota.length; i++) ...[
+                    Expanded(child: _buildFleetItem(frota[i], isDark)),
+                    if (i < frota.length - 1) const SizedBox(width: 16),
+                  ]
+                ],
+              )
+            else
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: frota.map((v) {
+                  double itemWidth = (width - 64 - 16) / 2;
+                  if (width < 600) itemWidth = width - 32;
+                  return SizedBox(width: itemWidth, child: _buildFleetItem(v, isDark));
+                }).toList(),
+              ),
         ],
       ),
     );
   }
-}
 
-class _SparklinePainter extends CustomPainter {
-  final Color color;
-  _SparklinePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-    path.moveTo(0, size.height * 0.8);
-    path.lineTo(size.width * 0.2, size.height * 0.4);
-    path.lineTo(size.width * 0.4, size.height * 0.6);
-    path.lineTo(size.width * 0.6, size.height * 0.2);
-    path.lineTo(size.width * 0.8, size.height * 0.5);
-    path.lineTo(size.width, size.height * 0.1);
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _FullDashboardChart extends StatelessWidget {
-  const _FullDashboardChart();
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _ChartPainter(),
-      size: Size.infinite,
+  Widget _buildFleetItem(VehicleData v, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(gradient: LinearGradient(colors: [v.cor1, v.cor2]), shape: BoxShape.circle, boxShadow: [BoxShadow(color: v.cor1.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]),
+            child: const Icon(LucideIcons.car, color: Colors.white, size: 20),
+          ),
+          const SizedBox(height: 16),
+          Text(v.placa, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+          Text(v.nome, style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : AppColors.textSecondaryLight), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 12),
+          StatusBadge(text: v.status, type: BadgeType.success),
+        ],
+      ),
     );
   }
-}
-
-class _ChartPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final maxVal = 8000.0;
-    final w = size.width / dadosMensais.length;
-    final h = size.height;
-
-    for (int i = 0; i < dadosMensais.length; i++) {
-        final d = dadosMensais[i];
-        final x = i * w + w * 0.2;
-        final barW = w * 0.2;
-
-        // Manutenção
-        final mH = (d.manutencao / maxVal) * h;
-        canvas.drawRRect(
-          RRect.fromLTRBAndCorners(x, h - mH, x + barW, h, topLeft: const Radius.circular(3), topRight: const Radius.circular(3)),
-          Paint()..color = AppColors.statusError.withOpacity(0.8),
-        );
-
-        // Financiamento (Stacked)
-        final fH = (d.financiamento / maxVal) * h;
-        canvas.drawRRect(
-          RRect.fromLTRBAndCorners(x + barW + 2, h - fH, x + (barW * 2) + 2, h, topLeft: const Radius.circular(3), topRight: const Radius.circular(3)),
-          Paint()..color = AppColors.statusWarning.withOpacity(0.8),
-        );
-
-        // Receita (Line)
-        if (i < dadosMensais.length - 1) {
-            final dNext = dadosMensais[i+1];
-            final xCenter = x + barW;
-            final xNextCenter = (i + 1) * w + w * 0.2 + barW;
-            final y = h - (d.receita / maxVal) * h;
-            final yNext = h - (dNext.receita / maxVal) * h;
-
-            canvas.drawLine(
-              Offset(xCenter, y),
-              Offset(xNextCenter, yNext),
-              Paint()..color = AppColors.statusSuccess..strokeWidth = 2.5..strokeCap = StrokeCap.round,
-            );
-            canvas.drawCircle(Offset(xCenter, y), 4, Paint()..color = AppColors.statusSuccess);
-            if (i == dadosMensais.length - 2) {
-               canvas.drawCircle(Offset(xNextCenter, yNext), 4, Paint()..color = AppColors.statusSuccess);
-            }
-        }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
