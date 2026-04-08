@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/atr_theme_state.dart';
 import 'core/utils/app_logger.dart';
+import 'core/services/auth_service.dart';
 import 'features/login/login_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/vehicles/vehicle_dossier_screen.dart';
@@ -27,46 +27,12 @@ void main() {
   );
 }
 
-class AuthService extends ChangeNotifier {
-  static bool _isAuthenticated = false;
-  bool get isAuthenticated => _isAuthenticated;
+class ATRApp extends StatefulWidget {
+  const ATRApp({super.key});
 
-  Future<void> checkAuth() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _isAuthenticated = prefs.getBool('is_authenticated') ?? false;
-      AppLogger.info('Verificação de sessão: ${_isAuthenticated ? 'Autenticado' : 'Visitante'}');
-      notifyListeners();
-    } catch (e) {
-      AppLogger.error('Falha ao verificar sessão', e);
-    }
-  }
-
-  Future<void> login() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _isAuthenticated = true;
-      await prefs.setBool('is_authenticated', true);
-      AppLogger.success('Usuário logado com sucesso (Sessão Persistida)');
-      notifyListeners();
-    } catch (e) {
-      AppLogger.error('Erro no processo de login', e);
-    }
-  }
-
-  Future<void> logout() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _isAuthenticated = false;
-      await prefs.setBool('is_authenticated', false);
-      AppLogger.warning('Usuário realizou logout');
-      notifyListeners();
-    } catch (e) {
-      AppLogger.error('Erro ao encerrar sessão', e);
-    }
-  }
+  @override
+  State<ATRApp> createState() => _ATRAppState();
 }
-
 class ATRApp extends StatefulWidget {
   const ATRApp({super.key});
 
@@ -93,7 +59,7 @@ class _ATRAppState extends State<ATRApp> {
       refreshListenable: authService,
       redirect: (context, state) {
         final loggingIn = state.uri.path == '/login';
-        final authenticated = AuthService._isAuthenticated;
+        final authenticated = authService.isAuthenticated;
 
         if (!authenticated && !loggingIn) return '/login';
         if (authenticated && loggingIn) return '/';
