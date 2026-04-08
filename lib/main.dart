@@ -33,12 +33,6 @@ class ATRApp extends StatefulWidget {
   @override
   State<ATRApp> createState() => _ATRAppState();
 }
-class ATRApp extends StatefulWidget {
-  const ATRApp({super.key});
-
-  @override
-  State<ATRApp> createState() => _ATRAppState();
-}
 
 class _ATRAppState extends State<ATRApp> {
   @override
