@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/widgets/bento_shimmer.dart';
+import '../../core/utils/app_logger.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -34,16 +35,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _updateMetrics() {
-    final monthsMap = {'Jan': 1, 'Fev': 2, 'Mar': 3, 'Abr': 4};
-    final monthNum = monthsMap[_selectedMonth.split('/').first] ?? 4;
+    try {
+      final monthsMap = {'Jan': 1, 'Fev': 2, 'Mar': 3, 'Abr': 4};
+      final monthNum = monthsMap[_selectedMonth.split('/').first] ?? 4;
 
-    receitaReal = frota.length * 2000.0;
-    parcelasReal = veiculosFinanciados.fold(0.0, (s, v) => s + (v.financiamento?.valorParcela ?? 0));
-    manutencaoMes = frota.expand((v) => v.manutencoes)
-        .where((m) => m.data.month == monthNum && m.data.year == 2026)
-        .fold(0.0, (s, m) => s + m.custo);
-        
-    lucroMes = receitaReal - parcelasReal - manutencaoMes;
+      receitaReal = frota.length * 2000.0;
+      parcelasReal = veiculosFinanciados.fold(0.0, (s, v) => s + (v.financiamento?.valorParcela ?? 0));
+      manutencaoMes = frota.expand((v) => v.manutencoes)
+          .where((m) => m.data.month == monthNum && m.data.year == 2026)
+          .fold(0.0, (s, m) => s + m.custo);
+          
+      lucroMes = receitaReal - parcelasReal - manutencaoMes;
+    } catch (e) {
+      // Em caso de erro nos cálculos, define valores seguros
+      receitaReal = 0;
+      parcelasReal = 0;
+      manutencaoMes = 0;
+      lucroMes = 0;
+      AppLogger.error('Erro ao calcular métricas do dashboard', e);
+    }
   }
 
   Future<void> _simulateLoading() async {
