@@ -1,37 +1,43 @@
 import 'package:flutter/foundation.dart';
-import '../../core/data/fleet_data.dart';
+import '../../core/enums/maintenance_priority.dart';
+import '../../core/enums/kanban_column.dart';
+
+export '../../core/enums/maintenance_priority.dart';
+export '../../core/enums/kanban_column.dart';
 
 class MaintenanceProvider with ChangeNotifier {
   final List<MaintenanceItem> _pending = [
-    MaintenanceItem(id: '1', title: 'Troca de Óleo', vehicle: 'Corolla (VD-1234)', date: '15/Mai', price: 350, priority: 'ALTA'),
-    MaintenanceItem(id: '2', title: 'Revisão 40k', vehicle: 'Hilux (TX-2041)', date: '22/Mai', price: 1200, priority: 'BAIXA'),
+    MaintenanceItem(id: '1', title: 'Troca de Óleo', vehicle: 'Corolla (VD-1234)', date: DateTime(2026, 5, 15), price: 350, priority: MaintenancePriority.alta),
+    MaintenanceItem(id: '2', title: 'Revisão 40k', vehicle: 'Hilux (TX-2041)', date: DateTime(2026, 5, 22), price: 1200, priority: MaintenancePriority.baixa),
   ];
 
   final List<MaintenanceItem> _ongoing = [
-    MaintenanceItem(id: '3', title: 'Alinhamento/Balanc.', vehicle: 'Civic (XT-9090)', date: 'Hoje', price: 180, priority: 'MÉDIA'),
+    MaintenanceItem(id: '3', title: 'Alinhamento/Balanc.', vehicle: 'Argo (ARG-4H78)', date: DateTime.now(), price: 180, priority: MaintenancePriority.media),
   ];
 
   final List<MaintenanceItem> _completed = [
-    MaintenanceItem(id: '4', title: 'Troca 4 Pneus', vehicle: 'Corolla (VD-1234)', date: 'Ontem', price: 2450, priority: 'OK', isDone: true),
+    MaintenanceItem(id: '4', title: 'Troca 4 Pneus', vehicle: 'Corolla (VD-1234)', date: DateTime.now().subtract(const Duration(days: 1)), price: 2450, priority: MaintenancePriority.ok, isDone: true),
   ];
 
-  List<MaintenanceItem> get pending => _pending;
-  List<MaintenanceItem> get ongoing => _ongoing;
-  List<MaintenanceItem> get completed => _completed;
+  List<MaintenanceItem> get pending => List.unmodifiable(_pending);
+  List<MaintenanceItem> get ongoing => List.unmodifiable(_ongoing);
+  List<MaintenanceItem> get completed => List.unmodifiable(_completed);
 
-  void moveItem(MaintenanceItem item, String targetStatus) {
-    // Remove de onde estiver
+  void moveItem(MaintenanceItem item, KanbanColumn column) {
     _pending.removeWhere((i) => i.id == item.id);
     _ongoing.removeWhere((i) => i.id == item.id);
     _completed.removeWhere((i) => i.id == item.id);
 
-    // Atualiza status interno do item (opcional, para UI)
-    final newItem = item.copyWith(isDone: targetStatus == 'Concluídos');
+    final newItem = item.copyWith(isDone: column == KanbanColumn.concluidos);
 
-    // Adiciona na nova lista
-    if (targetStatus == 'Pendentes') _pending.add(newItem);
-    if (targetStatus == 'Em Oficina') _ongoing.add(newItem);
-    if (targetStatus == 'Concluídos') _completed.add(newItem);
+    switch (column) {
+      case KanbanColumn.pendentes:
+        _pending.add(newItem);
+      case KanbanColumn.emOficina:
+        _ongoing.add(newItem);
+      case KanbanColumn.concluidos:
+        _completed.add(newItem);
+    }
 
     notifyListeners();
   }
@@ -41,9 +47,9 @@ class MaintenanceItem {
   final String id;
   final String title;
   final String vehicle;
-  final String date;
+  final DateTime date;
   final double price;
-  final String priority;
+  final MaintenancePriority priority;
   final bool isDone;
 
   MaintenanceItem({
@@ -56,9 +62,9 @@ class MaintenanceItem {
     this.isDone = false,
   });
 
-  MaintenanceItem copyWith({bool? isDone}) {
+  MaintenanceItem copyWith({bool? isDone, String? id}) {
     return MaintenanceItem(
-      id: id,
+      id: id ?? this.id,
       title: title,
       vehicle: vehicle,
       date: date,
@@ -66,5 +72,16 @@ class MaintenanceItem {
       priority: priority,
       isDone: isDone ?? this.isDone,
     );
+  }
+
+  String get dateLabel {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = DateTime(date.year, date.month, date.day);
+    if (d == today) return 'Hoje';
+    if (d == today.subtract(const Duration(days: 1))) return 'Ontem';
+    if (d == today.add(const Duration(days: 1))) return 'Amanhã';
+    final months = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    return '${date.day.toString().padLeft(2,'0')}/${months[date.month]}';
   }
 }

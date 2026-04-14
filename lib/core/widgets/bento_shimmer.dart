@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import '../theme/app_colors.dart';
 
@@ -20,7 +20,7 @@ class BentoShimmer extends StatelessWidget {
     
     return Shimmer.fromColors(
       baseColor: isDark ? AppColors.surfaceElevatedDark : Colors.grey[200]!,
-      highlightColor: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.5),
+      highlightColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.5),
       child: Container(
         width: width ?? double.infinity,
         height: height ?? double.infinity,
