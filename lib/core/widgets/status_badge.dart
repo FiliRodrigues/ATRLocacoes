@@ -16,10 +16,18 @@ class StatusBadge extends StatelessWidget {
     Color color;
 
     switch (type) {
-      case BadgeType.success: color = AppColors.statusSuccess; break;
-      case BadgeType.warning: color = AppColors.statusWarning; break;
-      case BadgeType.error: color = AppColors.statusError; break;
-      case BadgeType.info: color = AppColors.statusInfo; break;
+      case BadgeType.success:
+        color = AppColors.statusSuccess;
+        break;
+      case BadgeType.warning:
+        color = AppColors.statusWarning;
+        break;
+      case BadgeType.error:
+        color = AppColors.statusError;
+        break;
+      case BadgeType.info:
+        color = AppColors.statusInfo;
+        break;
     }
 
     return FittedBox(
@@ -31,13 +39,11 @@ class StatusBadge extends StatelessWidget {
           borderRadius: BorderRadius.circular(100),
           border: Border.all(
             color: color.withValues(alpha: isDark ? 0.25 : 0.20),
-            width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.08),
+              color: color.withValues(alpha: 0.08),
               blurRadius: 8,
-              spreadRadius: 0,
             ),
           ],
         ),
@@ -52,7 +58,7 @@ class StatusBadge extends StatelessWidget {
                 color: color,
                 boxShadow: [
                   BoxShadow(
-                    color: color.withOpacity(0.6),
+                    color: color.withValues(alpha: 0.6),
                     blurRadius: 4,
                     spreadRadius: 1,
                   ),

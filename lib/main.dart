@@ -1,120 +1,81 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'core/navigation/app_router.dart';
+import 'core/data/fleet_data.dart';
+import 'core/services/auth_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/atr_theme_state.dart';
-import 'core/utils/app_logger.dart';
-import 'core/services/auth_service.dart';
-import 'features/login/login_screen.dart';
-import 'features/dashboard/dashboard_screen.dart';
-import 'features/vehicles/vehicle_dossier_screen.dart';
-import 'features/drivers/drivers_screen.dart';
-import 'features/maintenance/maintenance_screen.dart';
 import 'features/maintenance/maintenance_provider.dart';
-import 'features/expenses/expenses_screen.dart';
-import 'features/financial_admin/financial_admin_screen.dart';
 
-void main() {
+export 'core/services/auth_service.dart' show AuthService;
+
+bool _envFlag(String key) {
+  final value = String.fromEnvironment(key, defaultValue: 'false');
+  return value.toLowerCase() == 'true' || value == '1';
+}
+
+final bool _kShowPerfOverlay = _envFlag('ATR_SHOW_PERF_OVERLAY');
+final bool _kCheckerboardRasterCacheImages =
+  _envFlag('ATR_CHECKERBOARD_RASTER_CACHE_IMAGES');
+final bool _kCheckerboardOffscreenLayers =
+  _envFlag('ATR_CHECKERBOARD_OFFSCREEN_LAYERS');
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('pt_BR');
+  final authService = AuthService();
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => MaintenanceProvider()),
-        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider.value(value: FleetRepository.instance),
+        ChangeNotifierProvider.value(value: authService),
       ],
-      child: const ATRApp(),
+      child: ATRApp(authService: authService),
     ),
   );
 }
 
 class ATRApp extends StatefulWidget {
-  const ATRApp({super.key});
+  final AuthService authService;
+  const ATRApp({super.key, required this.authService});
 
   @override
   State<ATRApp> createState() => _ATRAppState();
 }
 
 class _ATRAppState extends State<ATRApp> {
+  late final AppRouter _appRouter;
+
   @override
   void initState() {
     super.initState();
-    // Carrega o login persistente
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<AuthService>(context, listen: false).checkAuth();
-    });
+    widget.authService.checkAuth();
+    _appRouter = AppRouter(widget.authService);
+  }
+
+  @override
+  void dispose() {
+    _appRouter.router.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context, listen: false);
-
-    final GoRouter router = GoRouter(
-      initialLocation: '/login',
-      refreshListenable: authService,
-      redirect: (context, state) {
-        final loggingIn = state.uri.path == '/login';
-        final authenticated = authService.isAuthenticated;
-
-        if (!authenticated && !loggingIn) return '/login';
-        if (authenticated && loggingIn) return '/';
-        return null;
-      },
-      routes: [
-        GoRoute(
-          path: '/login',
-          builder: (context, state) => const LoginScreen(),
-        ),
-        GoRoute(
-          path: '/',
-          builder: (context, state) => const DashboardScreen(),
-          routes: [
-            GoRoute(
-              path: 'vehicles/:plate',
-              builder: (context, state) {
-                final plate = state.pathParameters['plate'] ?? '';
-                return VehicleDossierScreen(plateId: plate);
-              },
-            ),
-            GoRoute(
-              path: 'drivers',
-              builder: (context, state) => const DriversScreen(),
-            ),
-            GoRoute(
-              path: 'maintenance',
-              builder: (context, state) => const MaintenanceScreen(),
-            ),
-            GoRoute(
-              path: 'expenses',
-              builder: (context, state) => const ExpensesScreen(),
-            ),
-            GoRoute(
-              path: 'financial-admin',
-              builder: (context, state) => const FinancialAdminScreen(),
-              routes: [
-                 GoRoute(
-                    path: ':index',
-                    builder: (context, state) {
-                      final index = int.tryParse(state.pathParameters['index'] ?? '');
-                      return FinancialAdminScreen(vehicleIndex: index);
-                    },
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ],
-    );
-
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AtrThemeState.notifier,
       builder: (context, currentMode, _) {
         return MaterialApp.router(
           title: 'ATR Locações',
           debugShowCheckedModeBanner: false,
+          showPerformanceOverlay: _kShowPerfOverlay,
+          checkerboardRasterCacheImages: _kCheckerboardRasterCacheImages,
+          checkerboardOffscreenLayers: _kCheckerboardOffscreenLayers,
           themeMode: currentMode,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
-          routerConfig: router,
+          routerConfig: _appRouter.router,
         );
       },
     );
