@@ -47,6 +47,10 @@ endfunction()
 
 # Flutter library and tool build rules.
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
+# Keep this available for plugin CMake files when configuring via CMake Tools.
+if(NOT DEFINED FLUTTER_TARGET_PLATFORM OR "${FLUTTER_TARGET_PLATFORM}" STREQUAL "")
+  set(FLUTTER_TARGET_PLATFORM "windows-x64")
+endif()
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
 # Application build; see runner/CMakeLists.txt.

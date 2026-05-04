@@ -448,24 +448,11 @@ class _FinancialListView extends StatelessWidget {
               const SizedBox(height: 32),
 
               Text(
-                'Veículos Financiados',
+                'Veículos Financiados por Empresa',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: financiados.asMap().entries.map((e) {
-                  double itemWidth = (width - ((4 - 1) * 16)) / 4;
-                  if (width < 1200) itemWidth = (width - 16) / 3;
-                  if (width < 900) itemWidth = (width - 16) / 2;
-                  if (width < 600) itemWidth = width;
-                  return SizedBox(
-                    width: itemWidth,
-                    child: _vehicleCard(context, e.value, e.key, isDark),
-                  );
-                }).toList(),
-              ),
+              ..._buildCompanySections(context, financiados, width, isDark),
               const SizedBox(height: 32),
               _maintenanceTable(context, isDark),
             ],
@@ -653,6 +640,105 @@ class _FinancialListView extends StatelessWidget {
       case 12: return 'Dez';
       default: return '';
     }
+  }
+
+  List<Widget> _buildCompanySections(
+    BuildContext context,
+    List<VehicleData> vehicles,
+    double width,
+    bool isDark,
+  ) {
+    final grouped = _groupVehiclesByEmpresa(vehicles);
+    final sections = <Widget>[];
+
+    for (final group in grouped.entries) {
+      final sectionTitle = group.key == 'Não Locados'
+          ? 'Não Locados'
+          : 'Empresa ${group.key}';
+
+      sections.add(
+        Text(
+          sectionTitle,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      );
+      sections.add(const SizedBox(height: 12));
+      sections.add(
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: group.value.asMap().entries.map((entry) {
+            double itemWidth = (width - ((4 - 1) * 16)) / 4;
+            if (width < 1200) itemWidth = (width - 16) / 3;
+            if (width < 900) itemWidth = (width - 16) / 2;
+            if (width < 600) itemWidth = width;
+            return SizedBox(
+              width: itemWidth,
+              child: _vehicleCard(context, entry.value, entry.key, isDark),
+            );
+          }).toList(),
+        ),
+      );
+      sections.add(const SizedBox(height: 24));
+    }
+
+    return sections;
+  }
+
+  Map<String, List<VehicleData>> _groupVehiclesByEmpresa(
+    List<VehicleData> vehicles,
+  ) {
+    final grouped = <String, List<VehicleData>>{};
+    for (final v in vehicles) {
+      final groupKey = _resolveEmpresaGroup(v);
+      grouped.putIfAbsent(groupKey, () => <VehicleData>[]).add(v);
+    }
+
+    final ordered = <String, List<VehicleData>>{};
+    const orderedKeys = <String>[
+      'New Tesc',
+      'ATR',
+      'Ensin',
+      'New',
+      'Tesc',
+      'Outras Locadoras',
+      'Não Locados',
+    ];
+
+    for (final key in orderedKeys) {
+      final items = grouped[key];
+      if (items == null || items.isEmpty) continue;
+      items.sort((a, b) => a.placa.compareTo(b.placa));
+      ordered[key] = items;
+    }
+
+    return ordered;
+  }
+
+  String _resolveEmpresaGroup(VehicleData veiculo) {
+    final origem = veiculo.motorista.trim().toUpperCase();
+    final bool mencionaNew = origem.contains('NEW');
+    final bool mencionaTesc = origem.contains('TESC');
+    final bool mencionaAtr = origem.contains('ATR');
+    final bool mencionaEnsin = origem.contains('ENSIN');
+
+    final bool isLocado =
+        origem.contains('LOCADO') ||
+        mencionaNew ||
+        mencionaTesc ||
+        mencionaAtr ||
+        mencionaEnsin ||
+        veiculo.status == VehicleStatus.reserva;
+
+    if (!isLocado) return 'Não Locados';
+    if (mencionaNew && mencionaTesc) return 'New Tesc';
+    if (mencionaAtr) return 'ATR';
+    if (mencionaEnsin) return 'Ensin';
+    if (mencionaNew) return 'New';
+    if (mencionaTesc) return 'Tesc';
+    return 'Outras Locadoras';
   }
 
   Widget _vehicleCard(BuildContext ctx, VehicleData v, int index, bool isDark) {
@@ -1999,11 +2085,18 @@ class _DetailViewState extends State<_DetailView> {
     required bool isDark,
     required Color paidColor,
   }) {
-    final int mesesFaltantes = totalMeses - mesesPagos;
+    final int totalMesesSafe = totalMeses <= 0 ? 1 : totalMeses;
+    final int mesesPagosSafe = mesesPagos.clamp(0, totalMesesSafe);
+    final int mesesFaltantes = totalMesesSafe - mesesPagosSafe;
     final bool warningAlerte = mesesFaltantes > 0 && mesesFaltantes <= 3;
-    final int currentDisplay = (mesesPagos + 1).clamp(1, totalMeses);
-    final dtCurrent = DateTime(baseDate.year, baseDate.month + currentDisplay - 1, 1);
-    final String currentLabel = "$currentDisplay/$totalMeses, ${_monthName(dtCurrent.month)}/${dtCurrent.year}";
+    final int currentDisplay = (mesesPagosSafe + 1).clamp(1, totalMesesSafe);
+    final dtCurrent = DateTime(
+      baseDate.year,
+      baseDate.month + currentDisplay - 1,
+      1,
+    );
+    final String currentLabel =
+        "$currentDisplay/$totalMesesSafe, ${_monthName(dtCurrent.month)}/${dtCurrent.year}";
 
     return BentoCard(
       animationDelay: -1,
@@ -2013,23 +2106,30 @@ class _DetailViewState extends State<_DetailView> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(title, style: Theme.of(ctx).textTheme.titleLarge),
                     const SizedBox(height: 4),
-                    Text(currentLabel, style: Theme.of(ctx).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight)),
+                    Text(
+                      currentLabel,
+                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textSecondaryLight,
+                      ),
+                    ),
                   ],
                 ),
-                Row(
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 8,
                   children: [
                     _lg(paidColor, 'Pago'),
-                    const SizedBox(width: 14),
                     _lg(AppColors.atrOrange, 'Atual'),
-                    const SizedBox(width: 14),
                     _lg(
                       AppColors.textSecondaryLight.withValues(alpha: 0.3),
                       'Futuro',
@@ -2069,10 +2169,10 @@ class _DetailViewState extends State<_DetailView> {
             child: Wrap(
               spacing: 5,
               runSpacing: 5,
-              children: List.generate(totalMeses, (i) {
+              children: List.generate(totalMesesSafe, (i) {
                 final n = i + 1;
-                final paid = n <= mesesPagos;
-                final curr = n == mesesPagos + 1;
+                final paid = n <= mesesPagosSafe;
+                final curr = n == mesesPagosSafe + 1;
                 // Soma i meses na data de base para prever o mês
                 final dt = DateTime(baseDate.year, baseDate.month + i, 1);
                 final strMesAno = "${_monthName(dt.month)}/${dt.year}";
