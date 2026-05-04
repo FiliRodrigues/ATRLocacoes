@@ -637,6 +637,24 @@ class _FinancialListView extends StatelessWidget {
     );
   }
 
+  String _monthName(int month) {
+    switch (month) {
+      case 1: return 'Jan';
+      case 2: return 'Fev';
+      case 3: return 'Mar';
+      case 4: return 'Abr';
+      case 5: return 'Mai';
+      case 6: return 'Jun';
+      case 7: return 'Jul';
+      case 8: return 'Ago';
+      case 9: return 'Set';
+      case 10: return 'Out';
+      case 11: return 'Nov';
+      case 12: return 'Dez';
+      default: return '';
+    }
+  }
+
   Widget _vehicleCard(BuildContext ctx, VehicleData v, int index, bool isDark) {
     final f = v.financiamento!;
     final saldoMensal = f.recebimentoMensal - f.valorParcela;
@@ -657,11 +675,18 @@ class _FinancialListView extends StatelessWidget {
     }
 
     final progresso = f.progressoFinanciamento;
-    final Color progressColor = progresso >= 0.8
+    final progressoLoc = f.progressoLocacao;
+    final int mesesLocacaoRestantes = f.locacaoRestantes;
+    final bool isRenovacaoProxima = f.recebimentoMensal > 0 && mesesLocacaoRestantes <= 3;
+    final String mesAnoAtual = "${_monthName(DateTime.now().month)}/${DateTime.now().year}";
+
+    final Color progressColor = isQuitado
         ? AppColors.statusSuccess
-        : progresso >= 0.4
-            ? AppColors.atrOrange
-            : AppColors.statusError;
+        : (progresso >= 0.8
+            ? AppColors.statusSuccess
+            : progresso >= 0.4
+                ? AppColors.atrOrange
+                : AppColors.statusError);
 
     return BentoCard(
       animationDelay: 300 + (index * 80),
@@ -737,21 +762,72 @@ class _FinancialListView extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            // Barra de progresso do financiamento
+            // Progresso de Recebimentos (Locação)
+            if (f.recebimentoMensal > 0) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Locação',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: isDark ? Colors.white70 : Colors.black87)),
+                  Text(
+                    '${(progressoLoc * 100).toStringAsFixed(0)}%'
+                    '  (${f.mesesLocacaoPagos}/${f.mesesLocacaoTotais}) - $mesAnoAtual',
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.statusSuccess),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progressoLoc,
+                  minHeight: 4,
+                  backgroundColor: isDark ? AppColors.borderDark : AppColors.borderLight,
+                  valueColor: const AlwaysStoppedAnimation(AppColors.statusSuccess),
+                ),
+              ),
+              if (isRenovacaoProxima) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(LucideIcons.alertTriangle, size: 10, color: AppColors.statusWarning),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Faltam $mesesLocacaoRestantes parcelas para acabar os lançamentos',
+                      style: const TextStyle(
+                        fontSize: 9, 
+                        color: AppColors.statusWarning,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+
+            // Progresso de Pagamentos (Financiamento)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Progresso',
+                Text('Financiamento',
                     style: TextStyle(
                         fontSize: 10,
                         color: isDark ? Colors.white70 : Colors.black87)),
                 Text(
-                  '${(progresso * 100).toStringAsFixed(0)}%'
-                  '  (${f.parcelasPagas}/${f.totalParcelas})',
+                  isQuitado 
+                      ? 'Quitado (100%)'
+                      : '${(progresso * 100).toStringAsFixed(0)}%'
+                        '  (${f.parcelasPagas}/${f.totalParcelas})',
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: progressColor),
+                      color: isQuitado ? AppColors.statusSuccess : AppColors.statusError),
                 ),
               ],
             ),
@@ -763,7 +839,7 @@ class _FinancialListView extends StatelessWidget {
                 minHeight: 4,
                 backgroundColor:
                     isDark ? AppColors.borderDark : AppColors.borderLight,
-                valueColor: AlwaysStoppedAnimation(progressColor),
+                valueColor: AlwaysStoppedAnimation(isQuitado ? AppColors.statusSuccess : AppColors.statusError),
               ),
             ),
             const SizedBox(height: 14),
@@ -1151,7 +1227,7 @@ class _DetailViewState extends State<_DetailView> {
           const SizedBox(height: 32),
           _maintenanceCard(context, v, isDark),
           const SizedBox(height: 32),
-          _installmentTimeline(context, f, isDark),
+          _installmentTimeline(context, v, isDark),
           const SizedBox(height: 32),
           _revenueBreakdown(context, v, f, lucro, isDark),
         ],
@@ -1885,7 +1961,50 @@ class _DetailViewState extends State<_DetailView> {
         ],
       );
 
-  Widget _installmentTimeline(BuildContext ctx, FinancingData f, bool isDark) {
+  Widget _installmentTimeline(BuildContext ctx, VehicleData v, bool isDark) {
+    final f = v.financiamento!;
+    return Column(
+      children: [
+        if (f.recebimentoMensal > 0) ...[
+          _timelineGrid(
+            ctx,
+            title: 'Recebimentos (Locação)',
+            totalMeses: f.mesesLocacaoTotais,
+            mesesPagos: f.mesesLocacaoPagos,
+            baseDate: v.dataAquisicao,
+            isDark: isDark,
+            paidColor: AppColors.statusSuccess,
+          ),
+          const SizedBox(height: 24),
+        ],
+        _timelineGrid(
+          ctx,
+          title: 'Pagamentos (Financiamento)',
+          totalMeses: f.totalParcelas <= 1 ? 1 : f.totalParcelas,
+          mesesPagos: f.totalParcelas <= 1 ? 1 : f.parcelasPagas,
+          baseDate: v.dataAquisicao,
+          isDark: isDark,
+          paidColor: AppColors.statusError,
+        ),
+      ],
+    );
+  }
+
+  Widget _timelineGrid(
+    BuildContext ctx, {
+    required String title,
+    required int totalMeses,
+    required int mesesPagos,
+    required DateTime baseDate,
+    required bool isDark,
+    required Color paidColor,
+  }) {
+    final int mesesFaltantes = totalMeses - mesesPagos;
+    final bool warningAlerte = mesesFaltantes > 0 && mesesFaltantes <= 3;
+    final int currentDisplay = (mesesPagos + 1).clamp(1, totalMeses);
+    final dtCurrent = DateTime(baseDate.year, baseDate.month + currentDisplay - 1, 1);
+    final String currentLabel = "$currentDisplay/$totalMeses, ${_monthName(dtCurrent.month)}/${dtCurrent.year}";
+
     return BentoCard(
       animationDelay: -1,
       padding: EdgeInsets.zero,
@@ -1897,37 +2016,72 @@ class _DetailViewState extends State<_DetailView> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Parcelas', style: Theme.of(ctx).textTheme.titleLarge),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(ctx).textTheme.titleLarge),
+                    const SizedBox(height: 4),
+                    Text(currentLabel, style: Theme.of(ctx).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight)),
+                  ],
+                ),
                 Row(
                   children: [
-                    _lg(AppColors.statusSuccess, 'Paga'),
+                    _lg(paidColor, 'Pago'),
                     const SizedBox(width: 14),
                     _lg(AppColors.atrOrange, 'Atual'),
                     const SizedBox(width: 14),
                     _lg(
                       AppColors.textSecondaryLight.withValues(alpha: 0.3),
-                      'Futura',
+                      'Futuro',
                     ),
                   ],
                 ),
               ],
             ),
           ),
+          if (warningAlerte)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.atrOrange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.atrOrange.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.alertTriangle, size: 16, color: AppColors.atrOrange),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Faltam apenas $mesesFaltantes ${mesesFaltantes == 1 ? 'parcela' : 'parcelas'} para acabar os lançamentos registrados.",
+                        style: TextStyle(fontSize: 12, color: AppColors.atrOrange, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           const SizedBox(height: 14),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
             child: Wrap(
               spacing: 5,
               runSpacing: 5,
-              children: List.generate(f.totalParcelas, (i) {
+              children: List.generate(totalMeses, (i) {
                 final n = i + 1;
-                final paid = n <= f.parcelasPagas;
-                final curr = n == f.parcelasPagas + 1;
+                final paid = n <= mesesPagos;
+                final curr = n == mesesPagos + 1;
+                // Soma i meses na data de base para prever o mês
+                final dt = DateTime(baseDate.year, baseDate.month + i, 1);
+                final strMesAno = "${_monthName(dt.month)}/${dt.year}";
+
                 Color bg, txt;
                 Border? b;
                 if (paid) {
-                  bg = AppColors.statusSuccess.withValues(alpha: 0.15);
-                  txt = AppColors.statusSuccess;
+                  bg = paidColor.withValues(alpha: 0.15);
+                  txt = paidColor;
                 } else if (curr) {
                   bg = AppColors.atrOrange.withValues(alpha: 0.2);
                   txt = AppColors.atrOrange;
@@ -1938,12 +2092,13 @@ class _DetailViewState extends State<_DetailView> {
                       : AppColors.backgroundLight;
                   txt = AppColors.textSecondaryLight.withValues(alpha: 0.4);
                 }
+                
                 return Tooltip(
                   message: paid
-                      ? 'Parcela $n - PAGA'
+                      ? 'Mês $n ($strMesAno) - OK'
                       : curr
-                          ? 'Parcela $n - ATUAL'
-                          : 'Parcela $n - PENDENTE',
+                          ? 'Mês $n ($strMesAno) - ATUAL'
+                          : 'Mês $n ($strMesAno) - FUTURO',
                   child: Container(
                     width: 48,
                     height: 36,
@@ -1962,8 +2117,7 @@ class _DetailViewState extends State<_DetailView> {
                           '$n',
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight:
-                                curr ? FontWeight.w800 : FontWeight.w600,
+                            fontWeight: curr ? FontWeight.w800 : FontWeight.w600,
                             color: txt,
                           ),
                         ),
@@ -1977,6 +2131,24 @@ class _DetailViewState extends State<_DetailView> {
         ],
       ),
     );
+  }
+
+  String _monthName(int month) {
+    switch (month) {
+      case 1: return 'Jan';
+      case 2: return 'Fev';
+      case 3: return 'Mar';
+      case 4: return 'Abr';
+      case 5: return 'Mai';
+      case 6: return 'Jun';
+      case 7: return 'Jul';
+      case 8: return 'Ago';
+      case 9: return 'Set';
+      case 10: return 'Out';
+      case 11: return 'Nov';
+      case 12: return 'Dez';
+      default: return '';
+    }
   }
 
   Widget _lg(Color c, String t) => Row(

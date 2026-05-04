@@ -119,27 +119,25 @@ VehicleData vehicleFromSupabase(
     }
 
     // Parcelas pagas = meses desde a data de compra, limitado ao total de parcelas.
-    // valor_ja_pago do banco inclui entrada+juros+parcelas de forma inconsistente,
-    // então usamos mesesEmServico como fonte confiável.
-    //
-    // Para veículos quitados (quantidade_parcelas = 1) mas com locação ativa:
-    // usa 36 meses como duração do contrato de locação, garantindo que
-    // progressoFinanciamento e totalRecebido reflitam o contrato real.
-    final effectiveTotalParcelas =
-        (totalParcelas == 1 && recebimentoMensal > 0) ? 36 : totalParcelas;
-    final int parcelasPagas =
-        mesesEmServico.clamp(0, effectiveTotalParcelas);
+    final int parcelasPagas = mesesEmServico.clamp(0, totalParcelas);
+    
+    // Meses de locação
+    final int locTotais = recebimentoMensal > 0 ? 36 : 0;
+    final int locPagos = mesesEmServico.clamp(0, 36);
+
     // valorJaPago disponível para referência futura, mas não usado no cálculo.
     final _ = valorJaPago;
 
     financing = FinancingData(
       valorTotal: valorTotalDb,
       percentualEntrada: percentualEntrada,
-      totalParcelas: effectiveTotalParcelas,
+      totalParcelas: totalParcelas,
       parcelasPagas: parcelasPagas,
       recebimentoMensal: recebimentoMensal,
       taxaJurosMensal: taxaJurosMensal,
       previsaoQuitacao: previsaoQuitacao,
+      mesesLocacaoTotais: locTotais,
+      mesesLocacaoPagos: locPagos,
     );
   } else if (isFinanciado) {
     // Sem dados de financiamento no banco — usa estimativa padrão
