@@ -160,10 +160,23 @@ class Contrato {
         dataFim: DateTime.parse(row['data_fim'] as String),
         slaKmMes: (row['sla_km_mes'] as num?)?.toInt() ?? 0,
         valorMensal: (row['valor_mensal'] as num?)?.toDouble() ?? 0.0,
-        status: ContratoStatus.values.firstWhere(
-          (s) => s.name == row['status'],
-          orElse: () => ContratoStatus.rascunho,
-        ),
+        status: () {
+          final raw = (row['status']?.toString() ?? '').trim().toLowerCase();
+          if (raw.isEmpty) return ContratoStatus.rascunho;
+
+          if (raw == 'ativo') return ContratoStatus.ativo;
+          if (raw == 'suspenso') return ContratoStatus.suspenso;
+          if (raw == 'encerrado') return ContratoStatus.encerrado;
+          if (raw == 'rascunho') return ContratoStatus.rascunho;
+
+          final normalized = raw
+              .replaceAll('-', '_')
+              .replaceAll(' ', '_');
+          return ContratoStatus.values.firstWhere(
+            (s) => s.name.toLowerCase() == normalized,
+            orElse: () => ContratoStatus.rascunho,
+          );
+        }(),
         observacoes: row['observacoes'] as String? ?? '',
         criadoPor: row['criado_por'] as String? ?? '',
         createdAt: DateTime.parse(row['created_at'] as String),

@@ -500,47 +500,57 @@ class _AppSidebarState extends State<AppSidebar> {
 
   Map<String, List<VehicleData>> _groupVehiclesByContrato(
     List<VehicleData> vehicles,
-    List<Contrato> contratos,
+    List<Contrato> _contratos,
   ) {
-    final sortedContratos = [...contratos]
-      ..sort((a, b) {
-        final statusA = a.status == ContratoStatus.ativo ? 1 : 0;
-        final statusB = b.status == ContratoStatus.ativo ? 1 : 0;
-        if (statusA != statusB) return statusB - statusA;
-        return b.dataInicio.compareTo(a.dataInicio);
-      });
-
-    final clientePorPlaca = <String, String>{};
-    for (final c in sortedContratos) {
-      final placa = c.veiculoPlaca.trim().toUpperCase();
-      clientePorPlaca.putIfAbsent(
-        placa,
-        () => c.clienteNome.trim().isEmpty ? 'Sem Contrato' : c.clienteNome,
-      );
-    }
-
     final grouped = <String, List<VehicleData>>{};
     for (final v in vehicles) {
-      final placa = v.placa.trim().toUpperCase();
-      final key = clientePorPlaca[placa] ?? 'Sem Contrato';
-      grouped.putIfAbsent(key, () => <VehicleData>[]).add(v);
+      final groupKey = _resolveLocadoraGroupByVehicle(v);
+      grouped.putIfAbsent(groupKey, () => <VehicleData>[]).add(v);
     }
 
-    final orderedKeys = grouped.keys.toList()
-      ..sort((a, b) {
-        if (a == 'Sem Contrato') return 1;
-        if (b == 'Sem Contrato') return -1;
-        return a.toLowerCase().compareTo(b.toLowerCase());
-      });
-
     final ordered = <String, List<VehicleData>>{};
+    const orderedKeys = <String>[
+      'New Tesc',
+      'ATR',
+      'Ensin',
+      'New',
+      'Tesc',
+      'Outras Locadoras',
+      'Não Locados',
+    ];
+
     for (final key in orderedKeys) {
-      final items = grouped[key]!;
+      final items = grouped[key];
+      if (items == null || items.isEmpty) continue;
       items.sort((a, b) => a.placa.compareTo(b.placa));
       ordered[key] = items;
     }
 
     return ordered;
+  }
+
+  String _resolveLocadoraGroupByVehicle(VehicleData veiculo) {
+    final origem = veiculo.motorista.trim().toUpperCase();
+    final bool mencionaNew = origem.contains('NEW');
+    final bool mencionaTesc = origem.contains('TESC');
+    final bool mencionaAtr = origem.contains('ATR');
+    final bool mencionaEnsin = origem.contains('ENSIN');
+
+    final bool isLocado =
+        origem.contains('LOCADO') ||
+        mencionaNew ||
+        mencionaTesc ||
+        mencionaAtr ||
+      mencionaEnsin ||
+        veiculo.status == VehicleStatus.reserva;
+
+    if (!isLocado) return 'Não Locados';
+    if (mencionaNew && mencionaTesc) return 'New Tesc';
+    if (mencionaAtr) return 'ATR';
+    if (mencionaEnsin) return 'Ensin';
+    if (mencionaNew) return 'New';
+    if (mencionaTesc) return 'Tesc';
+    return 'Outras Locadoras';
   }
 }
 
