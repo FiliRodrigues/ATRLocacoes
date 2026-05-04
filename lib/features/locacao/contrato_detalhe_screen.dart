@@ -67,10 +67,10 @@ class _ContratoDetalheScreenState extends State<ContratoDetalheScreen>
           children: [
             Text(contrato.numero,
                 style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w800)),
+                    fontSize: 16, fontWeight: FontWeight.w800,),),
             Text(contrato.clienteNome,
                 style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w500)),
+                    fontSize: 12, fontWeight: FontWeight.w500,),),
           ],
         ),
         actions: [
@@ -149,9 +149,9 @@ class _ResumoTab extends StatelessWidget {
             _InfoRow('Valor Mensal', _brl.format(contrato.valorMensal), isDark),
             _InfoRow('Total Contrato', _brl.format(contrato.valorTotalContrato), isDark),
             _InfoRow('Impacto Ocorrências', _brl.format(impactoTotal), isDark,
-                valueColor: impactoTotal > 0 ? AppColors.statusError : null),
+                valueColor: impactoTotal > 0 ? AppColors.statusError : null,),
             _InfoRow('Saldo Líquido', _brl.format(saldoLiquido), isDark,
-                valueColor: saldoLiquido < 0 ? AppColors.statusError : AppColors.statusSuccess),
+                valueColor: saldoLiquido < 0 ? AppColors.statusError : AppColors.statusSuccess,),
           ],
         ),
         if (contrato.observacoes.isNotEmpty) ...[
@@ -167,7 +167,7 @@ class _ResumoTab extends StatelessWidget {
                       color: isDark
                           ? AppColors.textSecondaryDark
                           : AppColors.textSecondaryLight,
-                    )),
+                    ),),
               ),
             ],
           ),
@@ -196,7 +196,7 @@ class _ChecklistTab extends StatelessWidget {
                   style: TextStyle(
                       color: isDark
                           ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight)))
+                          : AppColors.textSecondaryLight,),),)
           : ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: lista.length,
@@ -216,7 +216,7 @@ class _ChecklistTab extends StatelessWidget {
         backgroundColor: AppColors.atrOrange,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Registrar Evento',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),),
       ),
     );
   }
@@ -282,7 +282,7 @@ class _ChecklistCard extends StatelessWidget {
                 if (evento.kmPercorridos != null)
                   Text(
                     'KM percorridos: ${evento.kmPercorridos}',
-                    style: TextStyle(fontSize: 12, color: AppColors.atrOrange),
+                    style: const TextStyle(fontSize: 12, color: AppColors.atrOrange),
                   ),
                 if (evento.observacoes.isNotEmpty)
                   Text(evento.observacoes,
@@ -290,7 +290,7 @@ class _ChecklistCard extends StatelessWidget {
                           fontSize: 12,
                           color: isDark
                               ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight)),
+                              : AppColors.textSecondaryLight,),),
               ],
             ),
           ),
@@ -303,7 +303,7 @@ class _ChecklistCard extends StatelessWidget {
                     fontSize: 11,
                     color: isDark
                         ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight),
+                        : AppColors.textSecondaryLight,),
               ),
               if (evento.fotos.isNotEmpty) ...[
                 const SizedBox(height: 4),
@@ -311,8 +311,8 @@ class _ChecklistCard extends StatelessWidget {
                   const Icon(LucideIcons.image, size: 12),
                   const SizedBox(width: 4),
                   Text('${evento.fotos.length}',
-                      style: const TextStyle(fontSize: 11)),
-                ]),
+                      style: const TextStyle(fontSize: 11),),
+                ],),
               ],
             ],
           ),
@@ -341,7 +341,7 @@ class _OcorrenciasTab extends StatelessWidget {
                   style: TextStyle(
                       color: isDark
                           ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight)))
+                          : AppColors.textSecondaryLight,),),)
           : ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: lista.length,
@@ -363,7 +363,7 @@ class _OcorrenciasTab extends StatelessWidget {
         backgroundColor: AppColors.statusError,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Nova Ocorrência',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),),
       ),
     );
   }
@@ -456,7 +456,7 @@ class _OcorrenciaCard extends StatelessWidget {
                   'Impacto', _brl.format(ocorrencia.impactoFinanceiro),
                   color: ocorrencia.impactoFinanceiro > 0
                       ? AppColors.statusError
-                      : null),
+                      : null,),
             ],
           ),
         ],
@@ -530,7 +530,7 @@ class _InfoCard extends StatelessWidget {
         color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: isDark ? AppColors.borderDark : AppColors.borderLight),
+            color: isDark ? AppColors.borderDark : AppColors.borderLight,),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -571,7 +571,7 @@ class _InfoRow extends StatelessWidget {
                   fontSize: 13,
                   color: isDark
                       ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight)),
+                      : AppColors.textSecondaryLight,),),
           Text(value,
               style: TextStyle(
                 fontSize: 13,
@@ -580,7 +580,7 @@ class _InfoRow extends StatelessWidget {
                     (isDark
                         ? AppColors.textPrimaryDark
                         : AppColors.textPrimaryLight),
-              )),
+              ),),
         ],
       ),
     );
@@ -599,13 +599,13 @@ class _LabelValue extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryDark)),
+            style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryDark),),
         Text(value,
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: color,
-            )),
+            ),),
       ],
     );
   }

@@ -39,7 +39,7 @@ class FinancialAdminScreen extends StatefulWidget {
 
 class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
   _FinancialTotals? _cachedTotals;
-  int _lastRepoVersion = -1;
+  final int _lastRepoVersion = -1;
   String _filterMode = 'Todos'; // 'Todos', 'Financiados', 'Quitados'
 
   _FinancialTotals _calculateTotals(List<VehicleData> viewList) {
@@ -764,7 +764,7 @@ class _FinancialListView extends StatelessWidget {
     final progressoLoc = f.progressoLocacao;
     final int mesesLocacaoRestantes = f.locacaoRestantes;
     final bool isRenovacaoProxima = f.recebimentoMensal > 0 && mesesLocacaoRestantes <= 3;
-    final String mesAnoAtual = "${_monthName(DateTime.now().month)}/${DateTime.now().year}";
+    final String mesAnoAtual = '${_monthName(DateTime.now().month)}/${DateTime.now().year}';
 
     final Color progressColor = isQuitado
         ? AppColors.statusSuccess
@@ -798,7 +798,7 @@ class _FinancialListView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(LucideIcons.car,
-                      color: Colors.white, size: 16),
+                      color: Colors.white, size: 16,),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -808,7 +808,7 @@ class _FinancialListView extends StatelessWidget {
                       Text(
                         v.placa,
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13),
+                            fontWeight: FontWeight.bold, fontSize: 13,),
                       ),
                       Text(
                         v.nome,
@@ -842,7 +842,7 @@ class _FinancialListView extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
-                        color: statusColor),
+                        color: statusColor,),
                   ),
                 ),
               ],
@@ -856,14 +856,14 @@ class _FinancialListView extends StatelessWidget {
                   Text('Locação',
                       style: TextStyle(
                           fontSize: 10,
-                          color: isDark ? Colors.white70 : Colors.black87)),
+                          color: isDark ? Colors.white70 : Colors.black87,),),
                   Text(
                     '${(progressoLoc * 100).toStringAsFixed(0)}%'
                     '  (${f.mesesLocacaoPagos}/${f.mesesLocacaoTotais}) - $mesAnoAtual',
                     style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.statusSuccess),
+                        color: AppColors.statusSuccess,),
                   ),
                 ],
               ),
@@ -904,7 +904,7 @@ class _FinancialListView extends StatelessWidget {
                 Text('Financiamento',
                     style: TextStyle(
                         fontSize: 10,
-                        color: isDark ? Colors.white70 : Colors.black87)),
+                        color: isDark ? Colors.white70 : Colors.black87,),),
                 Text(
                   isQuitado 
                       ? 'Quitado (100%)'
@@ -913,7 +913,7 @@ class _FinancialListView extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: isQuitado ? AppColors.statusSuccess : AppColors.statusError),
+                      color: isQuitado ? AppColors.statusSuccess : AppColors.statusError,),
                 ),
               ],
             ),
@@ -930,7 +930,7 @@ class _FinancialListView extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             _rowInfo('Parcela', formatCurrency(f.valorParcela),
-                AppColors.statusError),
+                AppColors.statusError,),
             const SizedBox(height: 4),
             _rowInfo(
               'Recebido/mês',
@@ -2093,10 +2093,9 @@ class _DetailViewState extends State<_DetailView> {
     final dtCurrent = DateTime(
       baseDate.year,
       baseDate.month + currentDisplay - 1,
-      1,
     );
     final String currentLabel =
-        "$currentDisplay/$totalMesesSafe, ${_monthName(dtCurrent.month)}/${dtCurrent.year}";
+        '$currentDisplay/$totalMesesSafe, ${_monthName(dtCurrent.month)}/${dtCurrent.year}';
 
     return BentoCard(
       animationDelay: -1,
@@ -2151,12 +2150,12 @@ class _DetailViewState extends State<_DetailView> {
                 ),
                 child: Row(
                   children: [
-                    Icon(LucideIcons.alertTriangle, size: 16, color: AppColors.atrOrange),
+                    const Icon(LucideIcons.alertTriangle, size: 16, color: AppColors.atrOrange),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         "Faltam apenas $mesesFaltantes ${mesesFaltantes == 1 ? 'parcela' : 'parcelas'} para acabar os lançamentos registrados.",
-                        style: TextStyle(fontSize: 12, color: AppColors.atrOrange, fontWeight: FontWeight.w600),
+                        style: const TextStyle(fontSize: 12, color: AppColors.atrOrange, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -2174,8 +2173,8 @@ class _DetailViewState extends State<_DetailView> {
                 final paid = n <= mesesPagosSafe;
                 final curr = n == mesesPagosSafe + 1;
                 // Soma i meses na data de base para prever o mês
-                final dt = DateTime(baseDate.year, baseDate.month + i, 1);
-                final strMesAno = "${_monthName(dt.month)}/${dt.year}";
+                final dt = DateTime(baseDate.year, baseDate.month + i);
+                final strMesAno = '${_monthName(dt.month)}/${dt.year}';
 
                 Color bg, txt;
                 Border? b;

@@ -193,7 +193,7 @@ class LocacaoRepository {
         .uploadBinary(
           path,
           bytes,
-          fileOptions: FileOptions(contentType: contentType, upsert: false),
+          fileOptions: FileOptions(contentType: contentType),
         );
     return _db.storage.from('atr-attachments').getPublicUrl(path);
   }

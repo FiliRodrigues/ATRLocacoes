@@ -52,7 +52,7 @@ void main() async {
   // 1. Sobrescreve a famosa "Tela Vermelha da Morte" por algo gracioso e calmo
   ErrorWidget.builder = (FlutterErrorDetails details) {
     saveErrorLog(
-        'UI Build Error: ${details.exceptionAsString()}\nTrace:\n${details.stack}');
+        'UI Build Error: ${details.exceptionAsString()}\nTrace:\n${details.stack}',);
     return Container(
       padding: const EdgeInsets.all(16),
       alignment: Alignment.center,
@@ -78,9 +78,9 @@ void main() async {
   // 2. Interceptador de Erros do Flutter (Fronteira Gráfica / Layout)
   FlutterError.onError = (FlutterErrorDetails details) {
     saveErrorLog(
-        'Flutter Error: ${details.exceptionAsString()}\nTrace:\n${details.stack}');
+        'Flutter Error: ${details.exceptionAsString()}\nTrace:\n${details.stack}',);
     FlutterError.presentError(
-        details); // Despeja no console para o desenvolvedor ver
+        details,); // Despeja no console para o desenvolvedor ver
   };
 
   // 3. Interceptador de Erros Assíncronos Não-Tratados (O que fecha/trava a janela do OS)

@@ -76,7 +76,6 @@ class CustosFilterBar extends StatelessWidget {
           value: veiculoSelecionado,
           items: [
             const DropdownMenuItem<String?>(
-              value: null,
               child: Text('Todos'),
             ),
             ...placasDisponiveis.map(
@@ -95,7 +94,6 @@ class CustosFilterBar extends StatelessWidget {
           value: tipoSelecionado,
           items: [
             const DropdownMenuItem<String?>(
-              value: null,
               child: Text('Todos'),
             ),
             ...tiposDisponiveis.map(
@@ -117,7 +115,7 @@ class CustosFilterBar extends StatelessWidget {
             hint: 'Status',
             value: statusPago,
             items: const [
-              DropdownMenuItem<bool?>(value: null, child: Text('Todos')),
+              DropdownMenuItem<bool?>(child: Text('Todos')),
               DropdownMenuItem<bool?>(value: true, child: Text('Pagos')),
               DropdownMenuItem<bool?>(value: false, child: Text('Pendentes')),
             ],

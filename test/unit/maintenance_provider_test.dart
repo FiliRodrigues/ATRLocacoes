@@ -16,7 +16,7 @@ class _SeededCustosRepository extends LocalCustosRepository {
         veiculoNome: 'Veículo Teste',
         titulo: 'Revisão Geral',
         tipo: 'Revisão',
-        data: DateTime(2026, 5, 1),
+        data: DateTime(2026, 5),
         prioridade: MaintenancePriority.alta,
         coluna: KanbanColumn.pendentes,
       ),

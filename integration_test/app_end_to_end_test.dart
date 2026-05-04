@@ -6,7 +6,6 @@ import 'package:fleet_app/core/data/fleet_data.dart';
 import 'package:fleet_app/core/navigation/app_router.dart';
 import 'package:fleet_app/core/services/auth_service.dart';
 import 'package:fleet_app/core/theme/app_theme.dart';
-import 'package:fleet_app/features/maintenance/maintenance_provider.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -15,7 +14,6 @@ void main() {
     final appRouter = AppRouter(authService);
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => MaintenanceProvider()),
         ChangeNotifierProvider.value(value: FleetRepository.instance),
         ChangeNotifierProvider.value(value: authService),
       ],

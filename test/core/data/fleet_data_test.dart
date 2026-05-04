@@ -40,14 +40,14 @@ void main() {
         cor2: const Color(0xFF000000),
         manutencoes: [
           MaintenanceEvent(
-            data: DateTime(2025, 1, 1),
+            data: DateTime(2025),
             tipo: 'Revisão',
             kmNoServico: 10000,
             custo: 500,
             descricao: 'Teste',
           ),
           MaintenanceEvent(
-            data: DateTime(2025, 6, 1),
+            data: DateTime(2025, 6),
             tipo: 'Troca',
             kmNoServico: 20000,
             custo: 300,
@@ -69,7 +69,7 @@ void main() {
 
   group('FinancingData', () {
     test('calcula valorParcela corretamente', () {
-      final financing = FinancingData(
+      const financing = FinancingData(
         valorTotal: 100000,
         percentualEntrada: 0.2,
         totalParcelas: 60,

@@ -111,11 +111,11 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
                 ),
               ),
               const Text('Nova Ocorrência',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),),
               const SizedBox(height: 20),
 
               // Tipo de ocorrência
-              _SectionLabel('Tipo de Ocorrência'),
+              const _SectionLabel('Tipo de Ocorrência'),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -131,7 +131,7 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
                                 ? FontWeight.w700
                                 : FontWeight.w500,
                           ),
-                        ))
+                        ),)
                     .toList(),
               ),
               const SizedBox(height: 16),
@@ -202,7 +202,7 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
               ),
               const SizedBox(height: 16),
 
-              _SectionLabel('Responsável pelo Pagamento'),
+              const _SectionLabel('Responsável pelo Pagamento'),
               Wrap(
                 spacing: 8,
                 children: [
@@ -248,12 +248,12 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: Colors.white,),
                         )
                       : const Text(
                           'Registrar Ocorrência',
                           style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 15),
+                              fontWeight: FontWeight.w700, fontSize: 15,),
                         ),
                 ),
               ),

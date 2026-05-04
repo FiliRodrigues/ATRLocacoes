@@ -6,7 +6,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 Map<String, dynamic> _mockUser(String username, String password,
-    {String tenantId = '00000000-0000-0000-0000-000000000001'}) {
+    {String tenantId = '00000000-0000-0000-0000-000000000001',}) {
   const salt = 'reg-salt-2026';
   final hash = sha256
       .convert(utf8.encode('$salt:$password:atr-salt-v1'))
@@ -23,7 +23,7 @@ Map<String, dynamic> _mockUser(String username, String password,
 
 AuthService _serviceWithUser(String username, String password,
     {DateTime Function()? now,
-    String tenantId = '00000000-0000-0000-0000-000000000001'}) {
+    String tenantId = '00000000-0000-0000-0000-000000000001',}) {
   return AuthService(
     now: now,
     userLookup: (u) async => u == username.toLowerCase()

@@ -106,7 +106,7 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
                             r.placa == v.placa &&
                             (_filtroMes == null ||
                                 (r.data.year == _filtroMes!.year &&
-                                    r.data.month == _filtroMes!.month)))
+                                    r.data.month == _filtroMes!.month)),)
                         .toList()
                       ..sort((a, b) => b.data.compareTo(a.data));
 
@@ -488,7 +488,7 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
     final now = DateTime.now();
     final meses = List.generate(
       12,
-      (i) => DateTime(now.year, now.month - i, 1),
+      (i) => DateTime(now.year, now.month - i),
     );
 
     final mes = await showModalBottomSheet<DateTime?>(
@@ -518,7 +518,7 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
             ListTile(
               leading: const Icon(LucideIcons.calendar),
               title: const Text('Todos os meses'),
-              onTap: () => Navigator.pop(ctx, null),
+              onTap: () => Navigator.pop(ctx),
             ),
             const Divider(height: 1),
             SizedBox(

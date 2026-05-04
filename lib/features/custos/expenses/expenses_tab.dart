@@ -69,9 +69,9 @@ class _ExpensesTabState extends State<ExpensesTab> {
         // Zera as horas para comparar apenas os dias
         final dData = DateTime(d.data.year, d.data.month, d.data.day);
         final start = DateTime(_periodoSelecionado!.start.year,
-            _periodoSelecionado!.start.month, _periodoSelecionado!.start.day);
+            _periodoSelecionado!.start.month, _periodoSelecionado!.start.day,);
         final end = DateTime(_periodoSelecionado!.end.year,
-            _periodoSelecionado!.end.month, _periodoSelecionado!.end.day);
+            _periodoSelecionado!.end.month, _periodoSelecionado!.end.day,);
 
         return dData.isAtSameMomentAs(start) ||
             dData.isAtSameMomentAs(end) ||
@@ -283,7 +283,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
                 child: const Row(
                   children: [
                     Icon(LucideIcons.download,
-                        size: 16, color: AppColors.textSecondaryLight),
+                        size: 16, color: AppColors.textSecondaryLight,),
                     SizedBox(width: 8),
                     Text(
                       'Exportar',
@@ -314,7 +314,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
                   context.read<CustosProvider>().addDespesa(newItem);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content: Text('Despesa adicionada com sucesso!')),
+                        content: Text('Despesa adicionada com sucesso!'),),
                   );
                 }
               },
@@ -364,7 +364,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
                       size: 14,
                       color: AppColors.atrOrange,
                     ),
-                  ]
+                  ],
                 ],
               ),
             ),
@@ -783,7 +783,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
               level: 0,
               child: pw.Text('Relatório de Despesas Operacionais',
                   style: pw.TextStyle(
-                      fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                      fontSize: 24, fontWeight: pw.FontWeight.bold,),),
             ),
             pw.SizedBox(height: 16),
             pw.TableHelper.fromTextArray(

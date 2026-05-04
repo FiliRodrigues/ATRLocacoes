@@ -33,7 +33,7 @@ class _ContratosScreenState extends State<ContratosScreen> {
             _busca.isEmpty ||
             c.clienteNome.toLowerCase().contains(_busca.toLowerCase()) ||
             c.numero.toLowerCase().contains(_busca.toLowerCase()) ||
-            c.veiculoPlaca.toLowerCase().contains(_busca.toLowerCase()))
+            c.veiculoPlaca.toLowerCase().contains(_busca.toLowerCase()),)
         .toList();
 
     final bgColor = isDark ? AppColors.backgroundDark : AppColors.backgroundLight;
@@ -118,21 +118,21 @@ class _ContratosScreenState extends State<ContratosScreen> {
   Widget _buildMetrics(bool isDark, LocacaoProvider provider) {
     final cards = [
       _MetricData('Contratos Ativos', '${provider.contratosAtivos.length}',
-          LucideIcons.fileCheck2, AppColors.statusSuccess),
+          LucideIcons.fileCheck2, AppColors.statusSuccess,),
       _MetricData('Receita Mensal', _brl.format(provider.receitaMensalAtiva),
-          LucideIcons.trendingUp, AppColors.atrOrange),
+          LucideIcons.trendingUp, AppColors.atrOrange,),
       _MetricData('Ocorrências Abertas', '${provider.ocorrenciasAbertas}',
-          LucideIcons.alertTriangle, AppColors.statusWarning),
+          LucideIcons.alertTriangle, AppColors.statusWarning,),
       _MetricData('Impacto Financeiro',
           _brl.format(provider.impactoFinanceiroTotal),
-          LucideIcons.alertCircle, AppColors.statusError),
+          LucideIcons.alertCircle, AppColors.statusError,),
     ];
     return Row(
       children: cards
           .map((d) => Expanded(child: Padding(
                 padding: const EdgeInsets.only(right: 12),
                 child: _MetricCard(data: d, isDark: isDark),
-              )))
+              ),),)
           .toList(),
     );
   }
@@ -176,7 +176,7 @@ class _ContratosScreenState extends State<ContratosScreen> {
                 onTap: () => setState(() => _filtroStatus = s),
                 isDark: isDark,
                 color: s.color,
-              )),
+              ),),
         ],
       ),
     );
@@ -206,7 +206,7 @@ class _ContratosScreenState extends State<ContratosScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(LucideIcons.fileX2, size: 48,
-              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,),
           const SizedBox(height: 12),
           Text(
             'Nenhum contrato encontrado',
@@ -339,7 +339,7 @@ class _ContratoCard extends StatelessWidget {
                     children: [
                       Text(
                         contrato.numero,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: AppColors.atrOrange,
@@ -403,7 +403,7 @@ class _ContratoCard extends StatelessWidget {
                         size: 12,
                         color: isDark
                             ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight),
+                            : AppColors.textSecondaryLight,),
                     const SizedBox(width: 4),
                     Text(
                       '${contrato.slaKmMes} km/mês',
@@ -423,7 +423,7 @@ class _ContratoCard extends StatelessWidget {
                 size: 18,
                 color: isDark
                     ? AppColors.textSecondaryDark
-                    : AppColors.textSecondaryLight),
+                    : AppColors.textSecondaryLight,),
           ],
         ),
       ),

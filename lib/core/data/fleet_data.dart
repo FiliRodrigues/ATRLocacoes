@@ -416,7 +416,7 @@ class FleetRepository extends ChangeNotifier {
   /// Não deve ser chamado em código de produção.
   @visibleForTesting
   void seedForTest(List<VehicleData> vehicles,
-      {List<DriverData> drivers = const []}) {
+      {List<DriverData> drivers = const [],}) {
     _frota
       ..clear()
       ..addAll(vehicles);

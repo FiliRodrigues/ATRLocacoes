@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -1056,7 +1056,7 @@ class _SalaAtrConsolidado extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: headerBg,
                     borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(12)),
+                        top: Radius.circular(12),),
                   ),
                   child: const Row(
                     children: [
@@ -1082,7 +1082,7 @@ class _SalaAtrConsolidado extends StatelessWidget {
                   return Container(
                     color: rowBg,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+                        horizontal: 16, vertical: 12,),
                     child: Row(
                       children: [
                         Expanded(
@@ -1143,7 +1143,7 @@ class _SalaAtrConsolidado extends StatelessWidget {
                           flex: 2,
                           child: Text(
                             '${r.ocupacao.toStringAsFixed(1)}%',
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: AppColors.atrOrange,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -1157,11 +1157,11 @@ class _SalaAtrConsolidado extends StatelessWidget {
                 // ── Rodapé totais ──
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
+                      horizontal: 16, vertical: 12,),
                   decoration: BoxDecoration(
                     color: AppColors.atrOrange.withValues(alpha: 0.06),
                     borderRadius: const BorderRadius.vertical(
-                        bottom: Radius.circular(12)),
+                        bottom: Radius.circular(12),),
                     border: Border(
                       top: BorderSide(color: border),
                     ),

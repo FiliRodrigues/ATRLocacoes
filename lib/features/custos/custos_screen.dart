@@ -40,8 +40,8 @@ class CustosScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                Expanded(
-                  child: const TabBarView(
+                const Expanded(
+                  child: TabBarView(
                     children: [
                       Padding(
                         padding: EdgeInsets.fromLTRB(32, 24, 32, 32),

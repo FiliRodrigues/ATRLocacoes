@@ -73,7 +73,7 @@ class LocacaoProvider extends ChangeNotifier {
 
   Future<Contrato> atualizarContrato(Contrato contrato) async {
     final antes = _contratos.firstWhere((c) => c.id == contrato.id,
-        orElse: () => contrato);
+        orElse: () => contrato,);
     final atualizado = await _repo.updateContrato(contrato);
     final idx = _contratos.indexWhere((c) => c.id == atualizado.id);
     if (idx != -1) _contratos[idx] = atualizado;
@@ -90,7 +90,7 @@ class LocacaoProvider extends ChangeNotifier {
 
   Future<void> deletarContrato(String id) async {
     final antes = _contratos.firstWhere((c) => c.id == id,
-        orElse: () => throw StateError('contrato $id não encontrado'));
+        orElse: () => throw StateError('contrato $id não encontrado'),);
     await _repo.deleteContrato(id);
     _contratos.removeWhere((c) => c.id == id);
     _checklistCache.remove(id);
@@ -164,7 +164,7 @@ class LocacaoProvider extends ChangeNotifier {
 
   Future<Ocorrencia> atualizarOcorrencia(Ocorrencia ocorrencia) async {
     final antes = _todasOcorrencias.firstWhere((o) => o.id == ocorrencia.id,
-        orElse: () => ocorrencia);
+        orElse: () => ocorrencia,);
     final atualizada = await _repo.updateOcorrencia(ocorrencia);
     final idx = _todasOcorrencias.indexWhere((o) => o.id == atualizada.id);
     if (idx != -1) _todasOcorrencias[idx] = atualizada;

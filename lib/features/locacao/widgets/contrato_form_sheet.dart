@@ -48,7 +48,7 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
     _clienteContatoCtrl = TextEditingController(text: c?.clienteContato ?? '');
     _slaKmCtrl = TextEditingController(text: c?.slaKmMes.toString() ?? '');
     _valorMensalCtrl = TextEditingController(
-        text: c?.valorMensal.toStringAsFixed(2) ?? '');
+        text: c?.valorMensal.toStringAsFixed(2) ?? '',);
     _obsCtrl = TextEditingController(text: c?.observacoes ?? '');
     if (c != null) {
       _veiculoPlacaSelecionada = c.veiculoPlaca;
@@ -102,7 +102,7 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
         dataFim: _dataFim,
         slaKmMes: int.tryParse(_slaKmCtrl.text) ?? 0,
         valorMensal: double.tryParse(
-                _valorMensalCtrl.text.replaceAll(',', '.')) ??
+                _valorMensalCtrl.text.replaceAll(',', '.'),) ??
             0.0,
         status: _status,
         observacoes: _obsCtrl.text.trim(),
@@ -181,11 +181,11 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
               Text(
                 _isEditing ? 'Editar Contrato' : 'Novo Contrato',
                 style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w800),
+                    fontSize: 18, fontWeight: FontWeight.w800,),
               ),
               const SizedBox(height: 24),
 
-              _SectionLabel('Identificação'),
+              const _SectionLabel('Identificação'),
               _FieldRow(children: [
                 _FormField(
                   controller: _numeroCtrl,
@@ -199,7 +199,7 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
                   isDark: isDark,
                   validator: _requiredValidator,
                 ),
-              ]),
+              ],),
               const SizedBox(height: 12),
               _FieldRow(children: [
                 _FormField(
@@ -215,18 +215,18 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
                   label: 'Contato / E-mail',
                   isDark: isDark,
                 ),
-              ]),
+              ],),
               const SizedBox(height: 20),
 
-              _SectionLabel('Veículo'),
+              const _SectionLabel('Veículo'),
               DropdownButtonFormField<String>(
-                value: _veiculoPlacaSelecionada,
+                initialValue: _veiculoPlacaSelecionada,
                 decoration: _inputDecoration('Placa do Veículo', isDark),
                 items: frota
                     .map((v) => DropdownMenuItem(
                           value: v.placa,
                           child: Text('${v.placa} — ${v.nome}'),
-                        ))
+                        ),)
                     .toList(),
                 onChanged: (v) =>
                     setState(() => _veiculoPlacaSelecionada = v),
@@ -235,7 +235,7 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
               ),
               const SizedBox(height: 20),
 
-              _SectionLabel('Vigência e Valores'),
+              const _SectionLabel('Vigência e Valores'),
               _FieldRow(children: [
                 _DatePickerField(
                   label: 'Início',
@@ -249,7 +249,7 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
                   isDark: isDark,
                   onTap: () => _pickDate(isInicio: false),
                 ),
-              ]),
+              ],),
               const SizedBox(height: 12),
               _FieldRow(children: [
                 _FormField(
@@ -266,10 +266,10 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
-              ]),
+              ],),
               const SizedBox(height: 20),
 
-              _SectionLabel('Status'),
+              const _SectionLabel('Status'),
               Wrap(
                 spacing: 8,
                 children: ContratoStatus.values
@@ -284,12 +284,12 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
                                 ? FontWeight.w700
                                 : FontWeight.w500,
                           ),
-                        ))
+                        ),)
                     .toList(),
               ),
               const SizedBox(height: 20),
 
-              _SectionLabel('Observações'),
+              const _SectionLabel('Observações'),
               TextFormField(
                 controller: _obsCtrl,
                 maxLines: 3,
@@ -319,7 +319,7 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
                       : Text(
                           _isEditing ? 'Salvar Alterações' : 'Criar Contrato',
                           style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 15),
+                              fontWeight: FontWeight.w700, fontSize: 15,),
                         ),
                 ),
               ),
@@ -372,10 +372,10 @@ class _FieldRow extends StatelessWidget {
           .map((c) => Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(
-                      right: c == children.last ? 0 : 12),
+                      right: c == children.last ? 0 : 12,),
                   child: c,
                 ),
-              ))
+              ),)
           .toList(),
     );
   }

@@ -12,14 +12,13 @@ import 'package:fleet_app/core/services/auth_service.dart';
 import 'package:fleet_app/core/data/custos_repository.dart';
 import 'package:fleet_app/features/custos/custos_provider.dart';
 import 'package:fleet_app/features/locacao/locacao_provider.dart';
-import 'package:fleet_app/features/maintenance/maintenance_provider.dart';
 
 class _StubLocacaoRepository extends LocacaoRepository {
   @override
   Future<List<Contrato>> fetchContratos({ContratoStatus? status}) =>
       Future.value([]);
   @override
-  Future<Contrato?> fetchContrato(String id) => Future.value(null);
+  Future<Contrato?> fetchContrato(String id) => Future.value();
   @override
   Future<List<Ocorrencia>> fetchTodasOcorrencias() => Future.value([]);
   @override
@@ -58,7 +57,6 @@ Widget _wrapWithProviders({
     providers: [
       ChangeNotifierProvider.value(value: auth),
       ChangeNotifierProvider.value(value: FleetRepository.instance),
-      ChangeNotifierProvider(create: (_) => MaintenanceProvider()),
       ChangeNotifierProvider(
         create: (_) => LocacaoProvider(_StubLocacaoRepository()),
       ),

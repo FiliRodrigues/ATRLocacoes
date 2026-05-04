@@ -545,7 +545,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
 
     var despesas = provider.despesas
         .where((d) =>
-            d.tipo == 'Manutenção' || d.tipo == 'Revisão' || d.tipo == 'Outros')
+            d.tipo == 'Manutenção' || d.tipo == 'Revisão' || d.tipo == 'Outros',)
         .toList();
 
     if (_filtroVeiculoPlaca != null) {
@@ -560,7 +560,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
       despesas = despesas
           .where((d) =>
               d.data.year == _filtroMesDespesa!.year &&
-              d.data.month == _filtroMesDespesa!.month)
+              d.data.month == _filtroMesDespesa!.month,)
           .toList();
     }
     despesas.sort((a, b) => b.data.compareTo(a.data));
@@ -1094,7 +1094,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
               title: const Text('Todos os veículos'),
               trailing: _filtroVeiculoPlaca == null
                   ? const Icon(LucideIcons.check,
-                      color: AppColors.atrOrange)
+                      color: AppColors.atrOrange,)
                   : null,
               onTap: () => Navigator.pop(ctx, 'TODOS'),
             ),
@@ -1124,7 +1124,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                     Text(v.nome, style: const TextStyle(fontSize: 12)),
                 trailing: _filtroVeiculoPlaca == v.placa
                     ? const Icon(LucideIcons.check,
-                        color: AppColors.atrOrange)
+                        color: AppColors.atrOrange,)
                     : null,
                 onTap: () => Navigator.pop(ctx, v.placa),
               ),
@@ -1136,7 +1136,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
     );
     if (placa != null && mounted) {
       setState(() =>
-          _filtroVeiculoPlaca = placa == 'TODOS' ? null : placa);
+          _filtroVeiculoPlaca = placa == 'TODOS' ? null : placa,);
     }
   }
 
@@ -1171,7 +1171,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
               title: const Text('Todos os tipos'),
               trailing: _filtroTipoDespesa == null
                   ? const Icon(LucideIcons.check,
-                      color: AppColors.atrOrange)
+                      color: AppColors.atrOrange,)
                   : null,
               onTap: () => Navigator.pop(ctx, 'TODOS'),
             ),
@@ -1182,7 +1182,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                 title: Text(t),
                 trailing: _filtroTipoDespesa == t
                     ? const Icon(LucideIcons.check,
-                        color: AppColors.atrOrange)
+                        color: AppColors.atrOrange,)
                     : null,
                 onTap: () => Navigator.pop(ctx, t),
               ),
@@ -1194,7 +1194,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
     );
     if (tipo != null && mounted) {
       setState(
-          () => _filtroTipoDespesa = tipo == 'TODOS' ? null : tipo);
+          () => _filtroTipoDespesa = tipo == 'TODOS' ? null : tipo,);
     }
   }
 
@@ -1204,7 +1204,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
     final now = DateTime.now();
     final meses = List.generate(
       12,
-      (i) => DateTime(now.year, now.month - i, 1),
+      (i) => DateTime(now.year, now.month - i),
     );
     final mes = await showModalBottomSheet<DateTime?>(
       context: context,
@@ -1233,7 +1233,7 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
             ListTile(
               leading: const Icon(LucideIcons.calendar),
               title: const Text('Todos os meses'),
-              onTap: () => Navigator.pop(ctx, null),
+              onTap: () => Navigator.pop(ctx),
             ),
             const Divider(height: 1),
             SizedBox(

@@ -96,7 +96,7 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
                 ),
               ),
               const Text('Registrar Evento',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),),
               const SizedBox(height: 20),
 
               // Tipo
@@ -105,14 +105,14 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
                     .map((t) => Expanded(
                           child: Padding(
                             padding: EdgeInsets.only(
-                                right: t == ChecklistTipo.checkIn ? 8 : 0),
+                                right: t == ChecklistTipo.checkIn ? 8 : 0,),
                             child: _TipoButton(
                               tipo: t,
                               isSelected: _tipo == t,
                               onTap: () => setState(() => _tipo = t),
                             ),
                           ),
-                        ))
+                        ),)
                     .toList(),
               ),
               const SizedBox(height: 20),
@@ -154,7 +154,6 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
                   ),
                   Slider(
                     value: _combustivelPct,
-                    min: 0,
                     max: 100,
                     divisions: 10,
                     activeColor: AppColors.atrOrange,
@@ -190,12 +189,12 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: Colors.white,),
                         )
                       : Text(
                           'Registrar ${_tipo.label}',
                           style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 15),
+                              fontWeight: FontWeight.w700, fontSize: 15,),
                         ),
                 ),
               ),
@@ -227,7 +226,7 @@ class _TipoButton extends StatelessWidget {
           color: isSelected ? color.withValues(alpha: 0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-              color: isSelected ? color : Colors.grey.withValues(alpha: 0.3)),
+              color: isSelected ? color : Colors.grey.withValues(alpha: 0.3),),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

@@ -212,7 +212,7 @@ void main() {
       const tenantA = '00000000-0000-0000-0000-000000000001';
       const tenantB = '00000000-0000-0000-0000-000000000002';
 
-      final serviceA = _serviceWithUser('userA', 'senhaA', tenantId: tenantA);
+      final serviceA = _serviceWithUser('userA', 'senhaA');
       final serviceB = _serviceWithUser('userB', 'senhaB', tenantId: tenantB);
 
       final resultA = await serviceA.loginWithCredentials(

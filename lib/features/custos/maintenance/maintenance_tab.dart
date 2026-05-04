@@ -46,7 +46,7 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildAlerts(context, fleet),
+        _buildAlerts(context, fleet, provider),
         const SizedBox(height: 16),
         _buildFilterBar(context, fleet),
         const SizedBox(height: 16),
@@ -55,12 +55,36 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
     );
   }
 
-  Widget _buildAlerts(BuildContext context, FleetRepository fleet) {
+  Widget _buildAlerts(BuildContext context, FleetRepository fleet, CustosProvider provider) {
     final now = DateTime.now();
     final alertas = <_AlertaMant>[];
 
+
     for (final v in fleet.frota) {
+      // Regras de Manutencao
+      final veiculoManuts = provider.manutencoes.where((m) => m.veiculoPlaca == v.placa).toList();
+      if (veiculoManuts.isEmpty) {
+        alertas.add(
+          _AlertaMant(
+            texto: 'VeÃ­culo sem manutenÃ§Ãµes lanÃ§adas -  ()',
+            cor: AppColors.statusError,
+          ),
+        );
+      } else {
+        veiculoManuts.sort((a, b) => b.data.compareTo(a.data));
+        final ultimaData = veiculoManuts.first.data;
+        if (now.difference(ultimaData).inDays > 180) {
+          alertas.add(
+            _AlertaMant(
+              texto: 'ManutenÃ§Ã£o desatualizada (>6 meses) -  ()',
+              cor: Colors.orange,
+            ),
+          );
+        }
+      }
+
       if (v.kmParaProxRevisao < 1500) {
+
         alertas.add(
           _AlertaMant(
             texto: 'Revisao proxima - ${v.nome} (${v.placa})',
@@ -157,7 +181,6 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
             ),
             items: [
               const DropdownMenuItem<String?>(
-                value: null,
                 child: Text('Todos os veiculos'),
               ),
               ...fleet.frota.map(

@@ -205,7 +205,7 @@ class _AppSidebarState extends State<AppSidebar> {
                                       onTap: () {
                                         if (frota.isNotEmpty) {
                                           context.go(
-                                              '/vehicles/${frota.first.placa}');
+                                              '/vehicles/${frota.first.placa}',);
                                         }
                                       },
                                     ),
@@ -249,7 +249,7 @@ class _AppSidebarState extends State<AppSidebar> {
                                       title: 'Adm Financeiro',
                                       isCollapsed: _isCollapsed,
                                       isActive: uri.startsWith(
-                                          '/${AppRoutes.financialAdmin}'),
+                                          '/${AppRoutes.financialAdmin}',),
                                       onTap: () => context
                                           .go('/${AppRoutes.financialAdmin}'),
                                     ),
@@ -500,7 +500,7 @@ class _AppSidebarState extends State<AppSidebar> {
 
   Map<String, List<VehicleData>> _groupVehiclesByContrato(
     List<VehicleData> vehicles,
-    List<Contrato> _contratos,
+    List<Contrato> contratos,
   ) {
     final grouped = <String, List<VehicleData>>{};
     for (final v in vehicles) {

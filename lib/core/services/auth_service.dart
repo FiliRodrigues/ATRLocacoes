@@ -93,7 +93,7 @@ class AuthService extends ChangeNotifier {
 
   // ── Supabase lookup padrão ──────────────────────────────────────────
   static Future<Map<String, dynamic>?> _defaultSupabaseLookup(
-      String username) async {
+      String username,) async {
     final rows = await Supabase.instance.client
         .from('app_users')
         .select('username, password_hash, password_salt, role, ativo, tenant_id')
@@ -196,7 +196,7 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       AppLogger.error('Falha ao consultar base de usuários', e);
       return const AuthAttemptResult.failure(
-          reason: AuthFailureReason.networkError);
+          reason: AuthFailureReason.networkError,);
     }
 
     // Credenciais inválidas — incrementar tentativas
@@ -268,7 +268,7 @@ class AuthService extends ChangeNotifier {
         _currentUser = null;
         await _clearSession(prefs);
         AppLogger.warning(
-            'Sessão inválida detectada (integridade comprometida)');
+            'Sessão inválida detectada (integridade comprometida)',);
         notifyListeners();
         return;
       }
@@ -310,7 +310,6 @@ class AuthService extends ChangeNotifier {
         prefs,
         username: 'dev',
         role: AuthUserRole.admin,
-        tenantId: kDefaultTenantId,
         sessionStartMs: _now().millisecondsSinceEpoch,
       );
       AppLogger.success('Usuário logado com sucesso (Atalho DEV)');
@@ -332,7 +331,7 @@ class AuthService extends ChangeNotifier {
         entity: AuditEntity.usuario,
         entityId: loggedOutUser,
       );
-      AuditService.setCurrentUser(null, tenantId: null);
+      AuditService.setCurrentUser(null);
       await _clearSession(prefs);
       AppLogger.warning('Usuário realizou logout');
       notifyListeners();

@@ -9,10 +9,7 @@ import 'package:fleet_app/core/data/locacao_repository.dart';
 import 'package:fleet_app/core/theme/app_theme.dart';
 import 'package:fleet_app/features/dashboard/dashboard_screen.dart';
 import 'package:fleet_app/features/drivers/drivers_screen.dart';
-import 'package:fleet_app/features/expenses/expenses_screen.dart';
 import 'package:fleet_app/features/locacao/locacao_provider.dart';
-import 'package:fleet_app/features/maintenance/maintenance_provider.dart';
-import 'package:fleet_app/features/maintenance/maintenance_screen.dart';
 import 'package:fleet_app/features/vehicles/vehicle_dossier_screen.dart';
 
 /// Stub sem dependência de Supabase para testes widget.
@@ -21,7 +18,7 @@ class _StubLocacaoRepository extends LocacaoRepository {
   Future<List<Contrato>> fetchContratos({ContratoStatus? status}) =>
       Future.value([]);
   @override
-  Future<Contrato?> fetchContrato(String id) => Future.value(null);
+  Future<Contrato?> fetchContrato(String id) => Future.value();
   @override
   Future<List<Ocorrencia>> fetchTodasOcorrencias() => Future.value([]);
   @override
@@ -49,15 +46,7 @@ void main() {
           path: '/drivers',
           builder: (_, __) => const DriversScreen(),
         ),
-        GoRoute(
-          path: '/expenses',
-          builder: (_, __) => const ExpensesScreen(),
-        ),
-        GoRoute(
-          path: '/maintenance',
-          builder: (_, __) => const MaintenanceScreen(),
-        ),
-        GoRoute(
+                        GoRoute(
           path: '/vehicles/:plate',
           builder: (_, state) =>
               VehicleDossierScreen(plateId: state.pathParameters['plate']!),
@@ -76,7 +65,6 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProvider.value(value: FleetRepository.instance),
-        ChangeNotifierProvider(create: (_) => MaintenanceProvider()),
         ChangeNotifierProvider(
           create: (_) => LocacaoProvider(_StubLocacaoRepository()),
         ),

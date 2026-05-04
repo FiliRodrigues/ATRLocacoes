@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/fleet_data.dart';
-import '../enums/vehicle_status.dart';
 
 // ═══════════════════════════════════════════════════════
 // SUPABASE CONFIG
@@ -86,7 +85,7 @@ VehicleData vehicleFromSupabase(
   final (cor1, cor2) = _coresParaMarca(marca);
 
   // Vencimentos padrão (1 ano a partir de hoje) — sem dados no Supabase ainda
-  final vencPadrao = DateTime(DateTime.now().year + 1, DateTime.now().month, 1);
+  final vencPadrao = DateTime(DateTime.now().year + 1, DateTime.now().month);
 
   FinancingData? financing;
   if (financiamentoRow != null) {
@@ -170,7 +169,6 @@ VehicleData vehicleFromSupabase(
     valorAquisicao: valorVeiculo,
     dataAquisicao: dataAquisicao,
     kmHodometro: kmInicial,
-    gastosNaoCiclicos: const [],
     financiamento: financing,
   );
 }
@@ -231,7 +229,7 @@ class FleetSupabaseService {
       'p_km': km,
       'p_registrado_por': registradoPor,
       'p_tenant_id': tenantId,
-    }) as Map<String, dynamic>;
+    },) as Map<String, dynamic>;
 
     if (result['ok'] != true) {
       throw Exception(result['error'] as String? ?? 'Erro ao registrar KM');
