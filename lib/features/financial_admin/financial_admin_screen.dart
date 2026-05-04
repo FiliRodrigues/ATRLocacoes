@@ -40,79 +40,127 @@ class FinancialAdminScreen extends StatefulWidget {
 class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
   _FinancialTotals? _cachedTotals;
   int _lastRepoVersion = -1;
+  String _filterMode = 'Todos'; // 'Todos', 'Financiados', 'Quitados'
 
-  _FinancialTotals _calculateTotals(FleetRepository repo) {
-    if (_cachedTotals != null && _lastRepoVersion == repo.version) {
-      return _cachedTotals!;
-    }
-    _lastRepoVersion = repo.version;
-
+  _FinancialTotals _calculateTotals(List<VehicleData> viewList) {
     double totalPago = 0;
     double totalRestante = 0;
     double totalManut = 0;
     double totalRecebido = 0;
 
-    for (final v in repo.veiculosFinanciados) {
-      final f = v.financiamento!;
-      totalPago += f.totalPago + f.valorEntrada;
-      totalRestante += f.totalRestante;
-      totalRecebido += f.recebimentoMensal * f.parcelasPagas;
-    }
-    for (final v in repo.frota) {
+    for (final v in viewList) {
+      if (v.financiamento != null) {
+        final f = v.financiamento!;
+        totalPago += f.totalPago + f.valorEntrada;
+        totalRestante += f.totalRestante;
+        totalRecebido += f.recebimentoMensal * f.parcelasPagas;
+      }
       totalManut += v.custoTotalManutencao;
     }
 
-    _cachedTotals = _FinancialTotals(
+    return _FinancialTotals(
       totalPago: totalPago,
       totalRestante: totalRestante,
       totalManut: totalManut,
       totalRecebido: totalRecebido,
       lucroLiquido: totalRecebido - totalPago - totalManut,
     );
-    return _cachedTotals!;
   }
 
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<FleetRepository>();
-    final financiados = repo.veiculosFinanciados;
-    final totals = _calculateTotals(repo);
+    
+    // Todos os veículos que possuem dados financeiros mapeados
+    final todosValidos = repo.frota.where((v) => v.financiamento != null).toList();
 
-    if (financiados.isEmpty) {
-      return AppSidebar(
-        child: Scaffold(
-          body: SafeArea(
-            child: Center(
-              child: Text(
-                'Nenhum veículo financiado encontrado.',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-          ),
-        ),
-      );
+    List<VehicleData> viewList;
+    switch (_filterMode) {
+      case 'Financiados':
+        viewList = todosValidos.where((v) => v.financiamento!.valorParcela > 0.01).toList();
+        break;
+      case 'Quitados':
+        viewList = todosValidos.where((v) => v.financiamento!.valorParcela < 0.01).toList();
+        break;
+      default:
+        viewList = todosValidos;
     }
+
+    final totals = _calculateTotals(viewList);
 
     return AppSidebar(
       child: Scaffold(
         body: SafeArea(
           child: widget.vehiclePlate == null
-              ? _FinancialListView(
-                  frota: repo.frota,
-                  financiados: financiados,
-                  totalPago: totals.totalPago,
-                  totalRestante: totals.totalRestante,
-                  totalManut: totals.totalManut,
-                  totalRecebido: totals.totalRecebido,
-                  lucroLiquido: totals.lucroLiquido,
+              ? Column(
+                  children: [
+                    _buildFilterRow(context),
+                    Expanded(
+                      child: viewList.isEmpty
+                          ? Center(
+                              child: Text(
+                                'Nenhum veículo encontrado para este filtro.',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            )
+                          : _FinancialListView(
+                              frota: viewList, // Para a tabela de manutenções usar a lista filtrada
+                              financiados: viewList, // A grid principal usa essa lista
+                              totalPago: totals.totalPago,
+                              totalRestante: totals.totalRestante,
+                              totalManut: totals.totalManut,
+                              totalRecebido: totals.totalRecebido,
+                              lucroLiquido: totals.lucroLiquido,
+                            ),
+                    ),
+                  ],
                 )
               : _DetailView(
-                  veiculo: financiados.firstWhere(
+                  veiculo: repo.frota.firstWhere(
                     (v) => v.placa == widget.vehiclePlate,
-                    orElse: () => financiados.first,
+                    orElse: () => repo.frota.first,
                   ),
                 ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFilterRow(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 20, 28, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Visão Administrativa',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'Todos', label: Text('Todos', style: TextStyle(fontSize: 12))),
+              ButtonSegment(value: 'Financiados', label: Text('Fin./Locados', style: TextStyle(fontSize: 12))),
+              ButtonSegment(value: 'Quitados', label: Text('Quitados', style: TextStyle(fontSize: 12))),
+            ],
+            selected: {_filterMode},
+            onSelectionChanged: (Set<String> newSelection) {
+              setState(() {
+                _filterMode = newSelection.first;
+              });
+            },
+            style: ButtonStyle(
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return isDark ? Colors.white24 : Colors.black12;
+                }
+                return Colors.transparent;
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -313,23 +361,18 @@ class _FinancialListView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Adm Financeiro',
+                          'Resumo da Seleção',
                           style: Theme.of(context)
                               .textTheme
                               .displayLarge
-                              ?.copyWith(fontSize: 28),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Financiamentos, receitas e manutenção da frota.',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                              ?.copyWith(fontSize: 20),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 16),
 
               // KPIs  todos clicáveis/flutuantes
               Wrap(
@@ -338,9 +381,9 @@ class _FinancialListView extends StatelessWidget {
                 children: [
                   _kpi(
                     context,
-                    'Financiados',
+                    'Veículos',
                     '${financiados.length}',
-                    'em andamento',
+                    'no filtro atual',
                     LucideIcons.car,
                     AppColors.statusInfo,
                     0,
@@ -368,9 +411,9 @@ class _FinancialListView extends StatelessWidget {
                   ),
                   _kpiClickable(
                     context,
-                    'Manutenção Frota',
+                    'Manutenção',
                     formatCurrency(totalManut),
-                    '${frota.length} veículos',
+                    'clique para ver lista',
                     LucideIcons.wrench,
                     AppColors.statusError,
                     240,
@@ -378,9 +421,9 @@ class _FinancialListView extends StatelessWidget {
                   ),
                   _kpi(
                     context,
-                    'Total Recebido',
+                    'Locações Totais',
                     formatCurrency(totalRecebido),
-                    'desde início das locações',
+                    'soma dos que estão no filtro',
                     LucideIcons.wallet,
                     AppColors.statusInfo,
                     320,
@@ -390,7 +433,7 @@ class _FinancialListView extends StatelessWidget {
                     context,
                     lucroLiquido >= 0 ? 'Lucro Líquido' : 'Prejuízo',
                     formatCurrency(lucroLiquido),
-                    'recebido - parcelas - manutenção',
+                    'recebido - pago - manutenção',
                     lucroLiquido >= 0
                         ? LucideIcons.trendingUp
                         : LucideIcons.trendingDown,
@@ -596,102 +639,154 @@ class _FinancialListView extends StatelessWidget {
 
   Widget _vehicleCard(BuildContext ctx, VehicleData v, int index, bool isDark) {
     final f = v.financiamento!;
+    final saldoMensal = f.recebimentoMensal - f.valorParcela;
+    // Quitado = sem parcela mensal (veículo próprio ou financiamento encerrado)
+    final isQuitado = f.valorParcela < 0.01;
+
+    // Cor de status do card:
+    // Verde   = saldo positivo (lucro)
+    // Vermelho = saldo negativo (prejuízo)
+    // Amarelo  = quitado sem recebimento cadastrado / saldo zero
+    final Color statusColor;
+    if (isQuitado || f.recebimentoMensal == 0) {
+      statusColor = AppColors.statusWarning; // amarelo — atenção
+    } else if (saldoMensal >= 0) {
+      statusColor = AppColors.statusSuccess; // verde — lucro
+    } else {
+      statusColor = AppColors.statusError; // vermelho — prejuízo
+    }
+
+    final progresso = f.progressoFinanciamento;
+    final Color progressColor = progresso >= 0.8
+        ? AppColors.statusSuccess
+        : progresso >= 0.4
+            ? AppColors.atrOrange
+            : AppColors.statusError;
+
     return BentoCard(
       animationDelay: 300 + (index * 80),
       onTap: () => ctx.go('/financial-admin/${v.placa}'),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [v.cor1, v.cor2]),
-                  borderRadius: BorderRadius.circular(10),
+      padding: EdgeInsets.zero,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: statusColor, width: 3),
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [v.cor1, v.cor2]),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(LucideIcons.car,
+                      color: Colors.white, size: 16),
                 ),
-                child:
-                    const Icon(LucideIcons.car, color: Colors.white, size: 16),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      v.placa,
-                      style: const TextStyle(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        v.placa,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      Text(
+                        v.nome,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? Colors.white38
+                              : AppColors.textSecondaryLight,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                // Badge de status
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    isQuitado
+                        ? 'Quitado'
+                        : f.recebimentoMensal == 0
+                            ? 'Sem dados'
+                            : saldoMensal >= 0
+                                ? 'Lucro'
+                                : 'Prejuízo',
+                    style: TextStyle(
+                        fontSize: 9,
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      v.nome,
-                      style: TextStyle(
+                        color: statusColor),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // Barra de progresso do financiamento
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Progresso',
+                    style: TextStyle(
                         fontSize: 10,
-                        color: isDark
-                            ? Colors.white38
-                            : AppColors.textSecondaryLight,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                        color: isDark ? Colors.white70 : Colors.black87)),
+                Text(
+                  '${(progresso * 100).toStringAsFixed(0)}%'
+                  '  (${f.parcelasPagas}/${f.totalParcelas})',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: progressColor),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Progresso',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isDark ? Colors.white70 : Colors.black87,
-                ),
-              ),
-              Text(
-                '${(f.progressoFinanciamento * 100).toStringAsFixed(0)}%',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: f.progressoFinanciamento > 0.7
-                      ? AppColors.statusSuccess
-                      : AppColors.atrOrange,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: f.progressoFinanciamento,
-              minHeight: 4,
-              backgroundColor:
-                  isDark ? AppColors.borderDark : AppColors.borderLight,
-              valueColor: AlwaysStoppedAnimation(
-                f.progressoFinanciamento > 0.7
-                    ? AppColors.statusSuccess
-                    : AppColors.atrOrange,
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progresso,
+                minHeight: 4,
+                backgroundColor:
+                    isDark ? AppColors.borderDark : AppColors.borderLight,
+                valueColor: AlwaysStoppedAnimation(progressColor),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          _rowInfo(
-            'Parcela',
-            formatCurrency(f.valorParcela),
-            AppColors.statusError,
-          ),
-          const SizedBox(height: 4),
-          _rowInfo(
-            'Manut.',
-            formatCurrency(v.custoTotalManutencao),
-            AppColors.statusWarning,
-          ),
-        ],
+            const SizedBox(height: 14),
+            _rowInfo('Parcela', formatCurrency(f.valorParcela),
+                AppColors.statusError),
+            const SizedBox(height: 4),
+            _rowInfo(
+              'Recebido/mês',
+              f.recebimentoMensal > 0
+                  ? formatCurrency(f.recebimentoMensal)
+                  : '—',
+              AppColors.statusSuccess,
+            ),
+            const SizedBox(height: 4),
+            _rowInfo(
+              'Saldo mensal',
+              f.recebimentoMensal > 0
+                  ? formatCurrency(saldoMensal)
+                  : '—',
+              saldoMensal >= 0 ? AppColors.statusSuccess : AppColors.statusError,
+            ),
+          ],
+        ),
       ),
     );
   }

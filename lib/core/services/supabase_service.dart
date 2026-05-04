@@ -56,15 +56,18 @@ VehicleStatus _mapStatus(String? situacao) {
   }
 }
 
-VehicleData vehicleFromSupabase(Map<String, dynamic> row) {
+VehicleData vehicleFromSupabase(
+  Map<String, dynamic> row, {
+  Map<String, dynamic>? financiamentoRow,
+}) {
   final marca = (row['marca'] as String? ?? '').trim();
   final modelo = (row['modelo'] as String? ?? '').trim();
   final nome = '$marca $modelo'.trim();
   final placa = (row['placa'] as String? ?? '').trim();
   final situacao = row['situacao_operacional'] as String?;
   final status = _mapStatus(situacao);
-  final isFinanciado =
-      (row['propriedade_status'] as String? ?? '').contains('Financiado');
+  final propriedadeStatus = (row['propriedade_status'] as String? ?? '');
+  final isFinanciado = propriedadeStatus.contains('Financiado');
 
   final kmInicial = (row['km_inicial'] as num?)?.toDouble();
 
@@ -85,6 +88,72 @@ VehicleData vehicleFromSupabase(Map<String, dynamic> row) {
   // Vencimentos padrão (1 ano a partir de hoje) — sem dados no Supabase ainda
   final vencPadrao = DateTime(DateTime.now().year + 1, DateTime.now().month, 1);
 
+  FinancingData? financing;
+  if (financiamentoRow != null) {
+    final f = financiamentoRow;
+    final valorTotalDb =
+        (f['valor_total_veiculo'] as num?)?.toDouble() ?? valorVeiculo;
+    final valorEntradaDb = (f['valor_entrada'] as num?)?.toDouble();
+    final valorFinanciadoDb = (f['valor_financiado'] as num?)?.toDouble();
+    final totalParcelas = (f['quantidade_parcelas'] as num?)?.toInt() ?? 48;
+    final recebimentoMensal =
+        (f['recebimento_mensal'] as num?)?.toDouble() ?? 0.0;
+    final taxaJurosMensal =
+        (f['taxa_juros_mensal'] as num?)?.toDouble() ?? 0.0139;
+    final previsaoQuitacao = (f['previsao_quitacao'] as String?) ?? '';
+    final valorJaPago = (f['valor_ja_pago'] as num?)?.toDouble() ?? 0.0;
+
+    final bool isQuitado = totalParcelas <= 1;
+
+    // Calcula percentual de entrada a partir dos valores reais, se disponíveis.
+    // Para veículos quitados (não financiados), força percentualEntrada=1.0 para
+    // que valorFinanciado=0 e, consequentemente, valorParcela=0.
+    double percentualEntrada = isQuitado ? 1.0 : 0.20;
+    if (!isQuitado) {
+      if (valorEntradaDb != null && valorTotalDb > 0) {
+        percentualEntrada = (valorEntradaDb / valorTotalDb).clamp(0.0, 1.0);
+      } else if (valorFinanciadoDb != null && valorTotalDb > 0) {
+        percentualEntrada =
+            ((valorTotalDb - valorFinanciadoDb) / valorTotalDb).clamp(0.0, 1.0);
+      }
+    }
+
+    // Parcelas pagas = meses desde a data de compra, limitado ao total de parcelas.
+    // valor_ja_pago do banco inclui entrada+juros+parcelas de forma inconsistente,
+    // então usamos mesesEmServico como fonte confiável.
+    //
+    // Para veículos quitados (quantidade_parcelas = 1) mas com locação ativa:
+    // usa 36 meses como duração do contrato de locação, garantindo que
+    // progressoFinanciamento e totalRecebido reflitam o contrato real.
+    final effectiveTotalParcelas =
+        (totalParcelas == 1 && recebimentoMensal > 0) ? 36 : totalParcelas;
+    final int parcelasPagas =
+        mesesEmServico.clamp(0, effectiveTotalParcelas);
+    // valorJaPago disponível para referência futura, mas não usado no cálculo.
+    final _ = valorJaPago;
+
+    financing = FinancingData(
+      valorTotal: valorTotalDb,
+      percentualEntrada: percentualEntrada,
+      totalParcelas: effectiveTotalParcelas,
+      parcelasPagas: parcelasPagas,
+      recebimentoMensal: recebimentoMensal,
+      taxaJurosMensal: taxaJurosMensal,
+      previsaoQuitacao: previsaoQuitacao,
+    );
+  } else if (isFinanciado) {
+    // Sem dados de financiamento no banco — usa estimativa padrão
+    financing = FinancingData(
+      valorTotal: valorVeiculo,
+      percentualEntrada: 0.20,
+      totalParcelas: 48,
+      parcelasPagas: mesesEmServico.clamp(0, 48),
+      recebimentoMensal: 0,
+      taxaJurosMensal: 0.0139,
+      previsaoQuitacao: '',
+    );
+  }
+
   return VehicleData(
     nome: nome.isEmpty ? placa : nome,
     placa: placa,
@@ -104,17 +173,7 @@ VehicleData vehicleFromSupabase(Map<String, dynamic> row) {
     dataAquisicao: dataAquisicao,
     kmHodometro: kmInicial,
     gastosNaoCiclicos: const [],
-    financiamento: isFinanciado
-        ? FinancingData(
-            valorTotal: valorVeiculo,
-            percentualEntrada: 0.20,
-            totalParcelas: 48,
-            parcelasPagas: mesesEmServico.clamp(0, 48),
-            recebimentoMensal: 0,
-            taxaJurosMensal: 0.0139,
-            previsaoQuitacao: '',
-          )
-        : null,
+    financiamento: financing,
   );
 }
 
@@ -125,14 +184,33 @@ VehicleData vehicleFromSupabase(Map<String, dynamic> row) {
 class FleetSupabaseService {
   static Future<List<VehicleData>> fetchVehicles() async {
     final client = Supabase.instance.client;
-    final response = await client
-        .from('veiculos')
-        .select()
-        .order('placa', ascending: true);
 
-    return (response as List<dynamic>)
-        .map((row) => vehicleFromSupabase(row as Map<String, dynamic>))
-        .toList();
+    // Busca veículos e financiamentos em paralelo
+    final results = await Future.wait([
+      client.from('veiculos').select().order('placa', ascending: true),
+      client.from('financiamentos').select(),
+    ]);
+
+    final veiculoRows = results[0] as List<dynamic>;
+    final financiamentoRows = results[1] as List<dynamic>;
+
+    // Indexa financiamentos por veiculo_id para lookup O(1)
+    final financiamentoByVeiculoId = <String, Map<String, dynamic>>{};
+    for (final f in financiamentoRows) {
+      final fMap = f as Map<String, dynamic>;
+      final veiculoId = fMap['veiculo_id'] as String?;
+      if (veiculoId != null) {
+        financiamentoByVeiculoId[veiculoId] = fMap;
+      }
+    }
+
+    return veiculoRows.map((row) {
+      final vRow = row as Map<String, dynamic>;
+      final veiculoId = vRow['id'] as String?;
+      final fRow =
+          veiculoId != null ? financiamentoByVeiculoId[veiculoId] : null;
+      return vehicleFromSupabase(vRow, financiamentoRow: fRow);
+    }).toList();
   }
 
   /// Registra leitura de hodômetro com validação server-side via RPC [registrar_km].
