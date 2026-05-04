@@ -1,3 +1,0 @@
-C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/pdfium-download.dir
-C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/ALL_BUILD.dir
-C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/ZERO_CHECK.dir
