@@ -1,0 +1,27 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Executar ATR Web Local",
+			"type": "shell",
+			"command": "run_atr.bat",
+			"isBackground": true
+		},
+		{
+			"label": "Flutter Run Chrome 5000",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"run",
+				"-d",
+				"chrome",
+				"--web-port",
+				"5000",
+				"--dart-define=ATR_LOGIN_USER=adm",
+				"--dart-define=ATR_LOGIN_PASS=TroquePorUmaSenhaForte",
+				"--dart-define=ATR_DEV_QUICK_LOGIN=true"
+			],
+			"isBackground": true
+		}
+	]
+}

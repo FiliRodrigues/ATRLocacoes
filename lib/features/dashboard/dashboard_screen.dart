@@ -9,6 +9,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/widgets/status_badge.dart';
 
+// Record tipado para itens de despesa, eliminando casts via Map<String, dynamic>.
+typedef _ExpenseItem = ({VehicleData v, MaintenanceEvent m});
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -199,7 +202,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
                 border:
-                    Border.all(color: Theme.of(context).dividerTheme.color!),),
+                    Border.all(color: Theme.of(context).dividerTheme.color ?? Theme.of(context).dividerColor),),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -682,7 +685,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final listItems = repo.frota
         .expand((v) => v.manutencoes
             .where((m) => m.data.month == monthNum && m.data.year == 2026)
-            .map((m) => {'v': v, 'm': m}),)
+            .map<_ExpenseItem>((m) => (v: v, m: m)),)
         .toList();
 
     return BentoCard(
@@ -710,8 +713,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         color: isDark ? Colors.white38 : Colors.black45,),);
               }
               final item = listItems[i];
-              final v = item['v'] as VehicleData;
-              final m = item['m'] as MaintenanceEvent;
+              final v = item.v;
+              final m = item.m;
 
               return Row(
                 children: [

@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import '../../features/locacao/locacao_provider.dart';
 import '../data/fleet_data.dart';
+import '../data/locacao_models.dart';
 import '../navigation/app_router.dart';
 import '../theme/app_colors.dart';
 import '../theme/atr_theme_state.dart';
+import '../services/auth_service.dart';
 
 /// Shell de navegação principal da aplicação.
 ///
@@ -157,26 +160,43 @@ class _AppSidebarState extends State<AppSidebar> {
                             builder: (context) {
                               final uri =
                                   GoRouterState.of(context).uri.toString();
-                              final repo = context.read<FleetRepository>();
+                              final repo = context.watch<FleetRepository>();
                               final frota = repo.frota;
                               final veiculosFinanciados =
                                   repo.veiculosFinanciados;
+                                final contratos =
+                                  context.watch<LocacaoProvider>().contratos;
+                              final isFleetOnly =
+                                  context.read<AuthService>().isFleetOnlyUser;
                               return Column(
                                 children: [
                                   _SidebarItem(
                                     icon: LucideIcons.layoutDashboard,
-                                    title: 'Dashboard Executivo',
+                                    title: isFleetOnly
+                                        ? 'Controle de Frota'
+                                        : 'Dashboard Executivo',
                                     isCollapsed: _isCollapsed,
                                     isActive: uri == AppRoutes.home,
                                     onTap: () => context.go(AppRoutes.home),
                                   ),
-                                  if (_showExpandedContent)
-                                    _buildVehicleExpansionTile(
-                                      context,
-                                      uri,
-                                      frota,
-                                    )
-                                  else
+                                  if (isFleetOnly)
+                                    _SidebarItem(
+                                      icon: LucideIcons.calendarCheck2,
+                                      title: 'Controle Revisão',
+                                      isCollapsed: _isCollapsed,
+                                      isActive: uri == AppRoutes.frotaRevisao,
+                                      onTap: () =>
+                                          context.go(AppRoutes.frotaRevisao),
+                                    ),
+                                  if (!isFleetOnly) ...[
+                                    if (_showExpandedContent)
+                                      _buildVehicleExpansionTile(
+                                        context,
+                                        uri,
+                                        frota,
+                                        contratos,
+                                      )
+                                    else
                                     _SidebarItem(
                                       icon: LucideIcons.car,
                                       title: 'Veículos',
@@ -184,7 +204,8 @@ class _AppSidebarState extends State<AppSidebar> {
                                       isActive: uri.startsWith('/vehicles'),
                                       onTap: () {
                                         if (frota.isNotEmpty) {
-                                          context.go('/vehicles/${frota.first.placa}');
+                                          context.go(
+                                              '/vehicles/${frota.first.placa}');
                                         }
                                       },
                                     ),
@@ -192,39 +213,47 @@ class _AppSidebarState extends State<AppSidebar> {
                                     icon: LucideIcons.users,
                                     title: 'Motoristas',
                                     isCollapsed: _isCollapsed,
-                                    isActive: uri.startsWith('/${AppRoutes.drivers}'),
-                                    onTap: () => context.go('/${AppRoutes.drivers}'),
+                                    isActive:
+                                        uri.startsWith('/${AppRoutes.drivers}'),
+                                    onTap: () =>
+                                        context.go('/${AppRoutes.drivers}'),
                                   ),
                                   _SidebarItem(
                                     icon: LucideIcons.wrench,
-                                    title: 'Manutenções',
+                                    title: 'Custos da Frota',
                                     isCollapsed: _isCollapsed,
-                                    isActive: uri.startsWith('/${AppRoutes.maintenance}'),
-                                    onTap: () => context.go('/${AppRoutes.maintenance}'),
+                                    isActive:
+                                        uri.startsWith(AppRoutes.custosRoot),
+                                    onTap: () =>
+                                        context.go(AppRoutes.custosRoot),
                                   ),
                                   _SidebarItem(
                                     icon: LucideIcons.fileText,
-                                    title: 'Despesas',
+                                    title: 'Contratos B2B',
                                     isCollapsed: _isCollapsed,
-                                    isActive: uri.startsWith('/${AppRoutes.expenses}'),
-                                    onTap: () => context.go('/${AppRoutes.expenses}'),
+                                    isActive:
+                                        uri.startsWith(AppRoutes.contratos),
+                                    onTap: () =>
+                                        context.go(AppRoutes.contratos),
                                   ),
                                   if (_showExpandedContent)
                                     _buildFinancialExpansionTile(
                                       context,
                                       uri,
                                       veiculosFinanciados,
+                                      contratos,
                                     )
                                   else
                                     _SidebarItem(
                                       icon: LucideIcons.landmark,
                                       title: 'Adm Financeiro',
                                       isCollapsed: _isCollapsed,
-                                      isActive:
-                                          uri.startsWith('/${AppRoutes.financialAdmin}'),
-                                      onTap: () =>
-                                          context.go('/${AppRoutes.financialAdmin}'),
+                                      isActive: uri.startsWith(
+                                          '/${AppRoutes.financialAdmin}'),
+                                      onTap: () => context
+                                          .go('/${AppRoutes.financialAdmin}'),
                                     ),
+                                  ],
                                 ],
                               );
                             },
@@ -266,7 +295,12 @@ class _AppSidebarState extends State<AppSidebar> {
                     title: 'Sair do Sistema',
                     isCollapsed: _isCollapsed,
                     isActive: false,
-                    onTap: () => context.go(AppRoutes.login),
+                    onTap: () async {
+                      final authService = context.read<AuthService>();
+                      await authService.logout();
+                      if (!mounted) return;
+                      context.go(AppRoutes.login);
+                    },
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -275,7 +309,7 @@ class _AppSidebarState extends State<AppSidebar> {
           Expanded(child: widget.child),
         ],
       ),
-      bottomNavigationBar: !isDesktop
+      bottomNavigationBar: (!isDesktop && !context.read<AuthService>().isFleetOnlyUser)
           ? BottomNavigationBar(
               currentIndex: _getBottomNavIndex(context),
               selectedItemColor: AppColors.atrOrange,
@@ -285,10 +319,13 @@ class _AppSidebarState extends State<AppSidebar> {
                 if (index == 0) context.go(AppRoutes.home);
                 if (index == 1) {
                   final frota = context.read<FleetRepository>().frota;
-                  if (frota.isNotEmpty) context.go('/vehicles/${frota.first.placa}');
+                  if (frota.isNotEmpty) {
+                    context.go('/vehicles/${frota.first.placa}');
+                  }
                 }
-                if (index == 2) context.go('/${AppRoutes.maintenance}');
-                if (index == 3) context.go('/${AppRoutes.expenses}');
+                if (index == 2) {
+                  context.go(AppRoutes.custosRoot);
+                }
               },
               items: const [
                 BottomNavigationBarItem(
@@ -301,11 +338,7 @@ class _AppSidebarState extends State<AppSidebar> {
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(LucideIcons.wrench),
-                  label: 'Serviços',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(LucideIcons.wallet),
-                  label: 'Lanc.',
+                  label: 'Custos',
                 ),
               ],
             )
@@ -317,8 +350,13 @@ class _AppSidebarState extends State<AppSidebar> {
     final uri = GoRouterState.of(context).uri.toString();
     if (uri == AppRoutes.home) return 0;
     if (uri.startsWith('/vehicles')) return 1;
-    if (uri.startsWith('/${AppRoutes.maintenance}')) return 2;
-    if (uri.startsWith('/${AppRoutes.expenses}')) return 3;
+    if (uri.startsWith(AppRoutes.custosRoot) ||
+        uri.startsWith('/${AppRoutes.maintenance}') ||
+        uri.startsWith('/${AppRoutes.expenses}') ||
+        uri.startsWith('/manutencao') ||
+        uri.startsWith('/despesas')) {
+      return 2;
+    }
     return 0;
   }
 
@@ -326,8 +364,10 @@ class _AppSidebarState extends State<AppSidebar> {
     BuildContext context,
     String uri,
     List<VehicleData> frota,
+    List<Contrato> contratos,
   ) {
     final isVehiclesActive = uri.startsWith('/vehicles');
+    final grouped = _groupVehiclesByContrato(frota, contratos);
 
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -359,13 +399,27 @@ class _AppSidebarState extends State<AppSidebar> {
         ),
         childrenPadding: const EdgeInsets.only(left: 32, bottom: 8),
         children: [
-          for (final v in frota) ...[
-            _SubSidebarItem(
-              title: '${v.placa} (${v.nome})',
-              isActive: uri == '/vehicles/${v.placa}',
-              onTap: () => context.go('/vehicles/${v.placa}'),
+          for (final group in grouped.entries) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 6, bottom: 6),
+              child: Text(
+                'Carros ${group.key}',
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                ),
+              ),
             ),
-            const SizedBox(height: 4),
+            for (final v in group.value) ...[
+              _SubSidebarItem(
+                title: '${v.placa} (${v.nome})',
+                isActive: uri == '/vehicles/${v.placa}',
+                onTap: () => context.go('/vehicles/${v.placa}'),
+              ),
+              const SizedBox(height: 4),
+            ],
           ],
         ],
       ),
@@ -376,8 +430,10 @@ class _AppSidebarState extends State<AppSidebar> {
     BuildContext context,
     String uri,
     List<VehicleData> veiculosFinanciados,
+    List<Contrato> contratos,
   ) {
     final isFinActive = uri.startsWith('/${AppRoutes.financialAdmin}');
+    final grouped = _groupVehiclesByContrato(veiculosFinanciados, contratos);
 
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -413,17 +469,78 @@ class _AppSidebarState extends State<AppSidebar> {
             isActive: uri == '/${AppRoutes.financialAdmin}',
             onTap: () => context.go('/${AppRoutes.financialAdmin}'),
           ),
-          for (final v in veiculosFinanciados) ...[
+          for (final group in grouped.entries) ...[
             const SizedBox(height: 4),
-            _SubSidebarItem(
-              title: '${v.nome} (${v.placa})',
-              isActive: uri == '/${AppRoutes.financialAdmin}/${v.placa}',
-              onTap: () => context.go('/${AppRoutes.financialAdmin}/${v.placa}'),
+            Padding(
+              padding: const EdgeInsets.only(top: 6, bottom: 6),
+              child: Text(
+                'Carros ${group.key}',
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                ),
+              ),
             ),
+            for (final v in group.value) ...[
+              _SubSidebarItem(
+                title: '${v.nome} (${v.placa})',
+                isActive: uri == '/${AppRoutes.financialAdmin}/${v.placa}',
+                onTap: () =>
+                    context.go('/${AppRoutes.financialAdmin}/${v.placa}'),
+              ),
+              const SizedBox(height: 4),
+            ],
           ],
         ],
       ),
     );
+  }
+
+  Map<String, List<VehicleData>> _groupVehiclesByContrato(
+    List<VehicleData> vehicles,
+    List<Contrato> contratos,
+  ) {
+    final sortedContratos = [...contratos]
+      ..sort((a, b) {
+        final statusA = a.status == ContratoStatus.ativo ? 1 : 0;
+        final statusB = b.status == ContratoStatus.ativo ? 1 : 0;
+        if (statusA != statusB) return statusB - statusA;
+        return b.dataInicio.compareTo(a.dataInicio);
+      });
+
+    final clientePorPlaca = <String, String>{};
+    for (final c in sortedContratos) {
+      final placa = c.veiculoPlaca.trim().toUpperCase();
+      clientePorPlaca.putIfAbsent(
+        placa,
+        () => c.clienteNome.trim().isEmpty ? 'Sem Contrato' : c.clienteNome,
+      );
+    }
+
+    final grouped = <String, List<VehicleData>>{};
+    for (final v in vehicles) {
+      final placa = v.placa.trim().toUpperCase();
+      final key = clientePorPlaca[placa] ?? 'Sem Contrato';
+      grouped.putIfAbsent(key, () => <VehicleData>[]).add(v);
+    }
+
+    final orderedKeys = grouped.keys.toList()
+      ..sort((a, b) {
+        if (a == 'Sem Contrato') return 1;
+        if (b == 'Sem Contrato') return -1;
+        return a.toLowerCase().compareTo(b.toLowerCase());
+      });
+
+    final ordered = <String, List<VehicleData>>{};
+    for (final key in orderedKeys) {
+      final items = grouped[key]!;
+      items.sort((a, b) => a.placa.compareTo(b.placa));
+      ordered[key] = items;
+    }
+
+    return ordered;
   }
 }
 

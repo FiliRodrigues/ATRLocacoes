@@ -784,3 +784,283 @@ Map<String, double> obrasDispositivosDetalhe({String? cidade, String? equipe}) {
   }
   return map;
 }
+
+// Gerencial - Custos de producao (dados ficticios para visualizacao)
+const int gerencialDiasMes = 30;
+const double gerencialJantarPorPessoaDia = 34;
+
+const List<String> gerencialCidades = ['Cidade X', 'Cidade Y', 'Cidade Z'];
+
+const Map<String, double> gerencialHotelMedioPorPessoaDia = {
+  'Cidade X': 220,
+  'Cidade Y': 260,
+  'Cidade Z': 290,
+};
+
+class GerencialEquipe {
+  final String nome;
+  final int funcionarios;
+  final double folhaMensal;
+
+  const GerencialEquipe({
+    required this.nome,
+    required this.funcionarios,
+    required this.folhaMensal,
+  });
+
+  double get custoSalarialDia => folhaMensal / gerencialDiasMes;
+  double get custoJantarDia => funcionarios * gerencialJantarPorPessoaDia;
+}
+
+const List<GerencialEquipe> gerencialEquipes = [
+  GerencialEquipe(nome: 'Julio', funcionarios: 9, folhaMensal: 45000),
+  GerencialEquipe(nome: 'Valdir', funcionarios: 6, folhaMensal: 38000),
+  GerencialEquipe(nome: 'Marcelo', funcionarios: 4, folhaMensal: 30000),
+];
+
+class GerencialAlocacao {
+  final String equipe;
+  final String cidade;
+  final int diasTrabalhados;
+
+  const GerencialAlocacao({
+    required this.equipe,
+    required this.cidade,
+    required this.diasTrabalhados,
+  });
+}
+
+const Map<int, List<GerencialAlocacao>> _gerencialAlocacoesPorMes = {
+  1: [
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade X', diasTrabalhados: 12),
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade Y', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade Z', diasTrabalhados: 8),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade X', diasTrabalhados: 9),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade Y', diasTrabalhados: 12),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade Z', diasTrabalhados: 9),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade X', diasTrabalhados: 8),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade Y', diasTrabalhados: 9),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade Z', diasTrabalhados: 13),
+  ],
+  2: [
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade X', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade Y', diasTrabalhados: 11),
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade Z', diasTrabalhados: 9),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade X', diasTrabalhados: 8),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade Y', diasTrabalhados: 13),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade Z', diasTrabalhados: 9),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade X', diasTrabalhados: 11),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade Y', diasTrabalhados: 8),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade Z', diasTrabalhados: 11),
+  ],
+  3: [
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade X', diasTrabalhados: 11),
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade Y', diasTrabalhados: 9),
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade Z', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade X', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade Y', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade Z', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade X', diasTrabalhados: 9),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade Y', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade Z', diasTrabalhados: 11),
+  ],
+  4: [
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade X', diasTrabalhados: 9),
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade Y', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Julio', cidade: 'Cidade Z', diasTrabalhados: 11),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade X', diasTrabalhados: 11),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade Y', diasTrabalhados: 9),
+    GerencialAlocacao(equipe: 'Valdir', cidade: 'Cidade Z', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade X', diasTrabalhados: 10),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade Y', diasTrabalhados: 11),
+    GerencialAlocacao(equipe: 'Marcelo', cidade: 'Cidade Z', diasTrabalhados: 9),
+  ],
+};
+
+class GerencialEquipeCidadeResumo {
+  final String equipe;
+  final String cidade;
+  final int funcionarios;
+  final int diasTrabalhados;
+  final double custoSalarialDia;
+  final double custoJantarDia;
+  final double custoHotelDia;
+  final double custoSalarialMes;
+  final double custoJantarMes;
+  final double custoHotelMes;
+
+  const GerencialEquipeCidadeResumo({
+    required this.equipe,
+    required this.cidade,
+    required this.funcionarios,
+    required this.diasTrabalhados,
+    required this.custoSalarialDia,
+    required this.custoJantarDia,
+    required this.custoHotelDia,
+    required this.custoSalarialMes,
+    required this.custoJantarMes,
+    required this.custoHotelMes,
+  });
+
+  double get custoTotalDia => custoSalarialDia + custoJantarDia + custoHotelDia;
+  double get custoTotalMes => custoSalarialMes + custoJantarMes + custoHotelMes;
+}
+
+class GerencialEquipeResumo {
+  final String equipe;
+  final int funcionarios;
+  final int diasAlocados;
+  final double custoSalarialMes;
+  final double custoJantarMes;
+  final double custoHotelMes;
+
+  const GerencialEquipeResumo({
+    required this.equipe,
+    required this.funcionarios,
+    required this.diasAlocados,
+    required this.custoSalarialMes,
+    required this.custoJantarMes,
+    required this.custoHotelMes,
+  });
+
+  double get custoTotalMes => custoSalarialMes + custoJantarMes + custoHotelMes;
+  double get custoMedioDia => diasAlocados > 0 ? custoTotalMes / diasAlocados : 0;
+}
+
+class GerencialCidadeResumo {
+  final String cidade;
+  final int diasAlocados;
+  final double custoSalarialMes;
+  final double custoJantarMes;
+  final double custoHotelMes;
+
+  const GerencialCidadeResumo({
+    required this.cidade,
+    required this.diasAlocados,
+    required this.custoSalarialMes,
+    required this.custoJantarMes,
+    required this.custoHotelMes,
+  });
+
+  double get custoTotalMes => custoSalarialMes + custoJantarMes + custoHotelMes;
+}
+
+List<int> _mesesGerencial(int? mes) {
+  if (mes != null) return [mes];
+  final meses = _gerencialAlocacoesPorMes.keys.toList()..sort();
+  return meses;
+}
+
+GerencialEquipe _getEquipeGerencial(String nome) {
+  return gerencialEquipes.firstWhere((e) => e.nome == nome);
+}
+
+List<GerencialEquipeCidadeResumo> gerencialCustosEquipeCidade({int? mes}) {
+  final acumulado = <String, GerencialEquipeCidadeResumo>{};
+  for (final m in _mesesGerencial(mes)) {
+    final alocacoes = _gerencialAlocacoesPorMes[m];
+    if (alocacoes == null) continue;
+
+    for (final aloc in alocacoes) {
+      final equipe = _getEquipeGerencial(aloc.equipe);
+      final hotelPessoaDia = gerencialHotelMedioPorPessoaDia[aloc.cidade] ?? 250;
+      final custoHotelDia = equipe.funcionarios * hotelPessoaDia;
+      final key = '${aloc.equipe}__${aloc.cidade}';
+
+      final atual = acumulado[key];
+      final custoSalarialMes = equipe.custoSalarialDia * aloc.diasTrabalhados;
+      final custoJantarMes = equipe.custoJantarDia * aloc.diasTrabalhados;
+      final custoHotelMes = custoHotelDia * aloc.diasTrabalhados;
+
+      if (atual == null) {
+        acumulado[key] = GerencialEquipeCidadeResumo(
+          equipe: aloc.equipe,
+          cidade: aloc.cidade,
+          funcionarios: equipe.funcionarios,
+          diasTrabalhados: aloc.diasTrabalhados,
+          custoSalarialDia: equipe.custoSalarialDia,
+          custoJantarDia: equipe.custoJantarDia,
+          custoHotelDia: custoHotelDia,
+          custoSalarialMes: custoSalarialMes,
+          custoJantarMes: custoJantarMes,
+          custoHotelMes: custoHotelMes,
+        );
+      } else {
+        acumulado[key] = GerencialEquipeCidadeResumo(
+          equipe: atual.equipe,
+          cidade: atual.cidade,
+          funcionarios: atual.funcionarios,
+          diasTrabalhados: atual.diasTrabalhados + aloc.diasTrabalhados,
+          custoSalarialDia: atual.custoSalarialDia,
+          custoJantarDia: atual.custoJantarDia,
+          custoHotelDia: atual.custoHotelDia,
+          custoSalarialMes: atual.custoSalarialMes + custoSalarialMes,
+          custoJantarMes: atual.custoJantarMes + custoJantarMes,
+          custoHotelMes: atual.custoHotelMes + custoHotelMes,
+        );
+      }
+    }
+  }
+
+  final itens = acumulado.values.toList()
+    ..sort((a, b) => b.custoTotalMes.compareTo(a.custoTotalMes));
+  return itens;
+}
+
+List<GerencialEquipeResumo> gerencialResumoPorEquipe({int? mes}) {
+  final mapa = <String, GerencialEquipeResumo>{};
+  for (final item in gerencialCustosEquipeCidade(mes: mes)) {
+    final atual = mapa[item.equipe];
+    if (atual == null) {
+      mapa[item.equipe] = GerencialEquipeResumo(
+        equipe: item.equipe,
+        funcionarios: item.funcionarios,
+        diasAlocados: item.diasTrabalhados,
+        custoSalarialMes: item.custoSalarialMes,
+        custoJantarMes: item.custoJantarMes,
+        custoHotelMes: item.custoHotelMes,
+      );
+    } else {
+      mapa[item.equipe] = GerencialEquipeResumo(
+        equipe: atual.equipe,
+        funcionarios: atual.funcionarios,
+        diasAlocados: atual.diasAlocados + item.diasTrabalhados,
+        custoSalarialMes: atual.custoSalarialMes + item.custoSalarialMes,
+        custoJantarMes: atual.custoJantarMes + item.custoJantarMes,
+        custoHotelMes: atual.custoHotelMes + item.custoHotelMes,
+      );
+    }
+  }
+
+  final itens = mapa.values.toList()
+    ..sort((a, b) => b.custoTotalMes.compareTo(a.custoTotalMes));
+  return itens;
+}
+
+List<GerencialCidadeResumo> gerencialResumoPorCidade({int? mes}) {
+  final mapa = <String, GerencialCidadeResumo>{};
+  for (final item in gerencialCustosEquipeCidade(mes: mes)) {
+    final atual = mapa[item.cidade];
+    if (atual == null) {
+      mapa[item.cidade] = GerencialCidadeResumo(
+        cidade: item.cidade,
+        diasAlocados: item.diasTrabalhados,
+        custoSalarialMes: item.custoSalarialMes,
+        custoJantarMes: item.custoJantarMes,
+        custoHotelMes: item.custoHotelMes,
+      );
+    } else {
+      mapa[item.cidade] = GerencialCidadeResumo(
+        cidade: atual.cidade,
+        diasAlocados: atual.diasAlocados + item.diasTrabalhados,
+        custoSalarialMes: atual.custoSalarialMes + item.custoSalarialMes,
+        custoJantarMes: atual.custoJantarMes + item.custoJantarMes,
+        custoHotelMes: atual.custoHotelMes + item.custoHotelMes,
+      );
+    }
+  }
+
+  final itens = mapa.values.toList()
+    ..sort((a, b) => b.custoTotalMes.compareTo(a.custoTotalMes));
+  return itens;
+}

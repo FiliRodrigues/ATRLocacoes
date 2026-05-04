@@ -9,6 +9,26 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/data/fleet_data.dart';
 
+// Records tipados usados internamente, eliminando casts via Map<String, dynamic>.
+typedef _MaintenanceEntry = ({
+  String veiculo,
+  String placa,
+  Color cor,
+  MaintenanceEvent evento,
+});
+
+typedef _MaintenanceRow = ({
+  String nome,
+  String placa,
+  String motorista,
+  double km,
+  int rev,
+  double custoRev,
+  double total,
+  bool fin,
+  Color cor,
+});
+
 class FinancialAdminScreen extends StatefulWidget {
   final String? vehiclePlate;
   const FinancialAdminScreen({super.key, this.vehiclePlate});
@@ -123,20 +143,16 @@ class _FinancialListView extends StatelessWidget {
 
   void _showMaintenanceModal(BuildContext context) {
     // Coleta TODAS as manutenções de TODOS os veículos
-    final allEvents = <Map<String, dynamic>>[];
+    final allEvents = <_MaintenanceEntry>[];
     for (final v in frota) {
       for (final m in v.manutencoes) {
         allEvents.add(
-          {'veiculo': v.nome, 'placa': v.placa, 'cor': v.cor1, 'evento': m},
+          (veiculo: v.nome, placa: v.placa, cor: v.cor1, evento: m),
         );
       }
     }
     // Ordena por data (mais recente primeiro)
-    allEvents.sort((a, b) {
-      final ea = a['evento'] as MaintenanceEvent;
-      final eb = b['evento'] as MaintenanceEvent;
-      return eb.data.compareTo(ea.data);
-    });
+    allEvents.sort((a, b) => b.evento.data.compareTo(a.evento.data));
 
     showDialog(
       context: context,
@@ -178,7 +194,7 @@ class _FinancialListView extends StatelessWidget {
                       itemCount: allEvents.length,
                       itemBuilder: (c, i) {
                         final item = allEvents[i];
-                        final m = item['evento'] as MaintenanceEvent;
+                        final m = item.evento;
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(14),
@@ -194,7 +210,7 @@ class _FinancialListView extends StatelessWidget {
                                 width: 4,
                                 height: 36,
                                 decoration: BoxDecoration(
-                                  color: item['cor'] as Color,
+                                  color: item.cor,
                                   borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
@@ -212,7 +228,7 @@ class _FinancialListView extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '${item['placa']} - ${formatDate(m.data)} - ${formatKm(m.kmNoServico.toDouble())}',
+                                      '${item.placa} - ${formatDate(m.data)} - ${formatKm(m.kmNoServico.toDouble())}',
                                       style: Theme.of(ctx)
                                           .textTheme
                                           .bodyMedium
@@ -702,26 +718,26 @@ class _FinancialListView extends StatelessWidget {
       );
 
   Widget _maintenanceTable(BuildContext ctx, bool isDark) {
-    final all = <Map<String, dynamic>>[];
+    final all = <_MaintenanceRow>[];
     for (final v in frota) {
-      all.add({
-        'nome': v.nome,
-        'placa': v.placa,
-        'motorista': v.motorista,
-        'km': v.kmAtual,
-        'rev': v.totalRevisoes,
-        'custoRev': v.manutencoes.isEmpty
+      all.add((
+        nome: v.nome,
+        placa: v.placa,
+        motorista: v.motorista,
+        km: v.kmAtual,
+        rev: v.totalRevisoes,
+        custoRev: v.manutencoes.isEmpty
             ? 0.0
             : v.manutencoes.map((m) => m.custo).reduce((a, b) => a + b) /
                 v.manutencoes.length,
-        'total': v.custoTotalManutencao,
-        'fin': v.isFinanciado,
-        'cor': v.cor1,
-      });
+        total: v.custoTotalManutencao,
+        fin: v.isFinanciado,
+        cor: v.cor1,
+      ),
+      );
     }
-    final totalManut =
-        all.fold<double>(0, (s, v) => s + (v['total'] as double));
-    final totalRev = all.fold<int>(0, (s, v) => s + (v['rev'] as int));
+    final totalManut = all.fold<double>(0, (s, v) => s + v.total);
+    final totalRev = all.fold<int>(0, (s, v) => s + v.rev);
 
     return BentoCard(
       animationDelay: 500,
@@ -823,7 +839,7 @@ class _FinancialListView extends StatelessWidget {
                           height: 8,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: v['cor'] as Color,
+                            color: v.cor,
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -832,14 +848,14 @@ class _FinancialListView extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                v['nome'] as String,
+                                v.nome,
                                 style: Theme.of(ctx)
                                     .textTheme
                                     .titleMedium
                                     ?.copyWith(fontSize: 13),
                               ),
                               Text(
-                                v['placa'] as String,
+                                v.placa,
                                 style: Theme.of(ctx)
                                     .textTheme
                                     .bodyMedium
@@ -854,7 +870,7 @@ class _FinancialListView extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: Text(
-                      v['motorista'] as String,
+                      v.motorista,
                       style: Theme.of(ctx)
                           .textTheme
                           .bodyMedium
@@ -864,7 +880,7 @@ class _FinancialListView extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: Text(
-                      formatKm(v['km'] as double),
+                      formatKm(v.km),
                       style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -874,7 +890,7 @@ class _FinancialListView extends StatelessWidget {
                   ),
                   Expanded(
                     child: Text(
-                      '${v['rev']}x',
+                      '${v.rev}x',
                       style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -885,7 +901,7 @@ class _FinancialListView extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: Text(
-                      formatCurrency(v['custoRev'] as double),
+                      formatCurrency(v.custoRev),
                       style: Theme.of(ctx)
                           .textTheme
                           .bodyMedium
@@ -896,7 +912,7 @@ class _FinancialListView extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: Text(
-                      formatCurrency(v['total'] as double),
+                      formatCurrency(v.total),
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -908,8 +924,8 @@ class _FinancialListView extends StatelessWidget {
                   Expanded(
                     child: Center(
                       child: StatusBadge(
-                        text: (v['fin'] as bool) ? 'FINANC.' : 'PRÓPRIO',
-                        type: (v['fin'] as bool)
+                        text: v.fin ? 'FINANC.' : 'PRÓPRIO',
+                        type: v.fin
                             ? BadgeType.info
                             : BadgeType.success,
                       ),

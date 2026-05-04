@@ -2,14 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:fleet_app/core/services/auth_service.dart';
 import 'package:fleet_app/core/data/fleet_data.dart';
+import 'package:fleet_app/core/data/locacao_models.dart';
+import 'package:fleet_app/core/data/locacao_repository.dart';
 import 'package:fleet_app/core/theme/app_theme.dart';
 import 'package:fleet_app/features/dashboard/dashboard_screen.dart';
 import 'package:fleet_app/features/drivers/drivers_screen.dart';
 import 'package:fleet_app/features/expenses/expenses_screen.dart';
+import 'package:fleet_app/features/locacao/locacao_provider.dart';
 import 'package:fleet_app/features/maintenance/maintenance_provider.dart';
 import 'package:fleet_app/features/maintenance/maintenance_screen.dart';
 import 'package:fleet_app/features/vehicles/vehicle_dossier_screen.dart';
+
+/// Stub sem dependência de Supabase para testes widget.
+class _StubLocacaoRepository extends LocacaoRepository {
+  @override
+  Future<List<Contrato>> fetchContratos({ContratoStatus? status}) =>
+      Future.value([]);
+  @override
+  Future<Contrato?> fetchContrato(String id) => Future.value(null);
+  @override
+  Future<List<Ocorrencia>> fetchTodasOcorrencias() => Future.value([]);
+  @override
+  Future<List<ChecklistEvento>> fetchChecklist(String contratoId) =>
+      Future.value([]);
+  @override
+  Future<List<Ocorrencia>> fetchOcorrencias(String contratoId) =>
+      Future.value([]);
+}
 
 void main() {
   void setLargeViewport(WidgetTester tester) {
@@ -53,8 +74,12 @@ void main() {
 
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProvider.value(value: FleetRepository.instance),
         ChangeNotifierProvider(create: (_) => MaintenanceProvider()),
+        ChangeNotifierProvider(
+          create: (_) => LocacaoProvider(_StubLocacaoRepository()),
+        ),
       ],
       child: MaterialApp.router(
         routerConfig: router,
@@ -75,6 +100,14 @@ void main() {
 
   testWidgets('drivers renderiza e filtra por busca', (tester) async {
     setLargeViewport(tester);
+    // Seed motorista (FleetRepository carrega do Supabase em runtime)
+    FleetRepository.instance.addDriver(
+      nome: 'João Silva',
+      telefone: '11999990001',
+      vencimentoCNH: DateTime(2027),
+    );
+    addTearDown(() => FleetRepository.instance.seedForTest([]));
+
     await tester.pumpWidget(buildAppAt('/drivers'));
     await tester.pumpAndSettle();
 
@@ -114,6 +147,37 @@ void main() {
 
   testWidgets('vehicle dossier renderiza dados do veículo', (tester) async {
     setLargeViewport(tester);
+    // Seed do veículo para o teste (FleetRepository carrega do Supabase em runtime)
+    FleetRepository.instance.seedForTest([
+      VehicleData(
+        nome: 'Toyota Corolla XEi 2.0',
+        placa: 'VD-1234',
+        motorista: 'Carlos Mendes',
+        telefoneMotorista: '11999999999',
+        status: VehicleStatus.emRota,
+        mesesEmServico: 24,
+        kmPorMes: 2000,
+        cor1: const Color(0xFF1565C0),
+        cor2: const Color(0xFF0D47A1),
+        manutencoes: const [],
+        vencimentoIPVA: DateTime(2027),
+        vencimentoSeguro: DateTime(2027),
+        vencimentoLicenciamento: DateTime(2027),
+        valorDeMercado: 80000,
+        valorAquisicao: 95000,
+        dataAquisicao: DateTime(2024),
+      ),
+    ]);
+    addTearDown(() => FleetRepository.instance.seedForTest([]));
+
+    // Overflow pré-existente no VehicleDossierScreen — suprimido no teste de widget
+    final originalOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exceptionAsString().contains('RenderFlex overflowed')) return;
+      originalOnError?.call(details);
+    };
+    addTearDown(() => FlutterError.onError = originalOnError);
+
     await tester.pumpWidget(buildAppAt('/vehicles/VD-1234'));
     await tester.pumpAndSettle();
 

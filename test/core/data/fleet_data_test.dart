@@ -10,7 +10,7 @@ void main() {
         placa: 'ABC-1234',
         motorista: 'João',
         telefoneMotorista: '(11) 99999-9999',
-        status: 'EM ROTA',
+        status: VehicleStatus.emRota,
         mesesEmServico: 12,
         kmPorMes: 1000,
         cor1: const Color(0xFF000000),
@@ -33,7 +33,7 @@ void main() {
         placa: 'ABC-1234',
         motorista: 'João',
         telefoneMotorista: '(11) 99999-9999',
-        status: 'EM ROTA',
+        status: VehicleStatus.emRota,
         mesesEmServico: 12,
         kmPorMes: 1000,
         cor1: const Color(0xFF000000),
@@ -87,6 +87,34 @@ void main() {
   });
 
   group('Helpers', () {
+    setUp(() {
+      // Seed estático para testes de getVehicleByPlate (independente do Supabase)
+      FleetRepository.instance.seedForTest([
+        VehicleData(
+          nome: 'Toyota Corolla XEi 2.0',
+          placa: 'VD-1234',
+          motorista: 'Motorista Teste',
+          telefoneMotorista: '11999999999',
+          status: VehicleStatus.emRota,
+          mesesEmServico: 24,
+          kmPorMes: 2000,
+          cor1: const Color(0xFF000000),
+          cor2: const Color(0xFF000000),
+          manutencoes: const [],
+          vencimentoIPVA: DateTime(2027),
+          vencimentoSeguro: DateTime(2027),
+          vencimentoLicenciamento: DateTime(2027),
+          valorDeMercado: 80000,
+          valorAquisicao: 95000,
+          dataAquisicao: DateTime(2024),
+        ),
+      ]);
+    });
+
+    tearDown(() {
+      FleetRepository.instance.seedForTest([]);
+    });
+
     test('formatCurrency funciona', () {
       expect(formatCurrency(1234.56), 'R\$ 1.234,56');
       expect(formatCurrency(-500), '-R\$ 500,00');

@@ -33,6 +33,7 @@ migrate_working_dir/
 # /build/
 /coverage/
 run_atr.local.bat
+.atr_build_stamp
 
 # Symbolication related
 app.*.symbols

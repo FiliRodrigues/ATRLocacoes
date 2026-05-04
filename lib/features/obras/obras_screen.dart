@@ -24,6 +24,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
   String? _servicoFiltro;
   DateTime? _drillDia;
   bool _rankPorMedia = false;
+  bool _comparativoGerencialAtivo = false;
   int? _mesFiltro;
 
   // ── Raio-X: justificativas (dia → texto) ────────────────────────
@@ -33,6 +34,8 @@ class _ObrasScreenState extends State<ObrasScreen> {
   // ── Formatadores ──────────────────────────────────────────────────
   final _fmtDec = NumberFormat('#,##0.00', 'pt_BR');
   final _fmtInt = NumberFormat('#,##0', 'pt_BR');
+  final _fmtMoney =
+      NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$ ', decimalDigits: 2);
   final _fmtDate = DateFormat('dd/MM/yy');
   final _fmtDateLong = DateFormat('EEEE, dd/MM/yyyy', 'pt_BR');
 
@@ -230,15 +233,12 @@ class _ObrasScreenState extends State<ObrasScreen> {
                 if (_equipeFiltro != null) _buildEquipeBanner(isDark),
                 if (_equipeFiltro != null) const SizedBox(height: 16),
 
-                // ── KPIs ──
                 _buildKpis(kpis, isDark),
                 const SizedBox(height: 32),
 
-                // ── Filtro por cidade ──
                 _buildCidadeFiltro(isDark),
                 const SizedBox(height: 32),
 
-                // ── Detalhe Pintura Quente (se selecionado) ──
                 if (_servicoFiltro == 'Pintura Quente') ...[
                   _buildPinturaQuenteDetalhe(resumo, isDark),
                   const SizedBox(height: 32),
@@ -269,7 +269,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                 const SizedBox(height: 32),
 
                 // ── Rankings lado a lado ──
-                _buildRankings(context, isDark),
+                _buildComparativos(context, isDark),
                 const SizedBox(height: 32),
               ],
             ),
@@ -618,6 +618,11 @@ class _ObrasScreenState extends State<ObrasScreen> {
   // FILTRO POR CIDADE
   // ════════════════════════════════════════════════════════════════
   Widget _buildCidadeFiltro(bool isDark) {
+    // Pré-computar todos os resumos em O(n) antes de montar a árvore de UI,
+    // evitando 5 chamadas independentes a obrasResumo() por rebuild.
+    final resumosPorCidade = {
+      for (final c in obrasCidades) c: obrasResumo(cidade: c, mes: _mesFiltro),
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -645,8 +650,11 @@ class _ObrasScreenState extends State<ObrasScreen> {
           runSpacing: 10,
           children: obrasCidades.map((cidade) {
             final selecionada = _cidade == cidade;
-            final cor = _coresCidade[cidade]!;
-            final resumoCidade = obrasResumo(cidade: cidade, mes: _mesFiltro);
+            // Fallback seguro: slate-400 caso uma cidade nova seja adicionada
+            // em obras_data.dart sem atualizar _coresCidade.
+            final cor =
+                _coresCidade[cidade] ?? const Color(0xFF94A3B8);
+            final resumoCidade = resumosPorCidade[cidade]!;
             return MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
@@ -714,6 +722,415 @@ class _ObrasScreenState extends State<ObrasScreen> {
   // ════════════════════════════════════════════════════════════════
   // DETALHE PINTURA QUENTE
   // ════════════════════════════════════════════════════════════════
+  Widget _buildCustosGerenciais(bool isDark) {
+    final porEquipe = gerencialResumoPorEquipe(mes: _mesFiltro);
+    final porCidade = gerencialResumoPorCidade(mes: _mesFiltro);
+    final porEquipeCidade = gerencialCustosEquipeCidade(mes: _mesFiltro);
+    final totalGeral =
+        porEquipe.fold<double>(0, (s, item) => s + item.custoTotalMes);
+    final equipeMaisCara = porEquipe.isNotEmpty ? porEquipe.first : null;
+    final cidadeMaisCara = porCidade.isNotEmpty ? porCidade.first : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              LucideIcons.wallet,
+              size: 16,
+              color: AppColors.statusWarning,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Custos de Producao (Gerencial)',
+              style: TextStyle(
+                color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Regra: folha/30 + jantar (R\$34 por pessoa) + hotel por pessoa/cidade.',
+          style: TextStyle(
+            color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+            fontSize: 11,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _gerencialMacroCard(
+              title: 'Custo Total',
+              value: _fmtMoney.format(totalGeral),
+              subtitle: _mesFiltro != null
+                  ? 'Mes $_mesFiltro/2026'
+                  : 'Consolidado Jan-Abr/2026',
+              color: AppColors.atrOrange,
+              isDark: isDark,
+            ),
+            _gerencialMacroCard(
+              title: 'Equipe Mais Cara',
+              value: equipeMaisCara == null
+                  ? '-'
+                  : '${equipeMaisCara.equipe} (${_fmtMoney.format(equipeMaisCara.custoTotalMes)})',
+              subtitle: equipeMaisCara == null
+                  ? 'Sem dados'
+                  : 'Media dia: ${_fmtMoney.format(equipeMaisCara.custoMedioDia)}',
+              color: AppColors.statusError,
+              isDark: isDark,
+            ),
+            _gerencialMacroCard(
+              title: 'Cidade Mais Cara',
+              value: cidadeMaisCara == null
+                  ? '-'
+                  : '${cidadeMaisCara.cidade} (${_fmtMoney.format(cidadeMaisCara.custoTotalMes)})',
+              subtitle: cidadeMaisCara == null
+                  ? 'Sem dados'
+                  : '${cidadeMaisCara.diasAlocados} dias alocados',
+              color: AppColors.statusInfo,
+              isDark: isDark,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked = constraints.maxWidth < 1120;
+            if (stacked) {
+              return Column(
+                children: [
+                  _gerencialEquipePanel(isDark, porEquipe),
+                  const SizedBox(height: 12),
+                  _gerencialCidadePanel(isDark, porCidade),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _gerencialEquipePanel(isDark, porEquipe)),
+                const SizedBox(width: 12),
+                Expanded(child: _gerencialCidadePanel(isDark, porCidade)),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        _gerencialEquipeCidadePanel(isDark, porEquipeCidade),
+      ],
+    ).animate().fadeIn(delay: 120.ms, duration: 350.ms);
+  }
+
+  Widget _gerencialMacroCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Container(
+      width: 320,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: isDark ? Colors.white70 : AppColors.textSecondaryLight,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+              fontSize: 10,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _gerencialEquipePanel(bool isDark, List<GerencialEquipeResumo> dados) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Macro por Equipe',
+            style: TextStyle(
+              color: isDark ? Colors.white : AppColors.textPrimaryLight,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...dados.map((e) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.surfaceElevatedDark
+                    : AppColors.surfaceElevatedLight,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${e.equipe} (${e.funcionarios} pessoas)',
+                          style: TextStyle(
+                            color:
+                                isDark ? Colors.white : AppColors.textPrimaryLight,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _fmtMoney.format(e.custoTotalMes),
+                        style: const TextStyle(
+                          color: AppColors.statusWarning,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Custo/dia: ${_fmtMoney.format(e.custoMedioDia)}',
+                    style: TextStyle(
+                      color: isDark ? Colors.white60 : AppColors.textSecondaryLight,
+                      fontSize: 10,
+                    ),
+                  ),
+                  Text(
+                    'Salario: ${_fmtMoney.format(e.custoSalarialMes)} | Hotel: ${_fmtMoney.format(e.custoHotelMes)} | Jantar: ${_fmtMoney.format(e.custoJantarMes)}',
+                    style: TextStyle(
+                      color: isDark ? Colors.white60 : AppColors.textSecondaryLight,
+                      fontSize: 10,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _gerencialCidadePanel(bool isDark, List<GerencialCidadeResumo> dados) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Total no Mes por Cidade',
+            style: TextStyle(
+              color: isDark ? Colors.white : AppColors.textPrimaryLight,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...dados.map((c) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.surfaceElevatedDark
+                    : AppColors.surfaceElevatedLight,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          c.cidade,
+                          style: TextStyle(
+                            color:
+                                isDark ? Colors.white : AppColors.textPrimaryLight,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          '${c.diasAlocados} dias alocados',
+                          style: TextStyle(
+                            color: isDark ? Colors.white60 : AppColors.textSecondaryLight,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    _fmtMoney.format(c.custoTotalMes),
+                    style: const TextStyle(
+                      color: AppColors.statusInfo,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _gerencialEquipeCidadePanel(
+    bool isDark,
+    List<GerencialEquipeCidadeResumo> dados,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Detalhe Equipe x Cidade',
+            style: TextStyle(
+              color: isDark ? Colors.white : AppColors.textPrimaryLight,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Mostra custo diario por equipe em cada cidade e total no periodo.',
+            style: TextStyle(
+              color: isDark ? Colors.white60 : AppColors.textSecondaryLight,
+              fontSize: 10,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...dados.map((d) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.surfaceElevatedDark
+                    : AppColors.surfaceElevatedLight,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      '${d.equipe} - ${d.cidade}',
+                      style: TextStyle(
+                        color:
+                            isDark ? Colors.white : AppColors.textPrimaryLight,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      '${d.diasTrabalhados} dias',
+                      style: TextStyle(
+                        color: isDark ? Colors.white60 : AppColors.textSecondaryLight,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      'Dia: ${_fmtMoney.format(d.custoTotalDia)}',
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : AppColors.textPrimaryLight,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      _fmtMoney.format(d.custoTotalMes),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: AppColors.statusSuccess,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPinturaQuenteDetalhe(ObrasResumo r, bool isDark) {
     final total = r.pinturaQuente;
     final pHot = total > 0 ? r.hotspray / total : 0.5;
@@ -1937,6 +2354,89 @@ class _ObrasScreenState extends State<ObrasScreen> {
   // ════════════════════════════════════════════════════════════════
   // RANKINGS
   // ════════════════════════════════════════════════════════════════
+  Widget _buildComparativos(BuildContext context, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              LucideIcons.layoutGrid,
+              size: 16,
+              color: AppColors.atrOrange,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Comparativos',
+              style: TextStyle(
+                color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            _comparativoTabBtn(
+              'Operacional',
+              !_comparativoGerencialAtivo,
+              isDark,
+              () => setState(() => _comparativoGerencialAtivo = false),
+            ),
+            const SizedBox(width: 8),
+            _comparativoTabBtn(
+              'Comparativo Gerencial',
+              _comparativoGerencialAtivo,
+              isDark,
+              () => setState(() => _comparativoGerencialAtivo = true),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (_comparativoGerencialAtivo)
+          _buildCustosGerenciais(isDark)
+        else
+          _buildRankings(context, isDark),
+      ],
+    );
+  }
+
+  Widget _comparativoTabBtn(
+    String label,
+    bool ativo,
+    bool isDark,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: ativo
+              ? AppColors.atrOrange
+              : (isDark
+                  ? AppColors.surfaceElevatedDark
+                  : AppColors.surfaceElevatedLight),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: ativo
+                ? AppColors.atrOrange
+                : (isDark ? AppColors.borderDark : AppColors.borderLight),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: ativo
+                ? Colors.white
+                : (isDark ? Colors.white70 : AppColors.textSecondaryLight),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildRankings(BuildContext context, bool isDark) {
     final rankEquipes = _ranking;
     final rankLocais = _locaisRanking;
@@ -2691,3 +3191,4 @@ class _ObrasScreenState extends State<ObrasScreen> {
     );
   }
 }
+

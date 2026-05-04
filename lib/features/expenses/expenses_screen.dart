@@ -7,6 +7,8 @@ import '../../core/widgets/bento_card.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/data/fleet_data.dart';
+import '../../core/utils/web_file_picker_stub.dart'
+    if (dart.library.html) '../../core/utils/web_file_picker_html.dart';
 
 class ExpenseItem {
   final DateTime data;
@@ -16,6 +18,11 @@ class ExpenseItem {
   final double valor;
   final bool pago;
   final bool temAnexo;
+  final String descricao;
+  final String nf;
+  final String nomeAnexo;
+
+  bool get temPdf => nomeAnexo.isNotEmpty;
 
   ExpenseItem({
     required this.data,
@@ -25,6 +32,9 @@ class ExpenseItem {
     required this.valor,
     required this.pago,
     this.temAnexo = false,
+    this.descricao = '',
+    this.nf = '',
+    this.nomeAnexo = '',
   });
 }
 
@@ -398,12 +408,50 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  d.tipo,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontSize: 14),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        d.tipo,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (d.descricao.isNotEmpty)
+                        Text(
+                          d.descricao,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondaryLight,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      if (d.nf.isNotEmpty)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              LucideIcons.receipt,
+                              size: 10,
+                              color: AppColors.atrOrange,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'NF ${d.nf}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: AppColors.atrOrange,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -441,17 +489,27 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             ),
           ),
           Expanded(
-            child: d.temAnexo
-                ? Icon(
-                    LucideIcons.fileCheck,
-                    size: 18,
-                    color: AppColors.statusSuccess.withValues(alpha: 0.7),
+            child: d.temPdf
+                ? Tooltip(
+                    message: d.nomeAnexo,
+                    child: const Icon(
+                      LucideIcons.fileText,
+                      size: 18,
+                      color: AppColors.statusInfo,
+                    ),
                   )
-                : Icon(
-                    LucideIcons.fileMinus,
-                    size: 18,
-                    color: AppColors.textSecondaryLight.withValues(alpha: 0.2),
-                  ),
+                : d.temAnexo
+                    ? const Icon(
+                        LucideIcons.fileCheck,
+                        size: 18,
+                        color: AppColors.statusSuccess,
+                      )
+                    : Icon(
+                        LucideIcons.fileMinus,
+                        size: 18,
+                        color: AppColors.textSecondaryLight
+                            .withValues(alpha: 0.2),
+                      ),
           ),
           Expanded(
             flex: 2,
@@ -565,8 +623,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     String? placa;
     String? tipo;
     String? modalError;
+    String pdfNome = '';
     final valorCtrl = TextEditingController();
     final descCtrl = TextEditingController();
+    final nfCtrl = TextEditingController();
 
     showDialog(
       context: context,
@@ -650,11 +710,96 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  // ── Nota Fiscal + Descrição ──
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: nfCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Nº Nota Fiscal (NF)',
+                            prefixIcon: Icon(LucideIcons.receipt, size: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: descCtrl,
                     maxLines: 2,
                     decoration: const InputDecoration(
                       labelText: 'Descrição / Observação',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // ── Anexo PDF ──
+                  GestureDetector(
+                    onTap: () async {
+                      final nome = await pickPdfFileName();
+                      if (nome != null) {
+                        setModalState(() => pdfNome = nome);
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: pdfNome.isEmpty
+                              ? AppColors.textSecondaryLight
+                                  .withValues(alpha: 0.3)
+                              : AppColors.statusInfo,
+                          width: pdfNome.isEmpty ? 1 : 1.5,
+                        ),
+                        color: pdfNome.isEmpty
+                            ? Colors.transparent
+                            : AppColors.statusInfo.withValues(alpha: 0.05),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            pdfNome.isEmpty
+                                ? LucideIcons.upload
+                                : LucideIcons.fileText,
+                            size: 18,
+                            color: pdfNome.isEmpty
+                                ? AppColors.textSecondaryLight
+                                : AppColors.statusInfo,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              pdfNome.isEmpty
+                                  ? 'Anexar Nota Fiscal (PDF)'
+                                  : pdfNome,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: pdfNome.isEmpty
+                                    ? AppColors.textSecondaryLight
+                                    : AppColors.statusInfo,
+                                fontWeight: pdfNome.isEmpty
+                                    ? FontWeight.normal
+                                    : FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (pdfNome.isNotEmpty)
+                            GestureDetector(
+                              onTap: () =>
+                                  setModalState(() => pdfNome = ''),
+                              child: Icon(
+                                LucideIcons.x,
+                                size: 16,
+                                color: AppColors.textSecondaryLight
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   if (modalError != null) ...[
@@ -721,6 +866,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         motorista: vehicle.motorista,
                         valor: valor,
                         pago: false,
+                        descricao: descCtrl.text.trim(),
+                        nf: nfCtrl.text.trim(),
+                        nomeAnexo: pdfNome,
                       ),
                     );
                   });
@@ -735,6 +883,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     ).whenComplete(() {
       valorCtrl.dispose();
       descCtrl.dispose();
+      nfCtrl.dispose();
     });
   }
 }

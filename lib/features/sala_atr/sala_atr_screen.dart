@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/data/sala_atr_data.dart';
+import '../../core/widgets/bookable_area_shared.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SALA ATR — 3 abas: Dashboard, Despesas, Agendamentos
@@ -50,16 +51,21 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
         child: SafeArea(
           child: Row(
             children: [
-              _SalaAtrSidebar(
+              BookableAreaSidebar(
+                title: 'Sala ATR',
+                subtitle: 'Gestão de Espaços',
+                icon: LucideIcons.building2,
+                titleFontSize: 15,
                 tabIndex: _tabIndex,
                 onTabChange: (i) => setState(() => _tabIndex = i),
                 onBack: () => context.go('/selector'),
                 isDark: isDark,
+                showConsolidado: true,
               ),
               Expanded(
                 child: Column(
                   children: [
-                    _SalaAtrHeader(
+                    BookableAreaHeader(
                       mesFiltro: _mesFiltro,
                       onPrev: () => _setMes(-1),
                       onNext: () => _setMes(1),
@@ -72,6 +78,7 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
                           _SalaAtrDashboard(mes: _mesFiltro, isDark: isDark),
                           _SalaAtrDespesas(mes: _mesFiltro, isDark: isDark),
                           _SalaAtrAgendamentos(mes: _mesFiltro, isDark: isDark),
+                          _SalaAtrConsolidado(ano: _mesFiltro.year, isDark: isDark),
                         ],
                       ),
                     ),
@@ -81,343 +88,6 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ── Sidebar ────────────────────────────────────────────────────────────────
-class _SalaAtrSidebar extends StatelessWidget {
-  final int tabIndex;
-  final ValueChanged<int> onTabChange;
-  final VoidCallback onBack;
-  final bool isDark;
-
-  const _SalaAtrSidebar({
-    required this.tabIndex,
-    required this.onTabChange,
-    required this.onBack,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tabs = [
-      (icon: LucideIcons.layoutDashboard, label: 'Dashboard'),
-      (icon: LucideIcons.receipt, label: 'Despesas'),
-      (icon: LucideIcons.calendarDays, label: 'Agendamentos'),
-    ];
-    final bg = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
-    final border = isDark ? AppColors.borderDark : AppColors.borderLight;
-    const activeColor = AppColors.atrOrange;
-    final inactiveColor =
-        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
-
-    return Container(
-      width: 200,
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(right: BorderSide(color: border)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: AppColors.atrOrange.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        LucideIcons.building2,
-                        color: AppColors.atrOrange,
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Sala ATR',
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.white
-                              : AppColors.textPrimaryLight,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Gestão de Espaços',
-                  style: TextStyle(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 28),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              'NAVEGAÇÃO',
-              style: TextStyle(
-                color: isDark
-                    ? AppColors.textSecondaryDark
-                    : AppColors.textSecondaryLight,
-                fontSize: 10,
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...List.generate(tabs.length, (i) {
-            final tab = tabs[i];
-            final active = i == tabIndex;
-            return GestureDetector(
-              onTap: () => onTabChange(i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: active
-                      ? AppColors.atrOrange.withValues(alpha: 0.12)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: active
-                        ? AppColors.atrOrange.withValues(alpha: 0.3)
-                        : Colors.transparent,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      tab.icon,
-                      size: 16,
-                      color: active ? activeColor : inactiveColor,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      tab.label,
-                      style: TextStyle(
-                        color: active ? activeColor : inactiveColor,
-                        fontSize: 13,
-                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: GestureDetector(
-              onTap: onBack,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.surfaceElevatedDark
-                      : AppColors.surfaceElevatedLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      LucideIcons.arrowLeft,
-                      size: 15,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Voltar',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Header com seletor de mês ──────────────────────────────────────────────
-class _SalaAtrHeader extends StatelessWidget {
-  final DateTime mesFiltro;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
-  final bool isDark;
-
-  const _SalaAtrHeader({
-    required this.mesFiltro,
-    required this.onPrev,
-    required this.onNext,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
-    final border = isDark ? AppColors.borderDark : AppColors.borderLight;
-    final mesLabel = DateFormat('MMMM yyyy', 'pt_BR').format(mesFiltro);
-
-    return Container(
-      height: 56,
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(bottom: BorderSide(color: border)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          Text(
-            mesLabel[0].toUpperCase() + mesLabel.substring(1),
-            style: TextStyle(
-              color: isDark ? Colors.white : AppColors.textPrimaryLight,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(width: 12),
-          _NavBtn(icon: LucideIcons.chevronLeft, onTap: onPrev, isDark: isDark),
-          const SizedBox(width: 4),
-          _NavBtn(
-            icon: LucideIcons.chevronRight,
-            onTap: onNext,
-            isDark: isDark,
-          ),
-          const Spacer(),
-        ],
-      ),
-    );
-  }
-}
-
-class _NavBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool isDark;
-  const _NavBtn({
-    required this.icon,
-    required this.onTap,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 28,
-        height: 28,
-        decoration: BoxDecoration(
-          color: isDark
-              ? AppColors.surfaceElevatedDark
-              : AppColors.surfaceElevatedLight,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Icon(
-          icon,
-          size: 14,
-          color: isDark ? Colors.white70 : AppColors.textSecondaryLight,
-        ),
-      ),
-    );
-  }
-}
-
-// ── KPI Card ──────────────────────────────────────────────────────────────
-class _KpiCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color iconColor;
-  final bool isDark;
-
-  const _KpiCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.iconColor,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
-    final border = isDark ? AppColors.borderDark : AppColors.borderLight;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 16, color: iconColor),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-              color: isDark ? Colors.white : AppColors.textPrimaryLight,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight,
-              fontSize: 12,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -466,118 +136,6 @@ Widget _statusPagamento(StatusPagamento status) {
 String _nomesSala(int id) =>
     salasAtr.firstWhere((s) => s.id == id, orElse: () => salasAtr.first).nome;
 
-// ── TableCol helper ──────────────────────────────────────────────────────
-class _Col extends StatelessWidget {
-  final String label;
-  final int flex;
-  const _Col(this.label, {this.flex = 1});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      flex: flex,
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.textSecondaryDark,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Empty state ──────────────────────────────────────────────────────────
-class _EmptyState extends StatelessWidget {
-  final String message;
-  final IconData icon;
-  final bool isDark;
-  const _EmptyState({
-    required this.message,
-    required this.icon,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            size: 36,
-            color: isDark
-                ? AppColors.textSecondaryDark
-                : AppColors.textSecondaryLight,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: TextStyle(
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Filter Chip ──────────────────────────────────────────────────────────
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool active;
-  final bool isDark;
-  final VoidCallback onTap;
-  const _FilterChip({
-    required this.label,
-    required this.active,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: active
-              ? AppColors.atrOrange
-              : (isDark
-                  ? AppColors.surfaceElevatedDark
-                  : AppColors.surfaceElevatedLight),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active
-                ? AppColors.atrOrange
-                : (isDark ? AppColors.borderDark : AppColors.borderLight),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active
-                ? Colors.white
-                : (isDark ? Colors.white70 : AppColors.textSecondaryLight),
-            fontSize: 12,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // ABA 0 — DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════
@@ -611,7 +169,7 @@ class _SalaAtrDashboard extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: w,
-                    child: _KpiCard(
+                    child: BookableAreaKpiCard(
                       label: 'Receita do Mês',
                       value: fmt.format(receita),
                       icon: LucideIcons.trendingUp,
@@ -622,7 +180,7 @@ class _SalaAtrDashboard extends StatelessWidget {
                   const SizedBox(width: 16),
                   SizedBox(
                     width: w,
-                    child: _KpiCard(
+                    child: BookableAreaKpiCard(
                       label: 'Despesas',
                       value: fmt.format(despesas),
                       icon: LucideIcons.trendingDown,
@@ -633,7 +191,7 @@ class _SalaAtrDashboard extends StatelessWidget {
                   const SizedBox(width: 16),
                   SizedBox(
                     width: w,
-                    child: _KpiCard(
+                    child: BookableAreaKpiCard(
                       label: 'Lucro Líquido',
                       value: fmt.format(lucro),
                       icon: LucideIcons.dollarSign,
@@ -646,7 +204,7 @@ class _SalaAtrDashboard extends StatelessWidget {
                   const SizedBox(width: 16),
                   SizedBox(
                     width: w,
-                    child: _KpiCard(
+                    child: BookableAreaKpiCard(
                       label: '% Ocupação',
                       value: '${ocupacao.toStringAsFixed(1)}%',
                       icon: LucideIcons.activity,
@@ -699,7 +257,7 @@ class _SalaAtrDashboard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (agendHoje.isEmpty)
-            _EmptyState(
+            BookableAreaEmptyState(
               message: 'Nenhum agendamento para hoje',
               icon: LucideIcons.calendarOff,
               isDark: isDark,
@@ -906,7 +464,7 @@ class _SalaAtrDespesas extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _KpiCard(
+                child: BookableAreaKpiCard(
                   label: 'Total de Despesas',
                   value: fmt.format(total),
                   icon: LucideIcons.receipt,
@@ -916,7 +474,7 @@ class _SalaAtrDespesas extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _KpiCard(
+                child: BookableAreaKpiCard(
                   label: 'Lançamentos',
                   value: '${dsps.length}',
                   icon: LucideIcons.fileText,
@@ -926,7 +484,7 @@ class _SalaAtrDespesas extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _KpiCard(
+                child: BookableAreaKpiCard(
                   label: 'A Pagar',
                   value: fmt.format(pendente),
                   icon: LucideIcons.alertCircle,
@@ -947,7 +505,7 @@ class _SalaAtrDespesas extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (dsps.isEmpty)
-            _EmptyState(
+            BookableAreaEmptyState(
               message: 'Nenhuma despesa neste mês',
               icon: LucideIcons.inbox,
               isDark: isDark,
@@ -1002,11 +560,11 @@ class _DespesasTable extends StatelessWidget {
             ),
             child: const Row(
               children: [
-                _Col('Data', flex: 2),
-                _Col('Descrição', flex: 4),
-                _Col('Categoria', flex: 2),
-                _Col('Valor', flex: 2),
-                _Col('Status', flex: 2),
+                BookableAreaTableCol('Data', flex: 2),
+                BookableAreaTableCol('Descrição', flex: 4),
+                BookableAreaTableCol('Categoria', flex: 2),
+                BookableAreaTableCol('Valor', flex: 2),
+                BookableAreaTableCol('Status', flex: 2),
               ],
             ),
           ),
@@ -1126,7 +684,7 @@ class _SalaAtrAgendamentosState extends State<_SalaAtrAgendamentos> {
           Row(
             children: [
               Expanded(
-                child: _KpiCard(
+                child: BookableAreaKpiCard(
                   label: 'Agendamentos',
                   value: '${agendamentosPorMes(mes: m, ano: a).length}',
                   icon: LucideIcons.calendarDays,
@@ -1136,7 +694,7 @@ class _SalaAtrAgendamentosState extends State<_SalaAtrAgendamentos> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _KpiCard(
+                child: BookableAreaKpiCard(
                   label: 'Receita do Mês',
                   value: fmt.format(totalMes),
                   icon: LucideIcons.dollarSign,
@@ -1146,7 +704,7 @@ class _SalaAtrAgendamentosState extends State<_SalaAtrAgendamentos> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _KpiCard(
+                child: BookableAreaKpiCard(
                   label: 'Cancelamentos',
                   value: '$cancelados',
                   icon: LucideIcons.xCircle,
@@ -1170,14 +728,14 @@ class _SalaAtrAgendamentosState extends State<_SalaAtrAgendamentos> {
                   fontSize: 13,
                 ),
               ),
-              _FilterChip(
+              BookableAreaFilterChip(
                 label: 'Todas',
                 active: _salaFiltro == null,
                 isDark: isDark,
                 onTap: () => setState(() => _salaFiltro = null),
               ),
               ...salasAtr.map(
-                (s) => _FilterChip(
+                (s) => BookableAreaFilterChip(
                   label: '${s.imagemEmoji} ${s.nome.split(' ').first}',
                   active: _salaFiltro == s.id,
                   isDark: isDark,
@@ -1196,7 +754,7 @@ class _SalaAtrAgendamentosState extends State<_SalaAtrAgendamentos> {
               ),
               ...['todos', 'confirmado', 'realizado', 'cancelado', 'pendente']
                   .map(
-                (s) => _FilterChip(
+                (s) => BookableAreaFilterChip(
                   label: s[0].toUpperCase() + s.substring(1),
                   active: _statusFiltro == s,
                   isDark: isDark,
@@ -1217,7 +775,7 @@ class _SalaAtrAgendamentosState extends State<_SalaAtrAgendamentos> {
           ),
           const SizedBox(height: 8),
           if (agends.isEmpty)
-            _EmptyState(
+            BookableAreaEmptyState(
               message: 'Nenhum agendamento encontrado',
               icon: LucideIcons.calendarOff,
               isDark: isDark,
@@ -1265,12 +823,12 @@ class _AgendamentosTable extends StatelessWidget {
             ),
             child: const Row(
               children: [
-                _Col('Início', flex: 2),
-                _Col('Cliente', flex: 3),
-                _Col('Sala', flex: 3),
-                _Col('Tipo', flex: 2),
-                _Col('Valor', flex: 2),
-                _Col('Status', flex: 2),
+                BookableAreaTableCol('Início', flex: 2),
+                BookableAreaTableCol('Cliente', flex: 3),
+                BookableAreaTableCol('Sala', flex: 3),
+                BookableAreaTableCol('Tipo', flex: 2),
+                BookableAreaTableCol('Valor', flex: 2),
+                BookableAreaTableCol('Status', flex: 2),
               ],
             ),
           ),
@@ -1352,6 +910,328 @@ class _AgendamentosTable extends StatelessWidget {
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ABA 3 — CONSOLIDADO ANUAL
+// ═══════════════════════════════════════════════════════════════════════════
+class _SalaAtrConsolidado extends StatelessWidget {
+  final int ano;
+  final bool isDark;
+  const _SalaAtrConsolidado({required this.ano, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    final mesNomes = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+    ];
+
+    double receitaTotal = 0;
+    double despesasTotal = 0;
+    int agendamentosTotal = 0;
+
+    final rows = List.generate(12, (i) {
+      final m = i + 1;
+      final rec = receitaMes(mes: m, ano: ano);
+      final desp = despesasMes(mes: m, ano: ano);
+      final lucro = rec - desp;
+      final agends = agendamentosPorMes(mes: m, ano: ano)
+          .where((ag) => ag.status != StatusAgendamento.cancelado)
+          .length;
+      final ocup = ocupacaoPercMes(mes: m, ano: ano);
+
+      receitaTotal += rec;
+      despesasTotal += desp;
+      agendamentosTotal += agends;
+
+      return (
+        mes: mesNomes[i],
+        receita: rec,
+        despesas: desp,
+        lucro: lucro,
+        agendamentos: agends,
+        ocupacao: ocup,
+      );
+    });
+
+    final lucroTotal = receitaTotal - despesasTotal;
+
+    final bg = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
+    final border = isDark ? AppColors.borderDark : AppColors.borderLight;
+    final headerBg =
+        isDark ? AppColors.surfaceElevatedDark : AppColors.surfaceElevatedLight;
+    final textPrimary =
+        isDark ? Colors.white : AppColors.textPrimaryLight;
+    final textSec =
+        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Consolidado $ano',
+            style: TextStyle(
+              color: textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+          // ── KPIs anuais ──
+          LayoutBuilder(
+            builder: (ctx, c) {
+              final w = (c.maxWidth - 48) / 4;
+              return Row(
+                children: [
+                  SizedBox(
+                    width: w,
+                    child: BookableAreaKpiCard(
+                      label: 'Receita do Ano',
+                      value: fmt.format(receitaTotal),
+                      icon: LucideIcons.trendingUp,
+                      iconColor: AppColors.statusSuccess,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: w,
+                    child: BookableAreaKpiCard(
+                      label: 'Despesas do Ano',
+                      value: fmt.format(despesasTotal),
+                      icon: LucideIcons.trendingDown,
+                      iconColor: AppColors.statusError,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: w,
+                    child: BookableAreaKpiCard(
+                      label: 'Lucro Líquido',
+                      value: fmt.format(lucroTotal),
+                      icon: LucideIcons.dollarSign,
+                      iconColor: lucroTotal >= 0
+                          ? AppColors.statusSuccess
+                          : AppColors.statusError,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: w,
+                    child: BookableAreaKpiCard(
+                      label: 'Agendamentos',
+                      value: '$agendamentosTotal',
+                      icon: LucideIcons.calendarCheck,
+                      iconColor: AppColors.atrOrange,
+                      isDark: isDark,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          // ── Tabela por mês ──
+          Container(
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: border),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: headerBg,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(12)),
+                  ),
+                  child: const Row(
+                    children: [
+                      BookableAreaTableCol('Mês', flex: 3),
+                      BookableAreaTableCol('Receita', flex: 3),
+                      BookableAreaTableCol('Despesas', flex: 3),
+                      BookableAreaTableCol('Lucro', flex: 3),
+                      BookableAreaTableCol('Agend.', flex: 2),
+                      BookableAreaTableCol('Ocup.%', flex: 2),
+                    ],
+                  ),
+                ),
+                ...rows.asMap().entries.map((e) {
+                  final r = e.value;
+                  final rowBg = e.key % 2 == 1
+                      ? (isDark
+                          ? Colors.white.withValues(alpha: 0.02)
+                          : Colors.black.withValues(alpha: 0.02))
+                      : Colors.transparent;
+                  final lucroColor = r.lucro >= 0
+                      ? AppColors.statusSuccess
+                      : AppColors.statusError;
+                  return Container(
+                    color: rowBg,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            r.mes,
+                            style: TextStyle(
+                              color: textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            fmt.format(r.receita),
+                            style: const TextStyle(
+                              color: AppColors.statusSuccess,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            fmt.format(r.despesas),
+                            style: const TextStyle(
+                              color: AppColors.statusError,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            fmt.format(r.lucro),
+                            style: TextStyle(
+                              color: lucroColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${r.agendamentos}',
+                            style: TextStyle(
+                              color: textSec,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${r.ocupacao.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              color: AppColors.atrOrange,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                // ── Rodapé totais ──
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.atrOrange.withValues(alpha: 0.06),
+                    borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(12)),
+                    border: Border(
+                      top: BorderSide(color: border),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          'TOTAL',
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          fmt.format(receitaTotal),
+                          style: const TextStyle(
+                            color: AppColors.statusSuccess,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          fmt.format(despesasTotal),
+                          style: const TextStyle(
+                            color: AppColors.statusError,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          fmt.format(lucroTotal),
+                          style: TextStyle(
+                            color: lucroTotal >= 0
+                                ? AppColors.statusSuccess
+                                : AppColors.statusError,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          '$agendamentosTotal',
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const Expanded(flex: 2, child: SizedBox()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
