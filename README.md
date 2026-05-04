@@ -46,6 +46,12 @@ flutter pub get
 flutter run -d windows
 ```
 
+Com Supabase explicitamente configurado no run:
+
+```bash
+flutter run -d windows --dart-define=SUPABASE_URL=https://SEU-PROJETO.supabase.co --dart-define=SUPABASE_ANON_KEY=sb_publishable_xxx
+```
+
 Opções web:
 
 ```bash

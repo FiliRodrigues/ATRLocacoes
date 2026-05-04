@@ -8,6 +8,26 @@ import '../../core/widgets/status_badge.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/data/fleet_data.dart';
 
+class _VehicleHistoryEntry {
+  final DateTime data;
+  final String titulo;
+  final String descricao;
+  final double valor;
+  final IconData icone;
+  final Color cor;
+  final int? kmNoServico;
+
+  const _VehicleHistoryEntry({
+    required this.data,
+    required this.titulo,
+    required this.descricao,
+    required this.valor,
+    required this.icone,
+    required this.cor,
+    this.kmNoServico,
+  });
+}
+
 class VehicleDossierScreen extends StatefulWidget {
   final String plateId;
   const VehicleDossierScreen({super.key, required this.plateId});
@@ -226,6 +246,18 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
   }
 
   Widget _buildKPIs(BuildContext context, VehicleData v, double width) {
+    final totalIpva = _sumByCategoria(v, 'IPVA');
+    final totalSeguro = _sumByCategoria(v, 'Seguro');
+    final totalMultas = _sumByCategoria(v, 'Multa');
+    final lucroColor = v.lucroPrejuizoAteAgora >= 0
+        ? AppColors.statusSuccess
+        : AppColors.statusError;
+    final lucroLabel = v.lucroPrejuizoAteAgora >= 0 ? 'Lucro' : 'Prejuízo';
+    final primeiroReceb =
+        v.dataPrimeiroRecebimento != null ? formatDate(v.dataPrimeiroRecebimento!) : '--';
+    final primeiroGasto =
+        v.dataPrimeiroGasto != null ? formatDate(v.dataPrimeiroGasto!) : '--';
+
     if (width < 1100) {
       return Wrap(
         spacing: 20,
@@ -240,24 +272,33 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
               AppColors.statusInfo,
               0,
               width,),
-          _kpi(context, 'Revisões', '${v.totalRevisoes}', 'a cada 10.000 km',
-              LucideIcons.wrench, AppColors.atrOrange, 100, width,),
+              _kpi(
+                context,
+                '$lucroLabel até Agora',
+                formatCurrency(v.lucroPrejuizoAteAgora),
+                'Recebe desde $primeiroReceb | Gasta desde $primeiroGasto',
+                v.lucroPrejuizoAteAgora >= 0
+                  ? LucideIcons.trendingUp
+                  : LucideIcons.trendingDown,
+                lucroColor,
+                100,
+                width,),
           _kpi(
               context,
               'Custo Manutenção',
               formatCurrency(v.custoTotalManutencao),
-              '${v.totalRevisoes} revisões',
+                '${v.totalRevisoes} revisões | Próx. revisão em ${formatKm(v.kmParaProxRevisao)}',
               LucideIcons.receipt,
               AppColors.statusError,
               200,
               width,),
           _kpi(
               context,
-              'Próx. Revisão em',
-              formatKm(v.kmParaProxRevisao),
-              '~${(v.kmParaProxRevisao / v.kmPorMes).toStringAsFixed(1)} meses',
-              LucideIcons.calendarClock,
-              AppColors.statusSuccess,
+                'Gasto Total Veículo',
+                formatCurrency(v.gastoTotalVeiculoKpi),
+                'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Multas ${formatCurrency(totalMultas)}',
+                LucideIcons.wallet,
+                AppColors.atrOrange,
               300,
               width,),
         ],
@@ -281,11 +322,13 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
         Expanded(
             child: _kpi(
                 context,
-                'Revisões',
-                '${v.totalRevisoes}',
-                'a cada 10.000 km',
-                LucideIcons.wrench,
-                AppColors.atrOrange,
+            '$lucroLabel até Agora',
+            formatCurrency(v.lucroPrejuizoAteAgora),
+            'Recebe desde $primeiroReceb | Gasta desde $primeiroGasto',
+            v.lucroPrejuizoAteAgora >= 0
+              ? LucideIcons.trendingUp
+              : LucideIcons.trendingDown,
+            lucroColor,
                 100,
                 width,
                 useExpanded: true,),),
@@ -295,7 +338,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
                 context,
                 'Custo Manutenção',
                 formatCurrency(v.custoTotalManutencao),
-                '${v.totalRevisoes} revisões',
+                '${v.totalRevisoes} revisões | Próx. revisão em ${formatKm(v.kmParaProxRevisao)}',
                 LucideIcons.receipt,
                 AppColors.statusError,
                 200,
@@ -305,11 +348,11 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
         Expanded(
             child: _kpi(
                 context,
-                'Próx. Revisão em',
-                formatKm(v.kmParaProxRevisao),
-                '~${(v.kmParaProxRevisao / v.kmPorMes).toStringAsFixed(1)} meses',
-                LucideIcons.calendarClock,
-                AppColors.statusSuccess,
+              'Gasto Total Veículo',
+              formatCurrency(v.gastoTotalVeiculoKpi),
+              'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Multas ${formatCurrency(totalMultas)}',
+              LucideIcons.wallet,
+              AppColors.atrOrange,
                 300,
                 width,
                 useExpanded: true,),),
@@ -478,6 +521,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
 
   Widget _buildMaintenanceHistory(
       BuildContext context, VehicleData v, bool isDark,) {
+    final historico = _buildCostHistory(v);
     return BentoCard(
       animationDelay: 500,
       child: Column(
@@ -486,7 +530,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Histórico de Manutenções',
+              Text('Histórico de Gastos do Veículo',
                   style: Theme.of(context).textTheme.titleLarge,),
               Container(
                 padding:
@@ -495,7 +539,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
                     color: AppColors.atrOrange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),),
                 child: Text(
-                    '${v.totalRevisoes} revisões | ${formatCurrency(v.custoTotalManutencao)}',
+                    '${historico.length} lançamentos | ${formatCurrency(v.gastoTotalVeiculoKpi)}',
                     style: const TextStyle(
                         color: AppColors.atrOrange,
                         fontSize: 11,
@@ -504,13 +548,12 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          ...v.manutencoes.reversed
-              .map((m) => _buildMaintenanceItem(context, m, isDark)),
-          if (v.manutencoes.isEmpty)
+          ...historico.map((m) => _buildMaintenanceItem(context, m, isDark)),
+          if (historico.isEmpty)
             Center(
                 child: Padding(
               padding: const EdgeInsets.all(32),
-              child: Text('Nenhuma manutenção registrada',
+              child: Text('Nenhum gasto não cíclico registrado',
                   style: Theme.of(context).textTheme.bodyMedium,),
             ),),
         ],
@@ -518,8 +561,55 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
     );
   }
 
+  double _sumByCategoria(VehicleData v, String categoria) {
+    return v.gastosNaoCiclicos
+        .where((e) => e.categoria.toLowerCase() == categoria.toLowerCase())
+        .fold(0.0, (s, e) => s + e.valor);
+  }
+
+  List<_VehicleHistoryEntry> _buildCostHistory(VehicleData v) {
+    final manutencoes = v.manutencoes
+        .map(
+          (m) => _VehicleHistoryEntry(
+            data: m.data,
+            titulo: m.tipo,
+            descricao: m.descricao,
+            valor: m.custo,
+            icone: LucideIcons.wrench,
+            cor: AppColors.atrOrange,
+            kmNoServico: m.kmNoServico,
+          ),
+        )
+        .toList();
+
+    final adicionais = v.gastosNaoCiclicos
+        .map(
+          (c) => _VehicleHistoryEntry(
+            data: c.data,
+            titulo: c.categoria,
+            descricao: c.descricao,
+            valor: c.valor,
+            icone: c.categoria.toLowerCase() == 'multa'
+                ? LucideIcons.alertTriangle
+                : (c.categoria.toLowerCase() == 'seguro'
+                    ? LucideIcons.shield
+                    : LucideIcons.receipt),
+            cor: c.categoria.toLowerCase() == 'multa'
+                ? AppColors.statusError
+                : (c.categoria.toLowerCase() == 'seguro'
+                    ? AppColors.statusInfo
+                    : AppColors.statusSuccess),
+          ),
+        )
+        .toList();
+
+    final todos = <_VehicleHistoryEntry>[...manutencoes, ...adicionais];
+    todos.sort((a, b) => b.data.compareTo(a.data));
+    return todos;
+  }
+
   Widget _buildMaintenanceItem(
-      BuildContext context, MaintenanceEvent m, bool isDark,) {
+      BuildContext context, _VehicleHistoryEntry m, bool isDark,) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -533,18 +623,17 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.atrOrange.withValues(alpha: 0.1),
+              color: m.cor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(LucideIcons.wrench,
-                size: 16, color: AppColors.atrOrange,),
+            child: Icon(m.icone, size: 16, color: m.cor),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(m.descricao,
+                Text('${m.titulo} • ${m.descricao}',
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
@@ -566,24 +655,25 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
                               .bodyMedium
                               ?.copyWith(fontSize: 12),),
                     ],),
-                    Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(LucideIcons.gauge,
-                          size: 11, color: AppColors.textSecondaryLight,),
-                      const SizedBox(width: 4),
-                      Text(
-                          '${m.kmNoServico.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (mt) => '${mt[1]}.')} km',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(fontSize: 12),),
-                    ],),
+                    if (m.kmNoServico != null)
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(LucideIcons.gauge,
+                            size: 11, color: AppColors.textSecondaryLight,),
+                        const SizedBox(width: 4),
+                        Text(
+                            '${m.kmNoServico.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (mt) => '${mt[1]}.')} km',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(fontSize: 12),),
+                      ],),
                   ],
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
-          Text(formatCurrency(m.custo),
+            Text(formatCurrency(m.valor),
               style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,

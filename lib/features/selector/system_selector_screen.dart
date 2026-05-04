@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/auth_service.dart';
 
 class SystemSelectorScreen extends StatelessWidget {
   const SystemSelectorScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final authService = context.watch<AuthService>();
+    final cards = _buildCards(context, authService);
+    final crossAxisCount = cards.length == 1 ? 1 : 2;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -138,46 +144,13 @@ class SystemSelectorScreen extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: GridView.count(
-                          crossAxisCount: 2,
+                          crossAxisCount: crossAxisCount,
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           crossAxisSpacing: 20,
                           mainAxisSpacing: 20,
                           childAspectRatio: 1.35,
-                          children: [
-                            _SystemCard(
-                              index: 0,
-                              icon: LucideIcons.truck,
-                              title: 'Frota de Carros',
-                              subtitle: 'Gestão de veículos e motoristas',
-                              available: true,
-                              onTap: () => context.go('/'),
-                            ),
-                            _SystemCard(
-                              index: 1,
-                              icon: LucideIcons.hardHat,
-                              title: 'Gestão de Obras',
-                              subtitle: 'Produtividade e sinalização viária',
-                              available: true,
-                              onTap: () => context.go('/obras'),
-                            ),
-                            _SystemCard(
-                              index: 2,
-                              icon: LucideIcons.building2,
-                              title: 'Sala ATR Locações',
-                              subtitle: 'Controle de salas e locatários',
-                              available: true,
-                              onTap: () => context.go('/sala-atr'),
-                            ),
-                            _SystemCard(
-                              index: 3,
-                              icon: LucideIcons.palmtree,
-                              title: 'ATR Área de Lazer',
-                              subtitle: 'Reservas, eventos e manutenção',
-                              available: true,
-                              onTap: () => context.go('/lazer'),
-                            ),
-                          ],
+                          children: cards,
                         ),
                       ),
                     ),
@@ -191,6 +164,49 @@ class SystemSelectorScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  List<Widget> _buildCards(BuildContext context, AuthService authService) {
+    final fleetCard = _SystemCard(
+      index: 0,
+      icon: LucideIcons.truck,
+      title: 'Frota de Carros',
+      subtitle: 'Gestão de veículos e motoristas',
+      available: true,
+      onTap: () => context.go('/'),
+    );
+
+    if (authService.isFleetOnlyUser) {
+      return [fleetCard];
+    }
+
+    return [
+      fleetCard,
+      _SystemCard(
+        index: 1,
+        icon: LucideIcons.hardHat,
+        title: 'Gestão de Obras',
+        subtitle: 'Produtividade e sinalização viária',
+        available: true,
+        onTap: () => context.go('/obras'),
+      ),
+      _SystemCard(
+        index: 2,
+        icon: LucideIcons.building2,
+        title: 'Sala ATR Locações',
+        subtitle: 'Controle de salas e locatários',
+        available: true,
+        onTap: () => context.go('/sala-atr'),
+      ),
+      _SystemCard(
+        index: 3,
+        icon: LucideIcons.palmtree,
+        title: 'ATR Área de Lazer',
+        subtitle: 'Reservas, eventos e manutenção',
+        available: true,
+        onTap: () => context.go('/lazer'),
+      ),
+    ];
   }
 }
 

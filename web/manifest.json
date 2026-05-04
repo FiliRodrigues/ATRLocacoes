@@ -1,11 +1,11 @@
 {
-    "name": "fleet_app",
-    "short_name": "fleet_app",
+    "name": "ATR",
+    "short_name": "ATR",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "ATR Locações - gestão de frota.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

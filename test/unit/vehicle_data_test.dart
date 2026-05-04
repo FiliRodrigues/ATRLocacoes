@@ -1,6 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:fleet_app/core/enums/vehicle_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fleet_app/core/data/fleet_data.dart';
+
+/// Cria um veículo mínimo para uso em testes unitários.
+VehicleData _makeTestVehicle(String placa) => VehicleData(
+      nome: 'Teste $placa',
+      placa: placa,
+      motorista: 'Motorista Teste',
+      telefoneMotorista: '11999999999',
+      status: VehicleStatus.emRota,
+      mesesEmServico: 12,
+      kmPorMes: 2000,
+      cor1: Colors.blue,
+      cor2: Colors.blueAccent,
+      manutencoes: const [],
+      vencimentoIPVA: DateTime(2027),
+      vencimentoSeguro: DateTime(2027),
+      vencimentoLicenciamento: DateTime(2027),
+      valorDeMercado: 50000,
+      valorAquisicao: 60000,
+      dataAquisicao: DateTime(2025),
+    );
 
 void main() {
   group('VehicleData', () {
@@ -120,6 +141,9 @@ void main() {
     });
 
     test('atualiza status por helper sem mutacao direta', () {
+      // Garante que o veículo de teste existe no repositório (independente do Supabase)
+      FleetRepository.instance.seedForTest([_makeTestVehicle('VD-1234')]);
+
       final oldStatus = getVehicleByPlate('VD-1234')!.status;
       final changed = updateVehicleStatus(
         placa: 'VD-1234',
@@ -135,6 +159,8 @@ void main() {
     });
 
     test('FleetRepository notifica ouvintes ao atualizar status', () {
+      FleetRepository.instance.seedForTest([_makeTestVehicle('VD-1234')]);
+
       final repository = FleetRepository.instance;
       final oldStatus = repository.getVehicleByPlate('VD-1234')!.status;
       var notified = false;

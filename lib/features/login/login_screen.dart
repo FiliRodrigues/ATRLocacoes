@@ -30,8 +30,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (username.length < 3) {
       return 'Usuário deve ter ao menos 3 caracteres.';
     }
-    if (password.length < 8) {
-      return 'Senha deve ter ao menos 8 caracteres.';
+    if (password.length < 3) {
+      return 'Senha deve ter ao menos 3 caracteres.';
     }
     if (username.length > 32 || password.length > 64) {
       return 'Credenciais inválidas para este ambiente.';
@@ -67,8 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         switch (result.failureReason) {
           case AuthFailureReason.configurationMissing:
-            _feedback =
-                'Credenciais do sistema não configuradas. Defina ATR_LOGIN_USER e ATR_LOGIN_PASS.';
+            _feedback = 'Credenciais do sistema não configuradas.';
             break;
           case AuthFailureReason.locked:
             final minutes = result.lockRemaining == null
@@ -82,6 +81,10 @@ class _LoginScreenState extends State<LoginScreen> {
             _feedback =
                 'Usuário ou senha inválidos. Tentativas restantes: $left.';
             break;
+            case AuthFailureReason.networkError:
+              _feedback =
+                  'Erro de conexão. Verifique sua internet e tente novamente.';
+              break;
           case null:
             _feedback = 'Falha inesperada no login.';
             break;
@@ -282,60 +285,86 @@ class _LoginScreenState extends State<LoginScreen> {
                     // Botão de Iniciar Login
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: SizedBox(
-                        width: 280,
-                        height: 50,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              setState(() => _showLoginForm = true);
-                              HapticFeedback.lightImpact();
-                            },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppColors.atrOrange.withValues(alpha: 0.92),
-                                    AppColors.atrOrange,
-                                  ],
-                                ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 280,
+                            height: 50,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() => _showLoginForm = true);
+                                  HapticFeedback.lightImpact();
+                                },
                                 borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.atrOrange
-                                        .withValues(alpha: 0.25),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: const Center(
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Fazer Login',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 15,
-                                        letterSpacing: 0.5,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        AppColors.atrOrange.withValues(alpha: 0.92),
+                                        AppColors.atrOrange,
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.atrOrange
+                                            .withValues(alpha: 0.25),
+                                        blurRadius: 20,
+                                        offset: const Offset(0, 4),
                                       ),
+                                    ],
+                                  ),
+                                  child: const Center(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          'Fazer Login',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 15,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Icon(
+                                          LucideIcons.arrowRight,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                      ],
                                     ),
-                                    SizedBox(width: 8),
-                                    Icon(
-                                      LucideIcons.arrowRight,
-                                      color: Colors.white,
-                                      size: 18,
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
+                          if (context.read<AuthService>().canUseDevShortcut) ...[
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: 280,
+                              height: 44,
+                              child: OutlinedButton.icon(
+                                onPressed: _loading ? null : _loginWithDevShortcut,
+                                icon: const Icon(LucideIcons.zap, size: 16),
+                                label: const Text('Entrar sem senha (teste)'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white70,
+                                  side: BorderSide(
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     )
                         .animate(delay: 550.ms)
@@ -418,32 +447,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         .animate(delay: 150.ms)
                         .fadeIn(duration: 400.ms)
                         .moveY(begin: 10, end: 0),
-
-                  if (_showLoginForm &&
-                      context.read<AuthService>().canUseDevShortcut) ...[
-                    const SizedBox(height: 10),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: SizedBox(
-                        width: 280,
-                        height: 44,
-                        child: OutlinedButton.icon(
-                          onPressed: _loading ? null : _loginWithDevShortcut,
-                          icon: const Icon(LucideIcons.zap, size: 16),
-                          label: const Text('Atalho DEV (sem senha)'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white70,
-                            side: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.25),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
 
                   const SizedBox(height: 50),
 

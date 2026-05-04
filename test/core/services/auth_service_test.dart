@@ -31,11 +31,14 @@ void main() {
     });
 
     test('checkAuth carrega estado salvo', () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('is_authenticated', true);
-
-      await authService.checkAuth();
+      // Login primeiro para criar sessão válida com proof v3
+      await authService.login();
       expect(authService.isAuthenticated, true);
+
+      // Novo AuthService deve restaurar a sessão a partir das prefs
+      final freshService = AuthService();
+      await freshService.checkAuth();
+      expect(freshService.isAuthenticated, true);
     });
 
     test('checkAuth retorna false se não há valor salvo', () async {

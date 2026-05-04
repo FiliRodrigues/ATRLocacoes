@@ -5,6 +5,7 @@ import '../enums/vehicle_status.dart';
 import '../enums/cnh_status.dart';
 import '../enums/alert_type.dart';
 import '../enums/event_type.dart';
+import '../services/supabase_service.dart';
 
 export '../enums/vehicle_status.dart';
 export '../enums/cnh_status.dart';
@@ -27,6 +28,20 @@ class MaintenanceEvent {
       required this.kmNoServico,
       required this.custo,
       required this.descricao,});
+}
+
+class VehicleCostEvent {
+  final DateTime data;
+  final String categoria;
+  final double valor;
+  final String descricao;
+
+  const VehicleCostEvent({
+    required this.data,
+    required this.categoria,
+    required this.valor,
+    required this.descricao,
+  });
 }
 
 class FinancingData {
@@ -96,6 +111,9 @@ class VehicleData {
   final double valorDeMercado;
   final double valorAquisicao;
   final DateTime dataAquisicao;
+  final List<VehicleCostEvent> gastosNaoCiclicos;
+  final double? kmHodometro;
+  final DateTime? ultimaAtualizacaoKm;
 
   VehicleData({
     required this.nome,
@@ -116,10 +134,15 @@ class VehicleData {
     required this.valorDeMercado,
     required this.valorAquisicao,
     required this.dataAquisicao,
+    this.gastosNaoCiclicos = const [],
+    this.kmHodometro,
+    this.ultimaAtualizacaoKm,
   });
 
   VehicleData copyWith({
     VehicleStatus? status,
+    double? kmHodometro,
+    DateTime? ultimaAtualizacaoKm,
   }) {
     return VehicleData(
       nome: nome,
@@ -140,15 +163,43 @@ class VehicleData {
       valorDeMercado: valorDeMercado,
       valorAquisicao: valorAquisicao,
       dataAquisicao: dataAquisicao,
+      gastosNaoCiclicos: gastosNaoCiclicos,
+      kmHodometro: kmHodometro ?? this.kmHodometro,
+      ultimaAtualizacaoKm: ultimaAtualizacaoKm ?? this.ultimaAtualizacaoKm,
     );
   }
 
-  double get kmAtual => kmPorMes * mesesEmServico;
+  double get kmAtual => kmHodometro ?? (kmPorMes * mesesEmServico);
   bool get isFinanciado => financiamento != null;
   int get totalRevisoes => manutencoes.length;
   double get custoTotalManutencao =>
       manutencoes.fold(0.0, (s, e) => s + e.custo);
+  double get custoTotalGastosNaoCiclicos =>
+      gastosNaoCiclicos.fold(0.0, (s, e) => s + e.valor);
+  double get gastoTotalVeiculoKpi =>
+      custoTotalManutencao + custoTotalGastosNaoCiclicos;
   double get kmParaProxRevisao => 10000 - (kmAtual % 10000);
+
+  DateTime? get dataPrimeiroRecebimento {
+    if (mesesEmServico <= 0) return null;
+    return DateTime(
+      dataAquisicao.year,
+      dataAquisicao.month + 1,
+      dataAquisicao.day,
+    );
+  }
+
+  DateTime? get dataPrimeiroGasto {
+    final datas = <DateTime>[
+      ...manutencoes.map((e) => e.data),
+      ...gastosNaoCiclicos.map((e) => e.data),
+    ];
+    if (datas.isEmpty) return null;
+    datas.sort();
+    return datas.first;
+  }
+
+  double get lucroPrejuizoAteAgora => receitaTotalAcumulada - gastoTotalVeiculoKpi;
 
   // Inteligência Financeira
   double get receitaTotalAcumulada =>
@@ -224,308 +275,29 @@ class UpcomingEvent {
       required this.tipo,});
 }
 
+class KmRegistro {
+  final String placa;
+  final double km;
+  final DateTime data;
+  const KmRegistro({
+    required this.placa,
+    required this.km,
+    required this.data,
+  });
+}
+
 // ═══════════════════════════════════════════════════════
-// DADOS MOCK — FROTA
+// DADOS FROTA — carregados do Supabase em runtime
 // ═══════════════════════════════════════════════════════
 
-final List<VehicleData> _frota = [
-  VehicleData(
-    nome: 'Toyota Corolla XEi 2.0',
-    placa: 'VD-1234',
-    motorista: 'João Silva',
-    telefoneMotorista: '(11) 98888-1234',
-    status: VehicleStatus.emRota,
-    mesesEmServico: 36,
-    kmPorMes: 2800,
-    imagemAsset: 'assets/images/corolla.png',
-    cor1: const Color(0xFF3B82F6),
-    cor2: const Color(0xFF1D4ED8),
-    vencimentoIPVA: DateTime(2026, 08, 15),
-    vencimentoSeguro: DateTime(2026, 05, 20),
-    vencimentoLicenciamento: DateTime(2026, 10, 30),
-    valorDeMercado: 115000,
-    valorAquisicao: 145000,
-    dataAquisicao: DateTime(2023, 01, 10),
-    manutencoes: [
-      MaintenanceEvent(
-          data: DateTime(2023, 07, 15),
-          tipo: 'Revisão',
-          kmNoServico: 10000,
-          custo: 1050,
-          descricao: 'Revisão 10k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2023, 11, 20),
-          tipo: 'Revisão',
-          kmNoServico: 20000,
-          custo: 1150,
-          descricao: 'Revisão 20k - Troca óleo, filtros e alinhamento',),
-      MaintenanceEvent(
-          data: DateTime(2024, 03, 10),
-          tipo: 'Revisão',
-          kmNoServico: 30000,
-          custo: 1050,
-          descricao: 'Revisão 30k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2024, 07, 15),
-          tipo: 'Revisão',
-          kmNoServico: 40000,
-          custo: 1250,
-          descricao: 'Revisão 40k - Filtros, óleo e velas',),
-      MaintenanceEvent(
-          data: DateTime(2024, 11, 20),
-          tipo: 'Revisão',
-          kmNoServico: 50000,
-          custo: 1050,
-          descricao: 'Revisão 50k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2025, 03, 10),
-          tipo: 'Revisão',
-          kmNoServico: 60000,
-          custo: 1450,
-          descricao: 'Revisão 60k - Kit Correias e Arrefecimento',),
-      MaintenanceEvent(
-          data: DateTime(2025, 07, 15),
-          tipo: 'Revisão',
-          kmNoServico: 70000,
-          custo: 1050,
-          descricao: 'Revisão 70k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2025, 11, 20),
-          tipo: 'Revisão',
-          kmNoServico: 80000,
-          custo: 1200,
-          descricao: 'Revisão 80k - Troca pastilhas e discos de freio',),
-      MaintenanceEvent(
-          data: DateTime(2026, 03, 10),
-          tipo: 'Revisão',
-          kmNoServico: 90000,
-          custo: 1050,
-          descricao: 'Revisão 90k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2026, 07, 15),
-          tipo: 'Revisão',
-          kmNoServico: 100000,
-          custo: 1200,
-          descricao: 'Revisão 100k - Revisão completa + correia',),
-    ],
-  ),
-  VehicleData(
-    nome: 'Toyota Hilux SRV 2.8',
-    placa: 'TX-2041',
-    motorista: 'Marcos Antônio',
-    telefoneMotorista: '(11) 97777-5678',
-    status: VehicleStatus.emRota,
-    mesesEmServico: 24,
-    kmPorMes: 3000,
-    imagemAsset: 'assets/images/hilux.png',
-    cor1: const Color(0xFF10B981),
-    cor2: const Color(0xFF059669),
-    vencimentoIPVA: DateTime(2026, 04, 15),
-    vencimentoSeguro: DateTime(2026, 09, 10),
-    vencimentoLicenciamento: DateTime(2026, 11, 15),
-    valorDeMercado: 245000,
-    valorAquisicao: 290000,
-    dataAquisicao: DateTime(2024, 05),
-    manutencoes: [
-      MaintenanceEvent(
-          data: DateTime(2024, 07),
-          tipo: 'Revisão',
-          kmNoServico: 10000,
-          custo: 1200,
-          descricao: 'Revisão 10k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2024, 10, 15),
-          tipo: 'Revisão',
-          kmNoServico: 20000,
-          custo: 1150,
-          descricao: 'Revisão 20k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2025, 02),
-          tipo: 'Revisão',
-          kmNoServico: 30000,
-          custo: 1350,
-          descricao: 'Revisão 30k - Filtros e Injeção',),
-      MaintenanceEvent(
-          data: DateTime(2025, 05, 10),
-          tipo: 'Revisão',
-          kmNoServico: 40000,
-          custo: 1200,
-          descricao: 'Revisão 40k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2025, 08, 15),
-          tipo: 'Revisão',
-          kmNoServico: 50000,
-          custo: 1800,
-          descricao: 'Revisão 50k - Freios e Suspensão',),
-      MaintenanceEvent(
-          data: DateTime(2025, 12),
-          tipo: 'Revisão',
-          kmNoServico: 60000,
-          custo: 1200,
-          descricao: 'Revisão 60k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2026, 04, 15),
-          tipo: 'Revisão',
-          kmNoServico: 70000,
-          custo: 1250,
-          descricao: 'Revisão 70k - Troca amortecedores + óleo',),
-    ],
-  ),
-  VehicleData(
-    nome: 'Fiat Argo Drive 1.0',
-    placa: 'ARG-1D23',
-    motorista: 'João Silva',
-    telefoneMotorista: '(11) 98888-1234',
-    status: VehicleStatus.emRota,
-    mesesEmServico: 41,
-    kmPorMes: 2500,
-    cor1: const Color(0xFF667EEA),
-    cor2: const Color(0xFF764BA2),
-    vencimentoIPVA: DateTime(2026, 05, 10),
-    vencimentoSeguro: DateTime(2026, 04, 12),
-    vencimentoLicenciamento: DateTime(2026, 09, 20),
-    valorDeMercado: 55000,
-    valorAquisicao: 72000,
-    dataAquisicao: DateTime(2022, 11, 10),
-    financiamento: const FinancingData(
-        valorTotal: 70000,
-        percentualEntrada: 0.10,
-        totalParcelas: 48,
-        parcelasPagas: 41,
-        recebimentoMensal: 2000,
-        taxaJurosMensal: 0.008,
-        previsaoQuitacao: 'Nov/2026',),
-    manutencoes: [
-      MaintenanceEvent(
-          data: DateTime(2023, 03, 10),
-          tipo: 'Revisão',
-          kmNoServico: 10000,
-          custo: 1050,
-          descricao: 'Revisão 10k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2023, 07, 12),
-          tipo: 'Revisão',
-          kmNoServico: 20000,
-          custo: 1200,
-          descricao: 'Revisão 20k - Filtros e Alinhamento',),
-      MaintenanceEvent(
-          data: DateTime(2023, 11, 15),
-          tipo: 'Revisão',
-          kmNoServico: 30000,
-          custo: 1050,
-          descricao: 'Revisão 30k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2024, 03, 20),
-          tipo: 'Revisão',
-          kmNoServico: 40000,
-          custo: 1350,
-          descricao: 'Revisão 40k - Filtros, óleo e velas',),
-      MaintenanceEvent(
-          data: DateTime(2024, 07, 25),
-          tipo: 'Revisão',
-          kmNoServico: 50000,
-          custo: 1050,
-          descricao: 'Revisão 50k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2024, 11, 28),
-          tipo: 'Revisão',
-          kmNoServico: 60000,
-          custo: 1550,
-          descricao: 'Revisão 60k - Kit Correia Dentada',),
-      MaintenanceEvent(
-          data: DateTime(2025, 03, 05),
-          tipo: 'Revisão',
-          kmNoServico: 70000,
-          custo: 1050,
-          descricao: 'Revisão 70k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2025, 07, 10),
-          tipo: 'Revisão',
-          kmNoServico: 80000,
-          custo: 1200,
-          descricao: 'Revisão 80k - Discos e Pastilhas de freio',),
-      MaintenanceEvent(
-          data: DateTime(2025, 11, 15),
-          tipo: 'Revisão',
-          kmNoServico: 90000,
-          custo: 1050,
-          descricao: 'Revisão 90k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2026, 03, 10),
-          tipo: 'Revisão',
-          kmNoServico: 100000,
-          custo: 1800,
-          descricao: 'Revisão 100k - Revisão completa + fluidos',),
-    ],
-  ),
-  VehicleData(
-    nome: 'Fiat Argo Trekking 1.3',
-    placa: 'ARG-4H78',
-    motorista: 'Roberto Carlos',
-    telefoneMotorista: '(11) 99999-0000',
-    status: VehicleStatus.emRota,
-    mesesEmServico: 12,
-    kmPorMes: 2200,
-    cor1: const Color(0xFFf093fb),
-    cor2: const Color(0xFFf5576c),
-    vencimentoIPVA: DateTime(2027, 01, 15),
-    vencimentoSeguro: DateTime(2026, 12),
-    vencimentoLicenciamento: DateTime(2026, 12, 10),
-    valorDeMercado: 68000,
-    valorAquisicao: 85000,
-    dataAquisicao: DateTime(2025, 05, 15),
-    financiamento: const FinancingData(
-        valorTotal: 75000,
-        percentualEntrada: 0.15,
-        totalParcelas: 60,
-        parcelasPagas: 12,
-        recebimentoMensal: 2000,
-        taxaJurosMensal: 0.008,
-        previsaoQuitacao: 'Abr/2030',),
-    manutencoes: [
-      MaintenanceEvent(
-          data: DateTime(2025, 09, 10),
-          tipo: 'Revisão',
-          kmNoServico: 10000,
-          custo: 1050,
-          descricao: 'Revisão 10k - Troca de óleo e filtros',),
-      MaintenanceEvent(
-          data: DateTime(2026, 01, 15),
-          tipo: 'Revisão',
-          kmNoServico: 20000,
-          custo: 1050,
-          descricao: 'Revisão 20k - Troca óleo, filtros e alinhamento',),
-    ],
-  ),
-];
+final List<VehicleData> _frota = [];
 
 List<VehicleData> get frota => FleetRepository.instance.frota;
 
-final List<DriverData> _motoristas = [
-  DriverData(
-      nome: 'João Silva',
-      telefone: '(11) 98888-1234',
-      vencimentoCNH: DateTime(2026, 10, 12),
-      statusCNH: CnhStatus.ok,
-      multas: 0,
-      placasVeiculos: ['VD-1234', 'ARG-1D23'],),
-  DriverData(
-      nome: 'Marcos Antônio',
-      telefone: '(11) 97777-5678',
-      vencimentoCNH: DateTime(2026, 05, 14),
-      statusCNH: CnhStatus.vencendo,
-      multas: 2,
-      placasVeiculos: ['TX-2041'],),
-  DriverData(
-      nome: 'Roberto Carlos',
-      telefone: '(11) 99999-0000',
-      vencimentoCNH: DateTime(2024),
-      statusCNH: CnhStatus.vencida,
-      multas: 0,
-      placasVeiculos: ['ARG-4H78'],),
-];
+final List<DriverData> _motoristas = [];
 
 List<DriverData> get motoristas => FleetRepository.instance.motoristas;
+
 
 // ═══════════════════════════════════════════════════════
 // DADOS MENSAIS (gráfico dashboard)
@@ -591,8 +363,55 @@ class FleetRepository extends ChangeNotifier {
 
   List<AlertItem>? _cachedAlertas;
   int _version = 0;
+  bool _isLoading = false;
+  String? _loadError;
+
+  bool get isLoading => _isLoading;
+  String? get loadError => _loadError;
+
+  final List<KmRegistro> _kmHistorico = [];
+
+  /// Carrega a frota do Supabase, substituindo todos os dados locais.
+  Future<void> loadFromSupabase() async {
+    _isLoading = true;
+    _loadError = null;
+    notifyListeners();
+    try {
+      final veiculos = await FleetSupabaseService.fetchVehicles();
+      _frota
+        ..clear()
+        ..addAll(veiculos);
+      _motoristas.clear();
+    } catch (e) {
+      _loadError = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  List<KmRegistro> get kmHistorico => List.unmodifiable(_kmHistorico);
+
+  List<KmRegistro> kmHistoricoVeiculo(String placa) => _kmHistorico
+      .where((r) => r.placa == placa)
+      .toList()
+    ..sort((a, b) => b.data.compareTo(a.data));
 
   int get version => _version;
+
+  /// Injeta veículos diretamente para uso em testes unitários.
+  /// Não deve ser chamado em código de produção.
+  @visibleForTesting
+  void seedForTest(List<VehicleData> vehicles,
+      {List<DriverData> drivers = const []}) {
+    _frota
+      ..clear()
+      ..addAll(vehicles);
+    _motoristas
+      ..clear()
+      ..addAll(drivers);
+    _cachedAlertas = null;
+  }
 
   @override
   void notifyListeners() {
@@ -662,6 +481,23 @@ class FleetRepository extends ChangeNotifier {
     final index = _frota.indexWhere((v) => v.placa == placa);
     if (index == -1) return false;
     _frota[index] = _frota[index].copyWith(status: status);
+    notifyListeners();
+    return true;
+  }
+
+  bool updateVehicleKm({
+    required String placa,
+    required double km,
+  }) {
+    final index = _frota.indexWhere((v) => v.placa == placa);
+    if (index == -1) return false;
+    _frota[index] = _frota[index].copyWith(
+      kmHodometro: km,
+      ultimaAtualizacaoKm: DateTime.now(),
+    );
+    _kmHistorico.add(
+      KmRegistro(placa: placa, km: km, data: DateTime.now()),
+    );
     notifyListeners();
     return true;
   }
