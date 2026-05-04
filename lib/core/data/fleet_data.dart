@@ -52,19 +52,25 @@ class FinancingData {
   final double recebimentoMensal;
   final double taxaJurosMensal;
   final String previsaoQuitacao;
-  const FinancingData(
-      {required this.valorTotal,
+  final int mesesLocacaoTotais;
+  final int mesesLocacaoPagos;
+  
+  const FinancingData({
+      required this.valorTotal,
       required this.percentualEntrada,
       required this.totalParcelas,
       required this.parcelasPagas,
       required this.recebimentoMensal,
       required this.taxaJurosMensal,
-      required this.previsaoQuitacao,});
+      required this.previsaoQuitacao,
+      this.mesesLocacaoTotais = 36,
+      this.mesesLocacaoPagos = 0,
+  });
 
   double get valorEntrada => valorTotal * percentualEntrada;
   double get valorFinanciado => valorTotal - valorEntrada;
   double get valorParcela {
-    if (totalParcelas <= 0) return 0;
+    if (totalParcelas <= 1) return 0; // Quitado não tem parcela calculada
     final i = taxaJurosMensal;
     final n = totalParcelas;
     final pv = valorFinanciado;
@@ -76,15 +82,22 @@ class FinancingData {
   }
 
   int get parcelasRestantes => max(totalParcelas - parcelasPagas, 0);
+  int get locacaoRestantes => max(mesesLocacaoTotais - mesesLocacaoPagos, 0);
   double get totalParcelasCompleto => valorParcela * totalParcelas;
   double get totalJuros => totalParcelasCompleto - valorFinanciado;
   double get totalPago => valorParcela * parcelasPagas;
   double get totalRestante => valorParcela * parcelasRestantes;
-  double get totalRecebido => recebimentoMensal * parcelasPagas;
+  double get totalRecebido => recebimentoMensal * mesesLocacaoPagos;
   double get custoTotalVeiculo => valorEntrada + totalParcelasCompleto;
+  
   double get progressoFinanciamento {
-    if (totalParcelas <= 0) return 0;
+    if (totalParcelas <= 1) return 1.0; // Quitado = 100%
     return (parcelasPagas / totalParcelas).clamp(0.0, 1.0);
+  }
+
+  double get progressoLocacao {
+    if (mesesLocacaoTotais <= 0 || recebimentoMensal <= 0) return 0.0;
+    return (mesesLocacaoPagos / mesesLocacaoTotais).clamp(0.0, 1.0);
   }
 
   double get taxaJurosAnual =>
