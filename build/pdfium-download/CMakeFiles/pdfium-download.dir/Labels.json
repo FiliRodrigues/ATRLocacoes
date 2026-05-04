@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/pdfium-download"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/51ee19f5c6474ae98544828c140b3a1f/pdfium-download.rule"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/21ac79738f00971ad87bd41443b2b231/pdfium-download-complete.rule"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/367647973692c1752ea9a1745ec42dc5/pdfium-download-build.rule"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/367647973692c1752ea9a1745ec42dc5/pdfium-download-configure.rule"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/367647973692c1752ea9a1745ec42dc5/pdfium-download-download.rule"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/367647973692c1752ea9a1745ec42dc5/pdfium-download-install.rule"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/367647973692c1752ea9a1745ec42dc5/pdfium-download-mkdir.rule"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/367647973692c1752ea9a1745ec42dc5/pdfium-download-patch.rule"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/367647973692c1752ea9a1745ec42dc5/pdfium-download-test.rule"
+		},
+		{
+			"file" : "C:/Users/filip/Desktop/ATR/build/pdfium-download/CMakeFiles/367647973692c1752ea9a1745ec42dc5/pdfium-download-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"pdfium-download"
+		],
+		"name" : "pdfium-download"
+	}
+}
