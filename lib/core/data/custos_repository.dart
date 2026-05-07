@@ -1,10 +1,14 @@
 import 'custos_models.dart';
 
 abstract class ICustosRepository {
-  Future<List<ManutencaoItem>> fetchManutencoes();
+  /// Busca manutenções com paginação. [page] começa em 0, [pageSize] define
+  /// quantos registros retornar por vez.
+  Future<List<ManutencaoItem>> fetchManutencoes({int page = 0, int pageSize = 50});
   Future<void> saveManutencao(ManutencaoItem item);
   Future<void> deleteManutencao(String id);
-  Future<List<DespesaItem>> fetchDespesas();
+  /// Busca despesas com paginação. [page] começa em 0, [pageSize] define
+  /// quantos registros retornar por vez.
+  Future<List<DespesaItem>> fetchDespesas({int page = 0, int pageSize = 50});
   Future<void> saveDespesa(DespesaItem item);
   Future<void> deleteDespesa(String id);
 }
@@ -14,7 +18,11 @@ class LocalCustosRepository implements ICustosRepository {
   final List<DespesaItem> _despesas = [];
 
   @override
-  Future<List<ManutencaoItem>> fetchManutencoes() {
+  Future<List<ManutencaoItem>> fetchManutencoes({
+    int page = 0,
+    int pageSize = 50,
+  }) {
+    // LocalRepository: retorna todos em memória (usado em testes/dev)
     return Future.value(List.unmodifiable(_manutencoes));
   }
 
@@ -36,7 +44,11 @@ class LocalCustosRepository implements ICustosRepository {
   }
 
   @override
-  Future<List<DespesaItem>> fetchDespesas() {
+  Future<List<DespesaItem>> fetchDespesas({
+    int page = 0,
+    int pageSize = 50,
+  }) {
+    // LocalRepository: retorna todos em memória (usado em testes/dev)
     return Future.value(List.unmodifiable(_despesas));
   }
 

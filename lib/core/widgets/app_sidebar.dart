@@ -139,11 +139,17 @@ class _AppSidebarState extends State<AppSidebar> {
                             ),
                           ),
                         IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
                           icon: Icon(
                             _isCollapsed
                                 ? LucideIcons.chevronRight
                                 : LucideIcons.chevronLeft,
                             color: Colors.white54,
+                            size: 18,
                           ),
                           onPressed: _toggleSidebar,
                         ),
@@ -168,6 +174,20 @@ class _AppSidebarState extends State<AppSidebar> {
                                   context.watch<LocacaoProvider>().contratos;
                               final isFleetOnly =
                                   context.read<AuthService>().isFleetOnlyUser;
+                              // Calcula alertas urgentes para o badge de vencimentos
+                              final hoje = DateTime.now();
+                              final hoje0 = DateTime(hoje.year, hoje.month, hoje.day);
+                              int nUrgentes = 0;
+                              for (final v in frota) {
+                                for (final dt in [v.vencimentoIPVA, v.vencimentoSeguro, v.vencimentoLicenciamento]) {
+                                  final d = dt.difference(hoje0).inDays;
+                                  if (d <= 7) nUrgentes++;
+                                }
+                              }
+                              for (final d in repo.motoristas) {
+                                final dias = d.vencimentoCNH.difference(hoje0).inDays;
+                                if (dias <= 7) nUrgentes++;
+                              }
                               return Column(
                                 children: [
                                   _SidebarItem(
@@ -219,6 +239,13 @@ class _AppSidebarState extends State<AppSidebar> {
                                         context.go('/${AppRoutes.drivers}'),
                                   ),
                                   _SidebarItem(
+                                    icon: LucideIcons.star,
+                                    title: 'Score',
+                                    isCollapsed: _isCollapsed,
+                                    isActive: uri == AppRoutes.scoreMoto,
+                                    onTap: () => context.go(AppRoutes.scoreMoto),
+                                  ),
+                                  _SidebarItem(
                                     icon: LucideIcons.wrench,
                                     title: 'Custos da Frota',
                                     isCollapsed: _isCollapsed,
@@ -235,6 +262,21 @@ class _AppSidebarState extends State<AppSidebar> {
                                         uri.startsWith(AppRoutes.contratos),
                                     onTap: () =>
                                         context.go(AppRoutes.contratos),
+                                  ),
+                                  _SidebarItem(
+                                    icon: LucideIcons.calendarClock,
+                                    title: 'Vencimentos',
+                                    isCollapsed: _isCollapsed,
+                                    isActive: uri == AppRoutes.vencimentos,
+                                    onTap: () => context.go(AppRoutes.vencimentos),
+                                    badgeCount: nUrgentes,
+                                  ),
+                                  _SidebarItem(
+                                    icon: LucideIcons.fileDown,
+                                    title: 'Relatórios',
+                                    isCollapsed: _isCollapsed,
+                                    isActive: uri == AppRoutes.relatorios,
+                                    onTap: () => context.go(AppRoutes.relatorios),
                                   ),
                                   if (_showExpandedContent)
                                     _buildFinancialExpansionTile(
@@ -560,6 +602,7 @@ class _SidebarItem extends StatefulWidget {
   final bool isActive;
   final bool isCollapsed;
   final VoidCallback onTap;
+  final int badgeCount;
 
   const _SidebarItem({
     required this.icon,
@@ -567,6 +610,7 @@ class _SidebarItem extends StatefulWidget {
     required this.isActive,
     this.isCollapsed = false,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   @override
@@ -621,7 +665,34 @@ class _SidebarItemState extends State<_SidebarItem> {
                     ? MainAxisAlignment.center
                     : MainAxisAlignment.start,
                 children: [
-                  Icon(widget.icon, color: iconColor, size: 20),
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(widget.icon, color: iconColor, size: 20),
+                      if (widget.badgeCount > 0)
+                        Positioned(
+                          top: -5,
+                          right: -5,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(
+                              color: AppColors.statusError,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                            child: Text(
+                              widget.badgeCount > 9 ? '9+' : '${widget.badgeCount}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                   if (!widget.isCollapsed) ...[
                     const SizedBox(width: 16),
                     Expanded(

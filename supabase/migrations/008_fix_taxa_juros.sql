@@ -18,7 +18,6 @@ WHERE f.veiculo_id = v.id
 -- Toros financiadas (7 unidades)
 UPDATE financiamentos f
 SET taxa_juros_mensal = 0.01425,
-    recebimento_mensal = 5750,
     recebimento_mensal = 5750
 FROM veiculos v
 WHERE f.veiculo_id = v.id

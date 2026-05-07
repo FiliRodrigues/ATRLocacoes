@@ -20,6 +20,7 @@ class BookableAreaSidebar extends StatelessWidget {
   final VoidCallback onBack;
   final bool isDark;
   final bool showConsolidado;
+  final List<({IconData icon, String label})>? customTabs;
 
   const BookableAreaSidebar({
     super.key,
@@ -32,11 +33,12 @@ class BookableAreaSidebar extends StatelessWidget {
     required this.onBack,
     required this.isDark,
     this.showConsolidado = false,
+    this.customTabs,
   });
 
   @override
   Widget build(BuildContext context) {
-    final tabs = [
+    final tabs = customTabs ?? [
       (icon: LucideIcons.layoutDashboard, label: 'Dashboard'),
       (icon: LucideIcons.receipt, label: 'Despesas'),
       (icon: LucideIcons.calendarDays, label: 'Agendamentos'),

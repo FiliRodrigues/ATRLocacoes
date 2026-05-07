@@ -5,7 +5,7 @@ import '../utils/app_logger.dart';
 import 'locacao_models.dart';
 
 /// UUID do tenant padrão — espelho do `kDefaultTenantId` em auth_service.dart.
-const String _kDefaultTenantId = '00000000-0000-0000-0000-000000000001';
+import '../constants.dart';
 
 /// Repositório de contratos, checklist e ocorrências via Supabase.
 ///
@@ -16,8 +16,7 @@ class LocacaoRepository {
   SupabaseClient get _db => Supabase.instance.client;
 
   /// Retorna o tenant_id ativo do usuário logado.
-  String get _tenantId =>
-      AuditService.currentTenantId ?? _kDefaultTenantId;
+  String get _tenantId => AuditService.currentTenantId ?? kDefaultTenantId;
 
   // ────────────────────────────────────────────────────
   // CONTRATOS
@@ -26,18 +25,14 @@ class LocacaoRepository {
   Future<List<Contrato>> fetchContratos({ContratoStatus? status}) async {
     var query = _db
         .from('contratos')
-        .select()
-        .eq('tenant_id', _tenantId)
-        .order('created_at', ascending: false);
+        .select('id, numero, cliente_nome, cliente_cnpj, cliente_contato, veiculo_placa, data_inicio, data_fim, sla_km_mes, valor_mensal, status, observacoes, criado_por, created_at, updated_at')
+        .eq('tenant_id', _tenantId);
+    
     if (status != null) {
-      query = _db
-          .from('contratos')
-          .select()
-          .eq('tenant_id', _tenantId)
-          .eq('status', status.name)
-          .order('created_at', ascending: false);
+      query = query.eq('status', status.name);
     }
-    final rows = await query;
+    
+    final rows = await query.order('created_at', ascending: false);
     return rows
         .map((r) => Contrato.fromRow(r))
         .toList();
@@ -47,7 +42,7 @@ class LocacaoRepository {
     try {
       final row = await _db
           .from('contratos')
-          .select()
+          .select('id, numero, cliente_nome, cliente_cnpj, cliente_contato, veiculo_placa, data_inicio, data_fim, sla_km_mes, valor_mensal, status, observacoes, criado_por, created_at, updated_at')
           .eq('id', id)
           .eq('tenant_id', _tenantId)
           .single();
@@ -62,7 +57,7 @@ class LocacaoRepository {
     final row = await _db
         .from('contratos')
         .insert({...contrato.toRow(), 'tenant_id': _tenantId})
-        .select()
+        .select('id, numero, cliente_nome, cliente_cnpj, cliente_contato, veiculo_placa, data_inicio, data_fim, sla_km_mes, valor_mensal, status, observacoes, criado_por, created_at, updated_at')
         .single();
     return Contrato.fromRow(row);
   }
@@ -73,7 +68,7 @@ class LocacaoRepository {
         .update(contrato.toRow())
         .eq('id', contrato.id)
         .eq('tenant_id', _tenantId)
-        .select()
+        .select('id, numero, cliente_nome, cliente_cnpj, cliente_contato, veiculo_placa, data_inicio, data_fim, sla_km_mes, valor_mensal, status, observacoes, criado_por, created_at, updated_at')
         .single();
     return Contrato.fromRow(row);
   }
@@ -93,7 +88,7 @@ class LocacaoRepository {
   Future<List<ChecklistEvento>> fetchChecklist(String contratoId) async {
     final rows = await _db
         .from('checklist_eventos')
-        .select()
+        .select('id, contrato_id, tipo, km_odometro, km_percorridos, combustivel_pct, observacoes, fotos, doc_url, assinatura_url, realizado_por, created_at')
         .eq('contrato_id', contratoId)
         .eq('tenant_id', _tenantId)
         .order('created_at', ascending: false);
@@ -106,7 +101,7 @@ class LocacaoRepository {
     final row = await _db
         .from('checklist_eventos')
         .insert({...evento.toRow(), 'tenant_id': _tenantId})
-        .select()
+        .select('id, contrato_id, tipo, km_odometro, km_percorridos, combustivel_pct, observacoes, fotos, doc_url, assinatura_url, realizado_por, created_at')
         .single();
     return ChecklistEvento.fromRow(row);
   }
@@ -118,7 +113,7 @@ class LocacaoRepository {
   Future<List<Ocorrencia>> fetchOcorrencias(String contratoId) async {
     final rows = await _db
         .from('ocorrencias')
-        .select()
+        .select('id, contrato_id, tipo, status, descricao, data_ocorrencia, valor_estimado, valor_final, impacto_financeiro, responsavel_pagamento, fotos, observacoes, registrado_por, resolvido_por, data_resolucao, created_at, updated_at')
         .eq('contrato_id', contratoId)
         .eq('tenant_id', _tenantId)
         .order('data_ocorrencia', ascending: false);
@@ -130,7 +125,7 @@ class LocacaoRepository {
   Future<List<Ocorrencia>> fetchTodasOcorrencias() async {
     final rows = await _db
         .from('ocorrencias')
-        .select()
+        .select('id, contrato_id, tipo, status, descricao, data_ocorrencia, valor_estimado, valor_final, impacto_financeiro, responsavel_pagamento, fotos, observacoes, registrado_por, resolvido_por, data_resolucao, created_at, updated_at')
         .eq('tenant_id', _tenantId)
         .order('data_ocorrencia', ascending: false);
     return rows
@@ -142,7 +137,7 @@ class LocacaoRepository {
     final row = await _db
         .from('ocorrencias')
         .insert({...ocorrencia.toInsertRow(), 'tenant_id': _tenantId})
-        .select()
+        .select('id, contrato_id, tipo, status, descricao, data_ocorrencia, valor_estimado, valor_final, impacto_financeiro, responsavel_pagamento, fotos, observacoes, registrado_por, resolvido_por, data_resolucao, created_at, updated_at')
         .single();
     return Ocorrencia.fromRow(row);
   }
@@ -166,7 +161,7 @@ class LocacaoRepository {
         .update(updatePayload)
         .eq('id', ocorrencia.id)
         .eq('tenant_id', _tenantId)
-        .select()
+        .select('id, contrato_id, tipo, status, descricao, data_ocorrencia, valor_estimado, valor_final, impacto_financeiro, responsavel_pagamento, fotos, observacoes, registrado_por, resolvido_por, data_resolucao, created_at, updated_at')
         .single();
     return Ocorrencia.fromRow(row);
   }

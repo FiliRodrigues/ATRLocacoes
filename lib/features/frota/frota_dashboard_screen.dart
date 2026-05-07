@@ -8,6 +8,8 @@ import '../../core/widgets/app_sidebar.dart';
 import '../../core/widgets/bento_card.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/data/custos_models.dart';
+import '../../core/services/audit_service.dart';
+import '../../core/services/supabase_service.dart';
 import '../custos/expenses/expense_form_modal.dart';
 import '../custos/custos_provider.dart';
 
@@ -506,16 +508,47 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
 
     if (confirm == true && mounted) {
       final novoKm = int.tryParse(ctrl.text) ?? v.kmAtual.toInt();
+
+      // Atualiza estado local imediatamente para UX responsiva
       context
           .read<FleetRepository>()
           .updateVehicleKm(placa: v.placa, km: novoKm.toDouble());
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'KM do ${v.placa} atualizado para ${NumberFormat('#,###', 'pt_BR').format(novoKm)} km',
+
+      // Persiste no Supabase de forma assíncrona
+      final registradoPor = AuditService.currentTenantId != null
+          ? (AuditService.currentTenantId!)
+          : 'frota';
+      FleetSupabaseService.updateVehicleKm(
+        placa: v.placa,
+        km: novoKm,
+        registradoPor: registradoPor,
+      ).then((_) {
+        AuditService.log(
+          action: AuditAction.atualizarKm,
+          entity: AuditEntity.veiculo,
+          entityId: v.placa,
+          payload: {'km': novoKm, 'placa': v.placa},
+        );
+      }).catchError((Object err) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.red.shade700,
+              content: Text('Erro ao salvar KM no servidor: $err'),
+            ),
+          );
+        }
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'KM do ${v.placa} atualizado para ${NumberFormat('#,###', 'pt_BR').format(novoKm)} km',
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
   }
 

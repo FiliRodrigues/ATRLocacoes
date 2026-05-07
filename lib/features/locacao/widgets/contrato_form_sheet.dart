@@ -220,7 +220,7 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
 
               _SectionLabel('Veículo'),
               DropdownButtonFormField<String>(
-                value: _veiculoPlacaSelecionada,
+                initialValue: _veiculoPlacaSelecionada,
                 decoration: _inputDecoration('Placa do Veículo', isDark),
                 items: frota
                     .map((v) => DropdownMenuItem(

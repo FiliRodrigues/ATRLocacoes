@@ -156,8 +156,8 @@ class Contrato {
         clienteCnpj: row['cliente_cnpj'] as String,
         clienteContato: row['cliente_contato'] as String? ?? '',
         veiculoPlaca: row['veiculo_placa'] as String,
-        dataInicio: DateTime.parse(row['data_inicio'] as String),
-        dataFim: DateTime.parse(row['data_fim'] as String),
+        dataInicio: DateTime.tryParse(row['data_inicio']?.toString() ?? '') ?? DateTime.now(),
+        dataFim: DateTime.tryParse(row['data_fim']?.toString() ?? '') ?? DateTime.now(),
         slaKmMes: (row['sla_km_mes'] as num?)?.toInt() ?? 0,
         valorMensal: (row['valor_mensal'] as num?)?.toDouble() ?? 0.0,
         status: () {
@@ -179,8 +179,8 @@ class Contrato {
         }(),
         observacoes: row['observacoes'] as String? ?? '',
         criadoPor: row['criado_por'] as String? ?? '',
-        createdAt: DateTime.parse(row['created_at'] as String),
-        updatedAt: DateTime.parse(row['updated_at'] as String),
+        createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ?? DateTime.now(),
+        updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? '') ?? DateTime.now(),
       );
 }
 
@@ -244,7 +244,7 @@ class ChecklistEvento {
       docUrl: row['doc_url'] as String?,
       assinaturaUrl: row['assinatura_url'] as String?,
       realizadoPor: row['realizado_por'] as String? ?? '',
-      createdAt: DateTime.parse(row['created_at'] as String),
+      createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 }
@@ -354,7 +354,7 @@ class Ocorrencia {
       ),
       status: parsedStatus,
       descricao: row['descricao'] as String,
-      dataOcorrencia: DateTime.parse(row['data_ocorrencia'] as String),
+      dataOcorrencia: DateTime.tryParse(row['data_ocorrencia']?.toString() ?? '') ?? DateTime.now(),
       valorEstimado: (row['valor_estimado'] as num?)?.toDouble() ?? 0.0,
       valorFinal: (row['valor_final'] as num?)?.toDouble(),
       impactoFinanceiro: (row['impacto_financeiro'] as num?)?.toDouble() ?? 0.0,
@@ -368,10 +368,10 @@ class Ocorrencia {
       registradoPor: row['registrado_por'] as String? ?? '',
       resolvidoPor: row['resolvido_por'] as String?,
       dataResolucao: row['data_resolucao'] != null
-          ? DateTime.parse(row['data_resolucao'] as String)
+          ? DateTime.tryParse(row['data_resolucao']?.toString() ?? '')
           : null,
-      createdAt: DateTime.parse(row['created_at'] as String),
-      updatedAt: DateTime.parse(row['updated_at'] as String),
+      createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(row['updated_at']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 }

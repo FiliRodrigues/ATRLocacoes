@@ -17,41 +17,99 @@ class AppTheme {
         secondary: AppColors.textSecondaryLight,
         error: AppColors.statusError,
       ),
-      textTheme: GoogleFonts.outfitTextTheme().copyWith(
-        displayLarge: const TextStyle(
+      textTheme: GoogleFonts.plusJakartaSansTextTheme().copyWith(
+        displayLarge: GoogleFonts.syne(
           color: AppColors.textPrimaryLight,
           fontWeight: FontWeight.w800,
-          fontSize: 32,
-          letterSpacing: -0.5,
+          fontSize: 34,
+          letterSpacing: -1.0,
           height: 1.1,
         ),
-        titleLarge: const TextStyle(
+        displayMedium: GoogleFonts.syne(
+          color: AppColors.textPrimaryLight,
+          fontWeight: FontWeight.w700,
+          fontSize: 28,
+          letterSpacing: -0.8,
+        ),
+        displaySmall: GoogleFonts.syne(
           color: AppColors.textPrimaryLight,
           fontWeight: FontWeight.w700,
           fontSize: 22,
+          letterSpacing: -0.5,
+        ),
+        headlineLarge: GoogleFonts.syne(
+          color: AppColors.textPrimaryLight,
+          fontWeight: FontWeight.w700,
+          fontSize: 20,
+          letterSpacing: -0.3,
+        ),
+        headlineMedium: GoogleFonts.syne(
+          color: AppColors.textPrimaryLight,
+          fontWeight: FontWeight.w600,
+          fontSize: 18,
           letterSpacing: -0.2,
         ),
-        titleMedium: const TextStyle(
+        headlineSmall: GoogleFonts.plusJakartaSans(
+          color: AppColors.textPrimaryLight,
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+          letterSpacing: -0.1,
+        ),
+        titleLarge: GoogleFonts.syne(
+          color: AppColors.textPrimaryLight,
+          fontWeight: FontWeight.w700,
+          fontSize: 24,
+          letterSpacing: -0.5,
+        ),
+        titleMedium: GoogleFonts.plusJakartaSans(
           color: AppColors.textPrimaryLight,
           fontWeight: FontWeight.w600,
           fontSize: 16,
+          letterSpacing: -0.2,
         ),
-        bodyLarge: const TextStyle(
+        titleSmall: GoogleFonts.plusJakartaSans(
+          color: AppColors.textPrimaryLight,
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+          letterSpacing: -0.1,
+        ),
+        bodyLarge: GoogleFonts.plusJakartaSans(
           color: AppColors.textPrimaryLight,
           fontSize: 16,
           fontWeight: FontWeight.w500,
         ),
-        bodyMedium: const TextStyle(
+        bodyMedium: GoogleFonts.plusJakartaSans(
           color: AppColors.textSecondaryLight,
           fontSize: 14,
           fontWeight: FontWeight.w400,
         ),
+        bodySmall: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryLight,
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
+        ),
+        labelLarge: GoogleFonts.plusJakartaSans(
+          color: AppColors.textPrimaryLight,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
+        ),
+        labelMedium: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryLight,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+        labelSmall: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryLight,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+        ),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.backgroundLight,
         elevation: 0,
-        iconTheme: IconThemeData(color: AppColors.textPrimaryLight),
-        titleTextStyle: TextStyle(
+        iconTheme: const IconThemeData(color: AppColors.textPrimaryLight),
+        titleTextStyle: GoogleFonts.plusJakartaSans(
           color: AppColors.textPrimaryLight,
           fontWeight: FontWeight.w600,
           fontSize: 20,
@@ -82,10 +140,14 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.atrOrange, width: 2),
         ),
-        labelStyle:
-            const TextStyle(color: AppColors.textSecondaryLight, fontSize: 14),
-        hintStyle:
-            const TextStyle(color: AppColors.textSecondaryLight, fontSize: 14),
+        labelStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryLight,
+          fontSize: 14,
+        ),
+        hintStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryLight,
+          fontSize: 14,
+        ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
@@ -103,34 +165,102 @@ class AppTheme {
         surface: AppColors.surfaceDark,
         error: AppColors.statusError,
       ),
-      textTheme: GoogleFonts.outfitTextTheme().copyWith(
-        displayLarge: const TextStyle(
+      appBarTheme: AppBarTheme(
+        backgroundColor: AppColors.backgroundDark,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: AppColors.textPrimaryDark),
+        titleTextStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.textPrimaryDark,
+          fontWeight: FontWeight.w600,
+          fontSize: 20,
+        ),
+      ),
+      textTheme: GoogleFonts.plusJakartaSansTextTheme().copyWith(
+        displayLarge: GoogleFonts.syne(
           color: AppColors.textPrimaryDark,
           fontWeight: FontWeight.w800,
-          fontSize: 32,
-          letterSpacing: -0.5,
+          fontSize: 34,
+          letterSpacing: -1.0,
           height: 1.1,
         ),
-        titleLarge: const TextStyle(
+        displayMedium: GoogleFonts.syne(
+          color: AppColors.textPrimaryDark,
+          fontWeight: FontWeight.w700,
+          fontSize: 28,
+          letterSpacing: -0.8,
+        ),
+        displaySmall: GoogleFonts.syne(
           color: AppColors.textPrimaryDark,
           fontWeight: FontWeight.w700,
           fontSize: 22,
+          letterSpacing: -0.5,
+        ),
+        headlineLarge: GoogleFonts.syne(
+          color: AppColors.textPrimaryDark,
+          fontWeight: FontWeight.w700,
+          fontSize: 20,
+          letterSpacing: -0.3,
+        ),
+        headlineMedium: GoogleFonts.syne(
+          color: AppColors.textPrimaryDark,
+          fontWeight: FontWeight.w600,
+          fontSize: 18,
           letterSpacing: -0.2,
         ),
-        titleMedium: const TextStyle(
+        headlineSmall: GoogleFonts.plusJakartaSans(
+          color: AppColors.textPrimaryDark,
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+          letterSpacing: -0.1,
+        ),
+        titleLarge: GoogleFonts.syne(
+          color: AppColors.textPrimaryDark,
+          fontWeight: FontWeight.w700,
+          fontSize: 24,
+          letterSpacing: -0.5,
+        ),
+        titleMedium: GoogleFonts.plusJakartaSans(
           color: AppColors.textPrimaryDark,
           fontWeight: FontWeight.w600,
           fontSize: 16,
+          letterSpacing: -0.2,
         ),
-        bodyLarge: const TextStyle(
+        titleSmall: GoogleFonts.plusJakartaSans(
+          color: AppColors.textPrimaryDark,
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+          letterSpacing: -0.1,
+        ),
+        bodyLarge: GoogleFonts.plusJakartaSans(
           color: AppColors.textPrimaryDark,
           fontSize: 16,
           fontWeight: FontWeight.w500,
         ),
-        bodyMedium: const TextStyle(
+        bodyMedium: GoogleFonts.plusJakartaSans(
           color: AppColors.textSecondaryDark,
           fontSize: 14,
           fontWeight: FontWeight.w400,
+        ),
+        bodySmall: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryDark,
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
+        ),
+        labelLarge: GoogleFonts.plusJakartaSans(
+          color: AppColors.textPrimaryDark,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
+        ),
+        labelMedium: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryDark,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+        labelSmall: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryDark,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
         ),
       ),
       cardTheme: CardThemeData(
@@ -158,10 +288,14 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.atrOrange, width: 2),
         ),
-        labelStyle:
-            const TextStyle(color: AppColors.textSecondaryDark, fontSize: 14),
-        hintStyle:
-            const TextStyle(color: AppColors.textSecondaryDark, fontSize: 14),
+        labelStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryDark,
+          fontSize: 14,
+        ),
+        hintStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.textSecondaryDark,
+          fontSize: 14,
+        ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),

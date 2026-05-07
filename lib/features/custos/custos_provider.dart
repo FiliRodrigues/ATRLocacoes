@@ -3,18 +3,26 @@ import '../../core/data/custos_models.dart';
 import '../../core/data/custos_repository.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/enums/kanban_column.dart';
-import '../../core/enums/maintenance_priority.dart';
 import '../../core/services/audit_service.dart';
 
 class CustosProvider extends ChangeNotifier {
   CustosProvider(this._repo) {
     _init();
+    // Re-tenta seed quando frota carrega do Supabase (resolve race condition)
+    FleetRepository.instance.addListener(_onFrotaUpdated);
   }
 
   final ICustosRepository _repo;
   bool _disposed = false;
   bool _loading = true;
   bool get isLoading => _loading;
+
+  void _onFrotaUpdated() {
+    if (_disposed) return;
+    if (_manutencoes.isEmpty || _despesas.isEmpty) {
+      if (!_loading) _safeNotify();
+    }
+  }
 
   List<ManutencaoItem> _manutencoes = [];
   List<DespesaItem> _despesas = [];
@@ -90,16 +98,24 @@ class CustosProvider extends ChangeNotifier {
     return futuras.isEmpty ? null : futuras.first;
   }
 
+  bool _isSaving = false;
+
   Future<void> addManutencao(ManutencaoItem item) async {
-    await _repo.saveManutencao(item);
-    _manutencoes.add(item);
-    AuditService.log(
-      action: AuditAction.criar,
-      entity: AuditEntity.manutencao,
-      entityId: item.id,
-      payload: {'titulo': item.titulo, 'veiculo': item.veiculoPlaca, 'custo': item.custo},
-    );
-    _safeNotify();
+    if (_isSaving) return;
+    _isSaving = true;
+    try {
+      await _repo.saveManutencao(item);
+      _manutencoes.add(item);
+      await AuditService.log(
+        action: AuditAction.criar,
+        entity: AuditEntity.manutencao,
+        entityId: item.id,
+        payload: {'titulo': item.titulo, 'veiculo': item.veiculoPlaca, 'custo': item.custo},
+      );
+      _safeNotify();
+    } finally {
+      _isSaving = false;
+    }
   }
 
   Future<void> updateManutencao(ManutencaoItem item) async {
@@ -110,14 +126,23 @@ class CustosProvider extends ChangeNotifier {
   }
 
   Future<void> deleteManutencao(String id) async {
-    await _repo.deleteManutencao(id);
-    _manutencoes.removeWhere((m) => m.id == id);
-    AuditService.log(
-      action: AuditAction.deletar,
-      entity: AuditEntity.manutencao,
-      entityId: id,
-    );
+    final idx = _manutencoes.indexWhere((m) => m.id == id);
+    if (idx == -1) return;
+    final backup = _manutencoes[idx];
+    _manutencoes.removeAt(idx);
     _safeNotify();
+    try {
+      await _repo.deleteManutencao(id);
+      await AuditService.log(
+        action: AuditAction.deletar,
+        entity: AuditEntity.manutencao,
+        entityId: id,
+      );
+    } catch (e) {
+      _manutencoes.insert(idx, backup);
+      _safeNotify();
+      rethrow;
+    }
   }
 
   Future<void> moverKanban(String id, KanbanColumn destino) async {
@@ -136,15 +161,21 @@ class CustosProvider extends ChangeNotifier {
   }
 
   Future<void> addDespesa(DespesaItem item) async {
-    await _repo.saveDespesa(item);
-    _despesas.add(item);
-    AuditService.log(
-      action: AuditAction.criar,
-      entity: AuditEntity.despesa,
-      entityId: item.id,
-      payload: {'tipo': item.tipo, 'veiculo': item.veiculoPlaca, 'valor': item.valor},
-    );
-    _safeNotify();
+    if (_isSaving) return;
+    _isSaving = true;
+    try {
+      await _repo.saveDespesa(item);
+      _despesas.add(item);
+      await AuditService.log(
+        action: AuditAction.criar,
+        entity: AuditEntity.despesa,
+        entityId: item.id,
+        payload: {'tipo': item.tipo, 'veiculo': item.veiculoPlaca, 'valor': item.valor},
+      );
+      _safeNotify();
+    } finally {
+      _isSaving = false;
+    }
   }
 
   Future<void> updateDespesa(DespesaItem item) async {
@@ -155,14 +186,23 @@ class CustosProvider extends ChangeNotifier {
   }
 
   Future<void> deleteDespesa(String id) async {
-    await _repo.deleteDespesa(id);
-    _despesas.removeWhere((d) => d.id == id);
-    AuditService.log(
-      action: AuditAction.deletar,
-      entity: AuditEntity.despesa,
-      entityId: id,
-    );
+    final idx = _despesas.indexWhere((d) => d.id == id);
+    if (idx == -1) return;
+    final backup = _despesas[idx];
+    _despesas.removeAt(idx);
     _safeNotify();
+    try {
+      await _repo.deleteDespesa(id);
+      await AuditService.log(
+        action: AuditAction.deletar,
+        entity: AuditEntity.despesa,
+        entityId: id,
+      );
+    } catch (e) {
+      _despesas.insert(idx, backup);
+      _safeNotify();
+      rethrow;
+    }
   }
 
   void _safeNotify() {
@@ -172,196 +212,16 @@ class CustosProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    FleetRepository.instance.removeListener(_onFrotaUpdated);
     super.dispose();
   }
 
   Future<void> _init() async {
     _manutencoes = (await _repo.fetchManutencoes()).toList();
     _despesas = (await _repo.fetchDespesas()).toList();
-    _seedIfEmpty();
     _loading = false;
     _safeNotify();
   }
 
-  void _seedIfEmpty() {
-    final frota = FleetRepository.instance.frota;
-    if (frota.isEmpty) return;
 
-    final primeiro = frota[0];
-    final segundo = frota.length > 1 ? frota[1] : frota[0];
-    final terceiro = frota.length > 2 ? frota[2] : frota[0];
-    final hoje = DateTime.now();
-
-    if (_manutencoes.isEmpty) {
-      _manutencoes.addAll([
-        ManutencaoItem(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          veiculoPlaca: primeiro.placa,
-          veiculoNome: 'Corolla',
-          titulo: 'Troca de Óleo',
-          tipo: 'Troca de Óleo',
-          data: hoje.add(const Duration(days: 15)),
-          custo: 350.0,
-          prioridade: MaintenancePriority.alta,
-          kmNoServico: 45000,
-          coluna: KanbanColumn.pendentes,
-          fornecedor: 'Auto Center Silva',
-        ),
-        ManutencaoItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          veiculoPlaca: segundo.placa,
-          veiculoNome: 'Hilux',
-          titulo: 'Revisão 40k',
-          tipo: 'Revisão Periódica',
-          data: hoje.add(const Duration(days: 22)),
-          custo: 1200.0,
-          prioridade: MaintenancePriority.baixa,
-          kmNoServico: 40000,
-          coluna: KanbanColumn.pendentes,
-        ),
-        ManutencaoItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 2).toString(),
-          veiculoPlaca: terceiro.placa,
-          veiculoNome: 'Argo',
-          titulo: 'Alinhamento/Balanceamento',
-          tipo: 'Pneus',
-          data: hoje,
-          custo: 180.0,
-          prioridade: MaintenancePriority.media,
-          kmNoServico: 38000,
-          coluna: KanbanColumn.emOficina,
-          fornecedor: 'Pneus & Cia',
-        ),
-        ManutencaoItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 3).toString(),
-          veiculoPlaca: primeiro.placa,
-          veiculoNome: 'Corolla',
-          titulo: 'Troca de Pastilhas de Freio',
-          tipo: 'Freios',
-          data: hoje,
-          custo: 420.0,
-          prioridade: MaintenancePriority.alta,
-          kmNoServico: 50000,
-          coluna: KanbanColumn.emOficina,
-          fornecedor: 'Freios Express',
-        ),
-        ManutencaoItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 4).toString(),
-          veiculoPlaca: segundo.placa,
-          veiculoNome: 'Hilux',
-          titulo: 'Troca 4 Pneus',
-          tipo: 'Pneus',
-          data: hoje.subtract(const Duration(days: 3)),
-          custo: 2450.0,
-          prioridade: MaintenancePriority.ok,
-          kmNoServico: 39000,
-          coluna: KanbanColumn.concluidos,
-          fornecedor: 'Pneus & Cia',
-        ),
-      ]);
-    }
-
-    if (_despesas.isEmpty) {
-      _despesas.addAll([
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 10).toString(),
-          veiculoPlaca: primeiro.placa,
-          motorista: primeiro.motorista,
-          data: DateTime(2026, 2, 4),
-          tipo: 'Combustível',
-          descricao: 'Abastecimento semanal',
-          valor: 285.90,
-          pago: true,
-          nf: 'NF-001',
-        ),
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 11).toString(),
-          veiculoPlaca: segundo.placa,
-          motorista: segundo.motorista,
-          data: DateTime(2026, 2, 12),
-          tipo: 'Pedágio',
-          descricao: 'Rota interior',
-          valor: 42.30,
-          pago: true,
-        ),
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 12).toString(),
-          veiculoPlaca: terceiro.placa,
-          motorista: terceiro.motorista,
-          data: DateTime(2026, 2, 18),
-          tipo: 'Lavagem',
-          descricao: 'Higienização completa',
-          valor: 95.0,
-        ),
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 13).toString(),
-          veiculoPlaca: primeiro.placa,
-          motorista: primeiro.motorista,
-          data: DateTime(2026, 3, 3),
-          tipo: 'Manutenção',
-          descricao: 'Pequeno reparo elétrico',
-          valor: 180.0,
-          pago: true,
-          nf: 'NF-002',
-        ),
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 14).toString(),
-          veiculoPlaca: segundo.placa,
-          motorista: segundo.motorista,
-          data: DateTime(2026, 3, 10),
-          tipo: 'Seguro',
-          descricao: 'Parcela seguro frota',
-          valor: 1320.0,
-        ),
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 15).toString(),
-          veiculoPlaca: terceiro.placa,
-          motorista: terceiro.motorista,
-          data: DateTime(2026, 3, 16),
-          tipo: 'Combustível',
-          descricao: 'Abastecimento viagem',
-          valor: 310.5,
-          pago: true,
-        ),
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 16).toString(),
-          veiculoPlaca: primeiro.placa,
-          motorista: primeiro.motorista,
-          data: DateTime(2026, 4, 2),
-          tipo: 'IPVA',
-          descricao: 'Pagamento anual',
-          valor: 2340.0,
-        ),
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 17).toString(),
-          veiculoPlaca: segundo.placa,
-          motorista: segundo.motorista,
-          data: DateTime(2026, 4, 7),
-          tipo: 'Pedágio',
-          descricao: 'Viagem BR-116',
-          valor: 66.4,
-          pago: true,
-        ),
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 18).toString(),
-          veiculoPlaca: terceiro.placa,
-          motorista: terceiro.motorista,
-          data: DateTime(2026, 4, 11),
-          tipo: 'Lavagem',
-          descricao: 'Limpeza interna',
-          valor: 75.0,
-        ),
-        DespesaItem(
-          id: (DateTime.now().millisecondsSinceEpoch + 19).toString(),
-          veiculoPlaca: primeiro.placa,
-          motorista: primeiro.motorista,
-          data: DateTime(2026, 4, 22),
-          tipo: 'Manutenção',
-          descricao: 'Troca de lâmpadas',
-          valor: 120.0,
-          pago: true,
-        ),
-      ]);
-    }
-  }
 }

@@ -95,52 +95,71 @@ class CustosKpiRow extends StatelessWidget {
     required IconData icone,
     required Color corIcone,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return BentoCard(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titulo,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondaryLight,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  valor,
-                  style: TextStyle(
-                    color: corValor,
-                    fontSize: tamanhoValor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (subtitulo != null)
+      padding: EdgeInsets.zero,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: corIcone, width: 3)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    subtitulo,
-                    style: const TextStyle(
+                    titulo,
+                    style: TextStyle(
                       fontSize: 11,
-                      color: AppColors.textSecondaryLight,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black87,
                     ),
                   ),
-              ],
+                  const SizedBox(height: 10),
+                  Text(
+                    valor,
+                    style: TextStyle(
+                      color: corValor,
+                      fontSize: tamanhoValor,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  if (subtitulo != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitulo,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isDark
+                            ? Colors.white38
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: corIcone.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    corIcone.withValues(alpha: 0.2),
+                    corIcone.withValues(alpha: 0.08),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icone, color: corIcone, size: 16),
             ),
-            child: Icon(icone, color: corIcone, size: 20),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

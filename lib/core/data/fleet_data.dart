@@ -54,7 +54,12 @@ class FinancingData {
   final String previsaoQuitacao;
   final int mesesLocacaoTotais;
   final int mesesLocacaoPagos;
-  
+  final double totalPagoReal;
+  /// Chave year*100+month (ex: 202604) → soma recebida naquele mês (via parcelas_financiamento).
+  final Map<int, double> recebidoPorMes;
+
+  double? recebidoNoMes(int year, int month) => recebidoPorMes[year * 100 + month];
+
   const FinancingData({
       required this.valorTotal,
       required this.percentualEntrada,
@@ -65,6 +70,8 @@ class FinancingData {
       required this.previsaoQuitacao,
       this.mesesLocacaoTotais = 36,
       this.mesesLocacaoPagos = 0,
+      this.totalPagoReal = 0.0,
+      this.recebidoPorMes = const {},
   });
 
   double get valorEntrada => valorTotal * percentualEntrada;
@@ -87,7 +94,8 @@ class FinancingData {
   double get totalJuros => totalParcelasCompleto - valorFinanciado;
   double get totalPago => valorParcela * parcelasPagas;
   double get totalRestante => valorParcela * parcelasRestantes;
-  double get totalRecebido => recebimentoMensal * mesesLocacaoPagos;
+  double get totalRecebido =>
+      totalPagoReal > 0 ? totalPagoReal : recebimentoMensal * mesesLocacaoPagos;
   double get custoTotalVeiculo => valorEntrada + totalParcelasCompleto;
   
   double get progressoFinanciamento {
@@ -316,20 +324,6 @@ List<DriverData> get motoristas => FleetRepository.instance.motoristas;
 // DADOS MENSAIS (gráfico dashboard)
 // ═══════════════════════════════════════════════════════
 
-final List<MonthlyData> _dadosMensais = [
-  const MonthlyData(
-      mes: 'Nov/25', manutencao: 3250, financiamento: 2800, receita: 4000,),
-  const MonthlyData(
-      mes: 'Dez/25', manutencao: 1150, financiamento: 2800, receita: 4000,),
-  const MonthlyData(
-      mes: 'Jan/26', manutencao: 2100, financiamento: 2800, receita: 4000,),
-  const MonthlyData(
-      mes: 'Fev/26', manutencao: 1250, financiamento: 2800, receita: 4000,),
-  const MonthlyData(
-      mes: 'Mar/26', manutencao: 3650, financiamento: 2800, receita: 4000,),
-  const MonthlyData(mes: 'Abr/26', manutencao: 0, financiamento: 2800, receita: 4000),
-];
-
 List<MonthlyData> get dadosMensais => FleetRepository.instance.dadosMensais;
 
 // ═══════════════════════════════════════════════════════
@@ -378,6 +372,7 @@ class FleetRepository extends ChangeNotifier {
   int _version = 0;
   bool _isLoading = false;
   String? _loadError;
+  final List<MonthlyData> _dadosMensais = [];
 
   bool get isLoading => _isLoading;
   String? get loadError => _loadError;
@@ -390,13 +385,21 @@ class FleetRepository extends ChangeNotifier {
     _loadError = null;
     notifyListeners();
     try {
+      debugPrint('[ATR] loadFromSupabase: iniciando fetchVehicles...');
       final veiculos = await FleetSupabaseService.fetchVehicles();
+      debugPrint('[ATR] loadFromSupabase: ${veiculos.length} veiculos carregados');
       _frota
         ..clear()
         ..addAll(veiculos);
       _motoristas.clear();
-    } catch (e) {
+      _recomputeDadosMensais();
+      final comFin = veiculos.where((v) => v.financiamento != null).length;
+      final comRec = veiculos.where((v) => (v.financiamento?.recebimentoMensal ?? 0) > 0).length;
+      final comParc = veiculos.where((v) => (v.financiamento?.recebidoPorMes.isNotEmpty ?? false)).length;
+      debugPrint('[ATR] loadFromSupabase: ${veiculos.length} veiculos, $comFin com financiamento, $comRec com recebimentoMensal>0, $comParc com recebidoPorMes');
+    } catch (e, s) {
       _loadError = e.toString();
+      debugPrint('[ATR] loadFromSupabase ERRO: $e\n$s');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -411,6 +414,48 @@ class FleetRepository extends ChangeNotifier {
     ..sort((a, b) => b.data.compareTo(a.data));
 
   int get version => _version;
+
+  static const _months = [
+    'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+    'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
+  ];
+
+  void _recomputeDadosMensais() {
+    _dadosMensais.clear();
+    final now = DateTime.now();
+    // Gera 12 meses: 6 antes do atual até 5 depois
+    for (int offset = -6; offset <= 5; offset++) {
+      final d = DateTime(now.year, now.month + offset);
+      final mLabel = '${_months[d.month - 1]}/${(d.year % 100).toString().padLeft(2, '0')}';
+
+      double receita = 0;
+      double financiamento = 0;
+      double manutencao = 0;
+
+      for (final v in _frota) {
+        final f = v.financiamento;
+        if (f != null) {
+          final realDoMes = f.recebidoNoMes(d.year, d.month);
+          if (realDoMes != null && realDoMes > 0) {
+            receita += realDoMes;
+          } else if (f.recebimentoMensal > 0) {
+            receita += f.recebimentoMensal;
+          }
+          financiamento += f.valorParcela;
+        }
+        manutencao += v.manutencoes
+            .where((m) => m.data.month == d.month && m.data.year == d.year)
+            .fold(0.0, (s, m) => s + m.custo);
+      }
+
+      _dadosMensais.add(MonthlyData(
+        mes: mLabel,
+        receita: receita,
+        financiamento: financiamento,
+        manutencao: manutencao,
+      ));
+    }
+  }
 
   /// Injeta veículos diretamente para uso em testes unitários.
   /// Não deve ser chamado em código de produção.

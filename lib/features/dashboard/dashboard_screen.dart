@@ -20,69 +20,64 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  bool _isLoading = true;
-  String _selectedMonth = 'Abr/26';
+  String _selectedMonth = (() {
+    final now = DateTime.now();
+    const m = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    return '${m[now.month - 1]}/${(now.year % 100).toString().padLeft(2, '0')}';
+  })();
 
-  // State caches para performance
-  double lucroMes = 0;
-  double receitaReal = 0;
-  double parcelasReal = 0;
-  double manutencaoMes = 0;
-  String _lastCacheKey = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _simulateLoading();
-  }
-
-  void _updateMetrics(FleetRepository repo) {
-    final cacheKey = '${_selectedMonth}_${repo.version}';
-    if (cacheKey == _lastCacheKey) return;
-    _lastCacheKey = cacheKey;
-
+  _Metrics _computeMetrics(FleetRepository repo) {
     const monthsMap = {
-      'Jan': 1,
-      'Fev': 2,
-      'Mar': 3,
-      'Abr': 4,
-      'Mai': 5,
-      'Jun': 6,
-      'Jul': 7,
-      'Ago': 8,
-      'Set': 9,
-      'Out': 10,
-      'Nov': 11,
-      'Dez': 12,
+      'Jan': 1, 'Fev': 2, 'Mar': 3, 'Abr': 4, 'Mai': 5, 'Jun': 6,
+      'Jul': 7, 'Ago': 8, 'Set': 9, 'Out': 10, 'Nov': 11, 'Dez': 12,
     };
     final parts = _selectedMonth.split('/');
-    if (parts.length < 2) return;
-    final monthNum = monthsMap[parts[0]] ?? 4;
+    if (parts.length < 2) return const _Metrics();
+    final monthNum = monthsMap[parts[0]] ?? DateTime.now().month;
     final yearNum = 2000 + (int.tryParse(parts[1]) ?? 26);
 
-    receitaReal = repo.frota.length * 2000.0;
-    parcelasReal = repo.veiculosFinanciados.fold(
-        0.0, (s, v) => s + (v.financiamento?.valorParcela ?? 0),);
-    manutencaoMes = repo.frota
-        .expand((v) => v.manutencoes)
-        .where((m) => m.data.month == monthNum && m.data.year == yearNum)
-        .fold(0.0, (s, m) => s + m.custo);
-
-    lucroMes = receitaReal - parcelasReal - manutencaoMes;
-  }
-
-  Future<void> _simulateLoading() async {
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (mounted) setState(() => _isLoading = false);
+    double receita = 0;
+    double parcelas = 0;
+    final frota = repo.frota;
+    int comFin = 0;
+    int comRecMes = 0;
+    int comRecReal = 0;
+    for (final v in frota) {
+      final f = v.financiamento;
+      if (f == null) continue;
+      comFin++;
+      final realDoMes = f.recebidoNoMes(yearNum, monthNum);
+      if (realDoMes != null && realDoMes > 0) {
+        receita += realDoMes;
+        comRecReal++;
+      } else if (f.recebimentoMensal > 0) {
+        receita += f.recebimentoMensal;
+        comRecMes++;
+      }
+      parcelas += f.valorParcela;
+    }
+    debugPrint('[DASH] _computeMetrics: frota=${frota.length} comFin=$comFin comRecReal=$comRecReal comRecMes=$comRecMes receita=$receita mes=$_selectedMonth');
+    double manutencao = 0;
+    for (final v in frota) {
+      for (final m in v.manutencoes) {
+        if (m.data.month == monthNum && m.data.year == yearNum) {
+          manutencao += m.custo;
+        }
+      }
+    }
+    return _Metrics(
+      receita: receita,
+      parcelas: parcelas,
+      manutencao: manutencao,
+      lucro: receita - parcelas - manutencao,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<FleetRepository>();
-    if (!_isLoading) {
-      _updateMetrics(repo);
-    }
-    final alerts = _isLoading ? const <AlertItem>[] : repo.frotaAlertas;
+    final metrics = _computeMetrics(repo);
+    final alerts = repo.isLoading ? const <AlertItem>[] : repo.frotaAlertas;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final width = MediaQuery.of(context).size.width;
     final isCompact = width < 1100;
@@ -106,10 +101,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: isDark ? null : AppColors.backgroundLight,
           ),
           child: SafeArea(
-            child: _isLoading
+            child: repo.isLoading
                 ? const Center(
-                    child:
-                        CircularProgressIndicator(color: AppColors.atrOrange),)
+                    child: CircularProgressIndicator(color: AppColors.atrOrange),)
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(32),
                     child: Column(
@@ -121,8 +115,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           _buildCompactAlerts(context, alerts),
                           const SizedBox(height: 24),
                         ],
-                        _buildMetricsGrid(
-                            context, width, isDark, _selectedMonth,),
+                        _buildMetricsGrid(context, width, isDark, metrics),
                         const SizedBox(height: 32),
                         _buildMainChartCard(context, isDark),
                         const SizedBox(height: 32),
@@ -138,16 +131,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                  child: _buildRevisionCard(context, isDark),),
+                              Expanded(child: _buildRevisionCard(context, isDark)),
                               const SizedBox(width: 24),
-                              Expanded(
-                                  child:
-                                      _buildInstallmentCard(context, isDark),),
+                              Expanded(child: _buildInstallmentCard(context, isDark)),
                               const SizedBox(width: 24),
-                              Expanded(
-                                  child: _buildExpensesCard(
-                                      context, isDark, _selectedMonth,),),
+                              Expanded(child: _buildExpensesCard(context, isDark, _selectedMonth)),
                             ],
                           ),
                         ],
@@ -163,7 +151,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _navMonth(int delta) {
+    const m = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    final parts = _selectedMonth.split('/');
+    final mIdx = m.indexOf(parts[0]);
+    final ano = int.tryParse(parts.length > 1 ? parts[1] : '26') ?? 26;
+    if (mIdx < 0) return;
+    final newDate = DateTime(2000 + ano, mIdx + 1 + delta);
+    setState(() => _selectedMonth = '${m[newDate.month - 1]}/${(newDate.year % 100).toString().padLeft(2, '0')}');
+  }
+
   Widget _buildHeader(BuildContext context) {
+    final parts = _selectedMonth.split('/');
+    final selMes = parts[0];
+    final selAno = '20${parts.length > 1 ? parts[1] : '26'}';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Wrap(
       spacing: 16,
       runSpacing: 12,
@@ -174,47 +177,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Visão Geral',
-                style: Theme.of(context)
-                    .textTheme
-                    .displayLarge
-                    ?.copyWith(fontSize: 28),),
+                style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28)),
             const SizedBox(height: 4),
             Text('Acompanhe os custos e disponibilidade da sua frota.',
-                style: Theme.of(context).textTheme.bodyMedium,),
+                style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
-        PopupMenuButton<String>(
-          onSelected: (val) {
-            setState(() {
-              _selectedMonth = val;
-            });
-          },
-          offset: const Offset(0, 45),
-          itemBuilder: (ctx) => context
-              .read<FleetRepository>()
-              .dadosMensais
-              .where((d) => d.mes.contains('26'))
-              .map((d) => PopupMenuItem(value: d.mes, child: Text(d.mes)))
-              .toList(),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border:
-                    Border.all(color: Theme.of(context).dividerTheme.color ?? Theme.of(context).dividerColor),),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(LucideIcons.calendar,
-                    size: 16, color: AppColors.atrOrange,),
-                const SizedBox(width: 8),
-                Text(_selectedMonth,
-                    style: const TextStyle(fontWeight: FontWeight.w600),),
-                const SizedBox(width: 16),
-                const Icon(LucideIcons.chevronDown, size: 16),
-              ],
-            ),
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _FilterBtn(icon: LucideIcons.chevronLeft, onTap: () => _navMonth(-1)),
+              const SizedBox(width: 2),
+              _MonthDropdown(value: selMes, onChanged: (m) => setState(() => _selectedMonth = '$m/$selAno')),
+              const SizedBox(width: 4),
+              _YearDropdown(value: selAno, onChanged: (a) => setState(() => _selectedMonth = '$selMes/${a.substring(2)}')),
+              const SizedBox(width: 2),
+              _FilterBtn(icon: LucideIcons.chevronRight, onTap: () => _navMonth(1)),
+            ],
           ),
         ),
       ],
@@ -273,7 +259,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMetricsGrid(
-      BuildContext context, double width, bool isDark, String selectedMonth,) {
+      BuildContext context, double width, bool isDark, _Metrics metrics) {
     final repo = context.read<FleetRepository>();
     final totalVeiculos = repo.frota.length;
     final ativos = repo.frota
@@ -289,8 +275,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _buildMetricCard(
             context,
             'Lucro da Operação',
-            formatCurrency(lucroMes),
-            selectedMonth,
+            formatCurrency(metrics.lucro),
+            _selectedMonth,
             LucideIcons.trendingUp,
             AppColors.statusSuccess,
             0,
@@ -300,7 +286,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _buildMetricCard(
             context,
             'Receita Bruta',
-            formatCurrency(receitaReal),
+            formatCurrency(metrics.receita),
             '${repo.frota.length} carros alugados',
             LucideIcons.wallet,
             AppColors.statusInfo,
@@ -311,7 +297,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _buildMetricCard(
             context,
             'Parcelas no Mês',
-            formatCurrency(parcelasReal),
+            formatCurrency(metrics.parcelas),
             '${repo.veiculosFinanciados.length} carros financ.',
             LucideIcons.landmark,
             AppColors.statusError,
@@ -322,8 +308,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _buildMetricCard(
             context,
             'Manut. no Mês',
-            formatCurrency(manutencaoMes),
-            'Serviços em $selectedMonth',
+            formatCurrency(metrics.manutencao),
+            'Serviços em $_selectedMonth',
             LucideIcons.wrench,
             AppColors.statusWarning,
             300,
@@ -358,51 +344,91 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildMetricCard(BuildContext context, String title, String value,
       String subtitle, IconData icon, Color color, int delay, double width,
-      {required bool isDark, int columns = 3,}) {
-    double itemWidth = (width - 64 - ((columns - 1) * 16)) / columns;
-    if (width < 1200) itemWidth = (width - 64 - 16) / 3;
-    if (width < 900) itemWidth = (width - 64 - 16) / 2;
-    if (width < 600) itemWidth = width - 32;
+      {required bool isDark, int columns = 6, VoidCallback? onTap}) {
+    double itemWidth = (width - 80) / columns;
+    if (width < 1300) itemWidth = (width - 80) / 4;
+    if (width < 900) itemWidth = (width - 40) / 3;
+    if (width < 700) itemWidth = (width - 20) / 2;
+    if (width < 450) itemWidth = width;
 
     return SizedBox(
       width: itemWidth,
       child: BentoCard(
         animationDelay: delay,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                    child: Text(title,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontSize: 12,
-                            color: isDark ? Colors.white70 : Colors.black87,),
-                        overflow: TextOverflow.ellipsis,),),
-                Container(
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: color, width: 3)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),),
-                    child: Icon(icon, color: color, size: 16),),
-              ],
-            ),
-            const SizedBox(height: 12),
-            FittedBox(
+                      gradient: LinearGradient(
+                        colors: [
+                          color.withValues(alpha: 0.2),
+                          color.withValues(alpha: 0.08),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: color, size: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(value,
-                    style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                        fontSize: 22,
-                        color: color,
-                        fontWeight: FontWeight.bold,),),),
-            const SizedBox(height: 6),
-            Text(subtitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontSize: 10,
-                    color: isDark ? Colors.white38 : Colors.black45,),),
-          ],
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isDark ? Colors.white38 : AppColors.textSecondaryLight,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (onTap != null) ...[
+                    const SizedBox(width: 4),
+                    Icon(LucideIcons.externalLink, size: 9, color: color),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -411,7 +437,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildMainChartCard(BuildContext context, bool isDark) {
     final repo = context.read<FleetRepository>();
     final months = repo.dadosMensais.where((d) => d.mes.contains('26')).toList();
-    final maxVal = repo.frota.length * 2000.0 * 1.25;
+    final maxVal = repo.frota.fold(0.0, (s, v) {
+          final f = v.financiamento;
+          if (f == null) return s;
+          double best = f.recebimentoMensal;
+          for (final val in f.recebidoPorMes.values) {
+            if (val > best) best = val;
+          }
+          if (best > 0) return s + best;
+          return s;
+        }) * 1.25;
 
     return BentoCard(
       height: 520,
@@ -465,23 +500,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: months.map((d) {
-                      // Calcula valores reais para o gráfico baseando-se na frota para bater com os KPIs
-                      final monthsMap = {
-                        'Jan': 1,
-                        'Fev': 2,
-                        'Mar': 3,
-                        'Abr': 4,
+                      const monthsMap = {
+                        'Jan': 1, 'Fev': 2, 'Mar': 3, 'Abr': 4,
+                        'Mai': 5, 'Jun': 6, 'Jul': 7, 'Ago': 8,
+                        'Set': 9, 'Out': 10, 'Nov': 11, 'Dez': 12,
                       };
-                      final mNum = monthsMap[d.mes.split('/').first] ?? 4;
+                      final parts = d.mes.split('/');
+                      final mNum = monthsMap[parts[0]] ?? 4;
+                      final yNum = 2000 + (int.tryParse(parts[1]) ?? 26);
 
-                        final rMonth = repo.frota.fold(
-                          0.0, (s, v) => s + 2000.0,); // 4 * 2000 = 8000
+                        final rMonth = repo.frota.fold(0.0, (s, v) {
+                        final f = v.financiamento;
+                        if (f == null) return s;
+                        final realDoMes = f.recebidoNoMes(yNum, mNum);
+                        if (realDoMes != null && realDoMes > 0) return s + realDoMes;
+                        if (f.recebimentoMensal > 0) return s + f.recebimentoMensal;
+                        return s;
+                      });
                         final fMonth = repo.veiculosFinanciados.fold(0.0,
                           (s, v) => s + (v.financiamento?.valorParcela ?? 0),);
                         final mMonth = repo.frota
                           .expand((v) => v.manutencoes)
                           .where((m) =>
-                              m.data.month == mNum && m.data.year == 2026,)
+                              m.data.month == mNum && m.data.year == yNum,)
                           .fold(0.0, (s, m) => s + m.custo);
 
                       final hRec = (rMonth / maxVal).clamp(0.0, 1.0);
@@ -580,36 +621,104 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildFleetOverview(BuildContext context, double width, bool isDark) {
     final vehicles = context.read<FleetRepository>().frota;
-    return BentoCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Resumo da Frota',
-              style: Theme.of(context).textTheme.titleLarge,),
-          const SizedBox(height: 24),
-          if (width > 1100)
-            Row(
-              children: [
-                for (int i = 0; i < vehicles.length; i++) ...[
-                  Expanded(child: _buildFleetItem(vehicles[i], isDark)),
-                  if (i < vehicles.length - 1) const SizedBox(width: 16),
-                ],
-              ],
-            )
-          else
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: vehicles.map((v) {
-                double itemWidth = (width - 64 - 16) / 2;
-                if (width < 600) itemWidth = width - 32;
-                return SizedBox(
-                    width: itemWidth, child: _buildFleetItem(v, isDark),);
-              }).toList(),
-            ),
-        ],
-      ),
+    final grouped = _groupVehiclesByEmpresa(vehicles);
+    final sections = <Widget>[];
+
+    sections.add(Text('Resumo da Frota',
+        style: Theme.of(context).textTheme.titleLarge,));
+    sections.add(const SizedBox(height: 24));
+
+    for (final group in grouped.entries) {
+      final sectionTitle = group.key == 'Não Locados'
+          ? 'Não Locados'
+          : 'Empresa ${group.key}';
+
+      sections.add(
+        Text(
+          sectionTitle,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      );
+      sections.add(const SizedBox(height: 12));
+      sections.add(
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: group.value.asMap().entries.map((entry) {
+            double itemWidth = (width - ((4 - 1) * 16)) / 4;
+            if (width < 1200) itemWidth = (width - 16) / 3;
+            if (width < 900) itemWidth = (width - 16) / 2;
+            if (width < 600) itemWidth = width;
+            return SizedBox(
+              width: itemWidth,
+              child: _buildFleetItem(entry.value, isDark),
+            );
+          }).toList(),
+        ),
+      );
+      sections.add(const SizedBox(height: 24));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: sections,
     );
+  }
+
+  String _resolveEmpresaGroup(VehicleData veiculo) {
+    final origem = veiculo.motorista.trim().toUpperCase();
+    final bool mencionaNew = origem.contains('NEW');
+    final bool mencionaTesc = origem.contains('TESC');
+    final bool mencionaAtr = origem.contains('ATR');
+    final bool mencionaEnsin = origem.contains('ENSIN');
+
+    final bool isLocado =
+        origem.contains('LOCADO') ||
+        mencionaNew ||
+        mencionaTesc ||
+        mencionaAtr ||
+        mencionaEnsin ||
+        veiculo.status == VehicleStatus.reserva;
+
+    if (!isLocado) return 'Não Locados';
+    if (mencionaNew && mencionaTesc) return 'New Tesc';
+    if (mencionaAtr) return 'ATR';
+    if (mencionaEnsin) return 'Ensin';
+    if (mencionaNew) return 'New';
+    if (mencionaTesc) return 'Tesc';
+    return 'Outras Locadoras';
+  }
+
+  Map<String, List<VehicleData>> _groupVehiclesByEmpresa(
+    List<VehicleData> vehicles,
+  ) {
+    final grouped = <String, List<VehicleData>>{};
+    for (final v in vehicles) {
+      final groupKey = _resolveEmpresaGroup(v);
+      grouped.putIfAbsent(groupKey, () => <VehicleData>[]).add(v);
+    }
+
+    final ordered = <String, List<VehicleData>>{};
+    const orderedKeys = <String>[
+      'New Tesc',
+      'ATR',
+      'Ensin',
+      'New',
+      'Tesc',
+      'Outras Locadoras',
+      'Não Locados',
+    ];
+
+    for (final key in orderedKeys) {
+      final items = grouped[key];
+      if (items == null || items.isEmpty) continue;
+      items.sort((a, b) => a.placa.compareTo(b.placa));
+      ordered[key] = items;
+    }
+
+    return ordered;
   }
 
   Widget _buildRevisionCard(BuildContext context, bool isDark) {
@@ -791,44 +900,166 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildFleetItem(VehicleData v, bool isDark) {
+    final f = v.financiamento;
+    final Color statusColor = v.status == VehicleStatus.emRota
+        ? AppColors.statusSuccess
+        : (v.status == VehicleStatus.emOficina
+            ? AppColors.statusError
+            : AppColors.statusWarning);
+
     return BentoCard(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      padding: EdgeInsets.zero,
       onTap: () => context.go('/vehicles/${v.placa}'),
-      child: Column(
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: statusColor, width: 3)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [v.cor1, v.cor2]),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(LucideIcons.car, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(v.placa,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),),
+                      Text(v.nome,
+                          style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : AppColors.textSecondaryLight,),
+                          overflow: TextOverflow.ellipsis,),
+                    ],
+                  ),
+                ),
+                StatusBadge(
+                  text: v.status.label,
+                  type: v.status == VehicleStatus.emRota
+                      ? BadgeType.success
+                      : (v.status == VehicleStatus.emOficina
+                          ? BadgeType.error
+                          : BadgeType.warning),
+                ),
+              ],
+            ),
+            if (f != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Recebido', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87)),
+                  Text(formatCurrency(f.totalRecebido),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.statusSuccess)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Parcela/mês', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87)),
+                  Text(formatCurrency(f.valorParcela),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.statusError)),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Metrics {
+  final double receita;
+  final double parcelas;
+  final double manutencao;
+  final double lucro;
+  const _Metrics({this.receita = 0, this.parcelas = 0, this.manutencao = 0, this.lucro = 0});
+}
+
+const _meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+class _FilterBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _FilterBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, size: 16, color: AppColors.atrOrange),
+        ),
+      ),
+    );
+  }
+}
+
+class _MonthDropdown extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _MonthDropdown({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      initialValue: value,
+      onSelected: onChanged,
+      offset: const Offset(0, 40),
+      itemBuilder: (ctx) => _meses
+          .map((m) => PopupMenuItem(value: m, child: Text(m, style: const TextStyle(fontWeight: FontWeight.w600))))
+          .toList(),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [v.cor1, v.cor2]),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                      color: v.cor1.withValues(alpha: 0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),),
-                ],),
-            child: const Icon(LucideIcons.car, color: Colors.white, size: 20),
-          ),
-          const SizedBox(height: 16),
-          Text(v.placa,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),),
-          Text(v.nome,
-              style: TextStyle(
-                  fontSize: 10,
-                  color:
-                      isDark ? Colors.white38 : AppColors.textSecondaryLight,),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,),
-          const SizedBox(height: 12),
-          StatusBadge(
-              text: v.status.label,
-              type: v.status == VehicleStatus.emRota
-                  ? BadgeType.success
-                  : (v.status == VehicleStatus.emOficina
-                      ? BadgeType.error
-                      : BadgeType.warning),),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          const SizedBox(width: 4),
+          const Icon(LucideIcons.chevronDown, size: 12),
+        ],
+      ),
+    );
+  }
+}
+
+class _YearDropdown extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _YearDropdown({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final currentYear = DateTime.now().year;
+    final years = List.generate(5, (i) => (currentYear - i).toString());
+
+    return PopupMenuButton<String>(
+      initialValue: value,
+      onSelected: onChanged,
+      offset: const Offset(0, 40),
+      itemBuilder: (ctx) => years
+          .map((y) => PopupMenuItem(value: y, child: Text(y, style: const TextStyle(fontWeight: FontWeight.w600))))
+          .toList(),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          const SizedBox(width: 4),
+          const Icon(LucideIcons.chevronDown, size: 12),
         ],
       ),
     );

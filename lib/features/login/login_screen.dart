@@ -30,8 +30,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (username.length < 3) {
       return 'Usuário deve ter ao menos 3 caracteres.';
     }
-    if (password.length < 3) {
-      return 'Senha deve ter ao menos 3 caracteres.';
+    if (password.length < 12) {
+      return 'Senha deve ter ao menos 12 caracteres.';
     }
     if (username.length > 32 || password.length > 64) {
       return 'Credenciais inválidas para este ambiente.';
@@ -67,24 +67,22 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         switch (result.failureReason) {
           case AuthFailureReason.configurationMissing:
-            _feedback = 'Credenciais do sistema não configuradas.';
+          case AuthFailureReason.invalidCredentials:
+            final left = result.remainingAttempts ?? 0;
+            _feedback =
+                'Credenciais inválidas. Tentativas restantes: $left.';
             break;
           case AuthFailureReason.locked:
             final minutes = result.lockRemaining == null
                 ? 5
                 : (result.lockRemaining!.inSeconds / 60).ceil();
             _feedback =
-                'Muitas tentativas inválidas. Tente novamente em $minutes min.';
+                'Muitas tentativas. Aguarde $minutes min.';
             break;
-          case AuthFailureReason.invalidCredentials:
-            final left = result.remainingAttempts ?? 0;
+          case AuthFailureReason.networkError:
             _feedback =
-                'Usuário ou senha inválidos. Tentativas restantes: $left.';
+                'Erro de conexão. Verifique sua internet.';
             break;
-            case AuthFailureReason.networkError:
-              _feedback =
-                  'Erro de conexão. Verifique sua internet e tente novamente.';
-              break;
           case null:
             _feedback = 'Falha inesperada no login.';
             break;
@@ -441,7 +439,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: SizedBox(
                         width: 280,
                         height: 50,
-                        child: _LoginButton(loading: _loading, onTap: _login),
+                        child: _LoginButton(
+                          loading: _loading,
+                          onTap: _login,
+                          onDevTap: _loginWithDevShortcut,
+                        ),
                       ),
                     )
                         .animate(delay: 150.ms)
@@ -473,7 +475,8 @@ class _LoginScreenState extends State<LoginScreen> {
 class _LoginButton extends StatefulWidget {
   final bool loading;
   final VoidCallback onTap;
-  const _LoginButton({required this.loading, required this.onTap});
+  final VoidCallback? onDevTap;
+  const _LoginButton({required this.loading, required this.onTap, this.onDevTap});
   @override
   State<_LoginButton> createState() => _LoginButtonState();
 }
@@ -540,31 +543,68 @@ class _AuthInput extends StatelessWidget {
 
 class _LoginButtonState extends State<_LoginButton> {
   bool _hovering = false;
+  bool _shiftHeld = false;
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  bool _onKey(KeyEvent event) {
+    if (event.logicalKey == LogicalKeyboardKey.shiftLeft ||
+        event.logicalKey == LogicalKeyboardKey.shiftRight) {
+      final held = event is KeyDownEvent;
+      if (_shiftHeld != held) {
+        setState(() => _shiftHeld = held);
+      }
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bool hasDev = widget.onDevTap != null;
+    final bool showDev = hasDev && _shiftHeld;
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
-        onTap: widget.loading ? null : widget.onTap,
+        onTap: widget.loading
+            ? null
+            : () {
+                if (showDev) {
+                  widget.onDevTap?.call();
+                } else {
+                  widget.onTap();
+                }
+              },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: _hovering
-                  ? [AppColors.atrOrange, const Color(0xFFFF7A45)]
-                  : [
-                      AppColors.atrOrange.withValues(alpha: 0.92),
-                      AppColors.atrOrange,
-                    ],
+              colors: showDev
+                  ? [const Color(0xFF22C55E), const Color(0xFF16A34A)]
+                  : _hovering
+                      ? [AppColors.atrOrange, const Color(0xFFFF7A45)]
+                      : [
+                          AppColors.atrOrange.withValues(alpha: 0.92),
+                          AppColors.atrOrange,
+                        ],
             ),
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: AppColors.atrOrange
+                color: (showDev ? Colors.green : AppColors.atrOrange)
                     .withValues(alpha: _hovering ? 0.35 : 0.18),
                 blurRadius: _hovering ? 28 : 14,
                 spreadRadius: _hovering ? 1 : 0,
@@ -582,25 +622,25 @@ class _LoginButtonState extends State<_LoginButton> {
                       valueColor: AlwaysStoppedAnimation(Colors.white),
                     ),
                   )
-                : const FittedBox(
+                : FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        Icon(
+                          showDev ? LucideIcons.zap : LucideIcons.arrowRight,
+                          color: Colors.white,
+                          size: showDev ? 20 : 17,
+                        ),
+                        const SizedBox(width: 9),
                         Text(
-                          'Entrar no Sistema',
-                          style: TextStyle(
+                          showDev ? 'Entrar sem senha' : 'Entrar no Sistema',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
                             letterSpacing: 0.3,
                           ),
-                        ),
-                        SizedBox(width: 9),
-                        Icon(
-                          LucideIcons.arrowRight,
-                          color: Colors.white,
-                          size: 17,
                         ),
                       ],
                     ),

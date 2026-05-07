@@ -6,6 +6,7 @@ import 'custos_provider.dart';
 import 'widgets/custos_kpi_row.dart';
 import 'maintenance/maintenance_tab.dart';
 import 'expenses/expenses_tab.dart';
+import 'combustivel/combustivel_tab.dart';
 
 class CustosScreen extends StatelessWidget {
   const CustosScreen({super.key});
@@ -13,7 +14,7 @@ class CustosScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: AppSidebar(
         child: Scaffold(
           body: SafeArea(
@@ -50,6 +51,10 @@ class CustosScreen extends StatelessWidget {
                       Padding(
                         padding: EdgeInsets.fromLTRB(32, 24, 32, 32),
                         child: ExpensesTab(),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(32, 24, 32, 32),
+                        child: CombustivelTab(),
                       ),
                     ],
                   ),
@@ -108,6 +113,7 @@ class CustosScreen extends StatelessWidget {
       tabs: [
         Tab(text: 'Manutenções'),
         Tab(text: 'Despesas'),
+        Tab(text: 'Combustível'),
       ],
     );
   }

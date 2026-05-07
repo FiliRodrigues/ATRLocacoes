@@ -9,6 +9,10 @@ import '../../features/vehicles/vehicle_dossier_screen.dart';
 import '../../features/drivers/drivers_screen.dart';
 import '../../features/custos/custos_screen.dart';
 import '../../features/financial_admin/financial_admin_screen.dart';
+import '../../features/financial_admin/tco_dashboard_screen.dart';
+import '../../features/vencimentos/vencimentos_screen.dart';
+import '../../features/relatorios/relatorios_screen.dart';
+import '../../features/drivers/score_motoristas_screen.dart';
 import '../../features/obras/obras_screen.dart';
 import '../../features/sala_atr/sala_atr_screen.dart';
 import '../../features/lazer/lazer_screen.dart';
@@ -35,6 +39,10 @@ abstract class AppRoutes {
   static const maintenance = 'maintenance';
   static const expenses = 'expenses';
   static const financialAdmin = 'financial-admin';
+  static const tco = '/tco';
+  static const vencimentos = '/vencimentos';
+  static const relatorios = '/relatorios';
+  static const scoreMoto = '/score-motoristas';
 
   static bool isFleetRoute(String path) {
     // Frota users are restricted to the fleet dashboard and review control.
@@ -159,6 +167,22 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.frotaRevisao,
         builder: (context, state) => const FrotaRevisaoScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.tco,
+        builder: (context, state) => const TcoDashboardScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.vencimentos,
+        builder: (context, state) => const VencimentosScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.relatorios,
+        builder: (context, state) => const RelatoriosScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.scoreMoto,
+        builder: (context, state) => const ScoreMotoristaScreen(),
       ),
     ],
   );

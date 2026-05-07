@@ -59,6 +59,23 @@ flutter run -d chrome --web-port 5000
 flutter run -d edge --web-port 5000
 ```
 
+Desktop Local (recomendado neste projeto):
+
+1. Ajuste credenciais e Supabase em `run_atr.local.bat`.
+2. Abra o app nativo com:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_atr_windows.ps1
+```
+
+3. Para abrir sem terminal (atalho desktop), execute uma vez:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\create_desktop_shortcut.ps1
+```
+
+Isso cria os atalhos `ATR Local` (web) e `ATR Desktop` (Windows nativo).
+
 ## Autenticação (configuração)
 
 O login usa credenciais fornecidas por variáveis de build (`--dart-define`).
@@ -76,6 +93,8 @@ flutter run -d chrome --web-port 5000 --dart-define=ATR_LOGIN_USER=seu_usuario -
 ```
 
 Sem essas variáveis, o login é bloqueado por segurança.
+O launcher Desktop (`run_atr_windows.ps1`) também consome `SUPABASE_URL` e
+`SUPABASE_ANON_KEY` do `run_atr.local.bat`.
 
 ## Qualidade
 

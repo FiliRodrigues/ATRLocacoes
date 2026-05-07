@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import '../../core/data/fleet_data.dart';
 import '../../core/data/locacao_models.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -123,9 +124,19 @@ class _ResumoTab extends StatelessWidget {
     final impactoTotal = ocorrencias.fold(0.0, (s, o) => s + o.impactoFinanceiro);
     final saldoLiquido = contrato.valorMensal - impactoTotal;
 
+    // Busca KM atual do veículo para cálculo de SLA
+    final fleet = context.watch<FleetRepository>();
+    final veiculo = fleet.frota
+        .where((v) => v.placa == contrato.veiculoPlaca)
+        .firstOrNull;
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        if (contrato.slaKmMes > 0 && veiculo != null) ...[
+          _SlaKmCard(contrato: contrato, veiculo: veiculo, isDark: isDark),
+          const SizedBox(height: 16),
+        ],
         _InfoCard(
           isDark: isDark,
           title: 'Dados do Contrato',
@@ -511,6 +522,290 @@ class _OcorrenciaCard extends StatelessWidget {
       updatedAt: DateTime.now(),
     );
     await onUpdate(atualizada);
+  }
+}
+
+// ── SLA KM Card ────────────────────────────────────────
+
+class _SlaKmCard extends StatelessWidget {
+  final Contrato contrato;
+  final VehicleData veiculo;
+  final bool isDark;
+
+  const _SlaKmCard({
+    required this.contrato,
+    required this.veiculo,
+    required this.isDark,
+  });
+
+  static final _km = NumberFormat('#,###', 'pt_BR');
+
+  @override
+  Widget build(BuildContext context) {
+    final hoje = DateTime.now();
+    final mesesDecorridos = _mesesEntre(contrato.dataInicio, hoje)
+        .clamp(0, contrato.duracaoMeses);
+
+    // KM total contratado no período decorrido
+    final kmContratadoPeriodo = contrato.slaKmMes * mesesDecorridos;
+    // KM rodado pelo veículo desde o início do contrato
+    final kmInicioContrato = _estimaKmNaData(contrato.dataInicio, veiculo);
+    final kmRodado = (veiculo.kmAtual - kmInicioContrato).clamp(0.0, double.infinity);
+
+    final pct = kmContratadoPeriodo > 0
+        ? (kmRodado / kmContratadoPeriodo).clamp(0.0, 2.0)
+        : 0.0;
+    final slaAlerta = pct > 0.8 && pct <= 1.0;
+    final slaExcedido = pct > 1.0;
+    final barColor = slaExcedido
+        ? AppColors.statusError
+        : slaAlerta
+            ? AppColors.statusWarning
+            : AppColors.statusSuccess;
+
+    final kmRestante = (kmContratadoPeriodo - kmRodado).clamp(0.0, double.infinity);
+    final kmExcedente = (kmRodado - kmContratadoPeriodo).clamp(0.0, double.infinity);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.atrNavyDarker : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: barColor.withValues(alpha: 0.35),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: barColor.withValues(alpha: 0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.gauge, size: 18, color: barColor),
+              const SizedBox(width: 8),
+              Text(
+                'Monitor de SLA — KM Contratual',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: barColor,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: barColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  slaExcedido
+                      ? 'EXCEDIDO'
+                      : slaAlerta
+                          ? 'ATENÇÃO'
+                          : 'DENTRO DO SLA',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: barColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Barra de progresso
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${_km.format(kmRodado.toInt())} km rodados',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          'de ${_km.format(kmContratadoPeriodo.toInt())} km SLA',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.white54 : Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: pct.clamp(0.0, 1.0),
+                            backgroundColor: isDark
+                                ? Colors.white12
+                                : Colors.black.withValues(alpha: 0.08),
+                            color: barColor,
+                            minHeight: 12,
+                          ),
+                        ),
+                        // Marcador de 80%
+                        Positioned(
+                          left: MediaQuery.sizeOf(context).width * 0.8 * 0.52,
+                          top: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 2,
+                            color: Colors.orange.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${(pct * 100).toStringAsFixed(1)}% do SLA utilizado no período',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.white54 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 10),
+
+          // KPIs
+          Wrap(
+            spacing: 20,
+            runSpacing: 8,
+            children: [
+              _slaKpi(
+                isDark,
+                label: 'SLA/mês',
+                value: '${_km.format(contrato.slaKmMes)} km',
+                color: AppColors.statusInfo,
+              ),
+              _slaKpi(
+                isDark,
+                label: 'Meses decorridos',
+                value: '$mesesDecorridos / ${contrato.duracaoMeses}',
+                color: AppColors.atrOrange,
+              ),
+              if (!slaExcedido)
+                _slaKpi(
+                  isDark,
+                  label: 'KM restante',
+                  value: '${_km.format(kmRestante.toInt())} km',
+                  color: AppColors.statusSuccess,
+                ),
+              if (slaExcedido)
+                _slaKpi(
+                  isDark,
+                  label: 'KM excedente',
+                  value: '+ ${_km.format(kmExcedente.toInt())} km',
+                  color: AppColors.statusError,
+                ),
+              _slaKpi(
+                isDark,
+                label: 'Uso atual/mês',
+                value: mesesDecorridos > 0
+                    ? '${_km.format((kmRodado / mesesDecorridos.clamp(1, 999)).toInt())} km/mês'
+                    : '-',
+                color: AppColors.statusWarning,
+              ),
+            ],
+          ),
+
+          if (slaAlerta || slaExcedido) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: barColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    slaExcedido
+                        ? LucideIcons.alertTriangle
+                        : LucideIcons.info,
+                    size: 14,
+                    color: barColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      slaExcedido
+                          ? 'SLA de KM excedido. Verifique possíveis cobranças adicionais conforme contrato.'
+                          : 'Atenção: mais de 80% do SLA de KM já foi consumido no período.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: barColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _slaKpi(bool isDark, {required String label, required String value, required Color color}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: isDark ? Colors.white38 : Colors.black38,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  int _mesesEntre(DateTime inicio, DateTime fim) {
+    return (fim.year - inicio.year) * 12 + (fim.month - inicio.month);
+  }
+
+  /// Estima o hodômetro do veículo na data de início do contrato
+  /// usando a taxa de kmPorMes inversa.
+  double _estimaKmNaData(DateTime dataInicio, VehicleData v) {
+    final mesesAtras = _mesesEntre(dataInicio, DateTime.now());
+    return (v.kmAtual - v.kmPorMes * mesesAtras).clamp(0.0, v.kmAtual);
   }
 }
 

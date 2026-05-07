@@ -58,17 +58,25 @@ class LocacaoProvider extends ChangeNotifier {
     await _init();
   }
 
+  bool _isSaving = false;
+
   Future<Contrato> criarContrato(Contrato contrato) async {
-    final criado = await _repo.createContrato(contrato);
-    _contratos.insert(0, criado);
-    AuditService.log(
-      action: AuditAction.criar,
-      entity: AuditEntity.manutencao,
-      entityId: criado.id,
-      afterState: {'numero': criado.numero, 'cliente': criado.clienteNome, 'status': criado.status.name},
-    );
-    _safeNotify();
-    return criado;
+    if (_isSaving) throw Exception('Salvamento em andamento');
+    _isSaving = true;
+    try {
+      final criado = await _repo.createContrato(contrato);
+      _contratos.insert(0, criado);
+      await AuditService.log(
+        action: AuditAction.criar,
+        entity: AuditEntity.manutencao,
+        entityId: criado.id,
+        payload: {'numero': criado.numero, 'cliente': criado.clienteNome},
+      );
+      _safeNotify();
+      return criado;
+    } finally {
+      _isSaving = false;
+    }
   }
 
   Future<Contrato> atualizarContrato(Contrato contrato) async {
@@ -77,7 +85,7 @@ class LocacaoProvider extends ChangeNotifier {
     final atualizado = await _repo.updateContrato(contrato);
     final idx = _contratos.indexWhere((c) => c.id == atualizado.id);
     if (idx != -1) _contratos[idx] = atualizado;
-    AuditService.log(
+    await AuditService.log(
       action: AuditAction.atualizar,
       entity: AuditEntity.manutencao,
       entityId: atualizado.id,
@@ -89,19 +97,34 @@ class LocacaoProvider extends ChangeNotifier {
   }
 
   Future<void> deletarContrato(String id) async {
-    final antes = _contratos.firstWhere((c) => c.id == id,
-        orElse: () => throw StateError('contrato $id não encontrado'));
-    await _repo.deleteContrato(id);
-    _contratos.removeWhere((c) => c.id == id);
+    final index = _contratos.indexWhere((c) => c.id == id);
+    if (index == -1) return;
+    final antes = _contratos[index];
+    
+    // Optimistic UI Update
+    _contratos.removeAt(index);
+    final cacheChecklist = _checklistCache[id];
     _checklistCache.remove(id);
+    final ocorrenciasRemovidas = _todasOcorrencias.where((o) => o.contratoId == id).toList();
     _todasOcorrencias.removeWhere((o) => o.contratoId == id);
-    AuditService.log(
-      action: AuditAction.deletar,
-      entity: AuditEntity.manutencao,
-      entityId: id,
-      beforeState: {'numero': antes.numero, 'cliente': antes.clienteNome},
-    );
     _safeNotify();
+
+    try {
+      await _repo.deleteContrato(id);
+      await AuditService.log(
+        action: AuditAction.deletar,
+        entity: AuditEntity.manutencao,
+        entityId: id,
+        beforeState: {'numero': antes.numero, 'cliente': antes.clienteNome},
+      );
+    } catch (e) {
+      // Rollback
+      _contratos.insert(index, antes);
+      if (cacheChecklist != null) _checklistCache[id] = cacheChecklist;
+      _todasOcorrencias.addAll(ocorrenciasRemovidas);
+      _safeNotify();
+      throw Exception('Falha ao deletar contrato: $e');
+    }
   }
 
   // ════════════════════════════════════════════════════
@@ -125,7 +148,7 @@ class LocacaoProvider extends ChangeNotifier {
     final criado = await _repo.createChecklist(evento);
     final lista = _checklistCache[evento.contratoId] ?? [];
     _checklistCache[evento.contratoId] = [criado, ...lista];
-    AuditService.log(
+    await AuditService.log(
       action: AuditAction.criar,
       entity: AuditEntity.veiculo,
       entityId: evento.contratoId,
@@ -145,21 +168,22 @@ class LocacaoProvider extends ChangeNotifier {
   // ════════════════════════════════════════════════════
 
   Future<Ocorrencia> criarOcorrencia(Ocorrencia ocorrencia) async {
-    final criada = await _repo.createOcorrencia(ocorrencia);
-    _todasOcorrencias.insert(0, criada);
-    AuditService.log(
-      action: AuditAction.criar,
-      entity: AuditEntity.despesa,
-      entityId: criada.id,
-      afterState: {
-        'tipo': criada.tipo.name,
-        'valor_estimado': criada.impactoFinanceiro,
-        'contrato_id': criada.contratoId,
-        'responsavel': criada.responsavelPagamento,
-      },
-    );
-    _safeNotify();
-    return criada;
+    if (_isSaving) throw Exception('Salvamento em andamento');
+    _isSaving = true;
+    try {
+      final criada = await _repo.createOcorrencia(ocorrencia);
+      _todasOcorrencias.insert(0, criada);
+      await AuditService.log(
+        action: AuditAction.criar,
+        entity: AuditEntity.despesa,
+        entityId: criada.id,
+        payload: {'contrato': criada.contratoId, 'tipo': criada.tipo.name},
+      );
+      _safeNotify();
+      return criada;
+    } finally {
+      _isSaving = false;
+    }
   }
 
   Future<Ocorrencia> atualizarOcorrencia(Ocorrencia ocorrencia) async {
@@ -168,7 +192,7 @@ class LocacaoProvider extends ChangeNotifier {
     final atualizada = await _repo.updateOcorrencia(ocorrencia);
     final idx = _todasOcorrencias.indexWhere((o) => o.id == atualizada.id);
     if (idx != -1) _todasOcorrencias[idx] = atualizada;
-    AuditService.log(
+    await AuditService.log(
       action: AuditAction.atualizar,
       entity: AuditEntity.despesa,
       entityId: atualizada.id,

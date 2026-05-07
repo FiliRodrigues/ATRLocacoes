@@ -30,7 +30,17 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-# /build/
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+
+# Build
+/build/
 /coverage/
 run_atr.local.bat
 .atr_build_stamp
@@ -45,3 +55,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# MCP server config (contém access tokens)
+.mcp.json
+.claude/settings.local.json

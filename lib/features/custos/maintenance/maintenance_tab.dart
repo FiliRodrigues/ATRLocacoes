@@ -5,10 +5,12 @@ import '../../../core/data/custos_models.dart';
 import '../../../core/data/fleet_data.dart';
 import '../../../core/enums/kanban_column.dart';
 import '../../../core/enums/maintenance_priority.dart';
+import '../../../core/providers/regras_manutencao_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/bento_card.dart';
 import '../custos_provider.dart';
 import 'maintenance_form_modal.dart';
+import 'regras_manutencao_sheet.dart';
 
 class MaintenanceTab extends StatefulWidget {
   const MaintenanceTab({super.key});
@@ -206,6 +208,25 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
           ),
         ),
         const Spacer(),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.atrOrange,
+            side: const BorderSide(color: AppColors.atrOrange),
+          ),
+          onPressed: () {
+            // ignora se RegrasManutencaoProvider ainda não está registrado
+            if (!context.mounted) return;
+            RegrasManutencaoSheet.show(context);
+          },
+          icon: const Icon(LucideIcons.alarmClock, size: 16),
+          label: Consumer<RegrasManutencaoProvider>(
+            builder: (_, p, __) {
+              final n = p.regrasAtivas.length;
+              return Text('Regras${n > 0 ? ' ($n)' : ''}');
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(backgroundColor: AppColors.atrOrange),
           onPressed: () async {

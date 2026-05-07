@@ -53,6 +53,13 @@ class AuditService {
     String origin = 'web',
   }) async {
     try {
+      try {
+        Supabase.instance.client;
+      } catch (_) {
+        AppLogger.warning('AuditService: Supabase não inicializado. Ignorando log.');
+        return;
+      }
+      
       await Supabase.instance.client.from('audit_log').insert({
         'username':       _currentUsername ?? 'desconhecido',
         'effective_user': _currentUsername ?? 'desconhecido',

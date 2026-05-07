@@ -4,22 +4,24 @@
 		{
 			"label": "Executar ATR Web Local",
 			"type": "shell",
-			"command": "run_atr.bat",
+			"command": ".\\run_atr.bat",
 			"isBackground": true
 		},
 		{
 			"label": "Flutter Run Chrome 5000",
 			"type": "shell",
-			"command": "flutter",
+			"command": ".\\run_atr.bat",
+			"isBackground": true
+		},
+		{
+			"label": "Executar ATR Desktop Local",
+			"type": "shell",
+			"command": "powershell",
 			"args": [
-				"run",
-				"-d",
-				"chrome",
-				"--web-port",
-				"5000",
-				"--dart-define=ATR_LOGIN_USER=adm",
-				"--dart-define=ATR_LOGIN_PASS=TroquePorUmaSenhaForte",
-				"--dart-define=ATR_DEV_QUICK_LOGIN=true"
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				".\\run_atr_windows.ps1"
 			],
 			"isBackground": true
 		}

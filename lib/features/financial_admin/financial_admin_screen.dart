@@ -8,6 +8,7 @@ import '../../core/widgets/bento_card.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/data/fleet_data.dart';
+import '../../core/navigation/app_router.dart';
 
 // Records tipados usados internamente, eliminando casts via Map<String, dynamic>.
 typedef _MaintenanceEntry = ({
@@ -38,8 +39,6 @@ class FinancialAdminScreen extends StatefulWidget {
 }
 
 class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
-  _FinancialTotals? _cachedTotals;
-  int _lastRepoVersion = -1;
   String _filterMode = 'Todos'; // 'Todos', 'Financiados', 'Quitados'
 
   _FinancialTotals _calculateTotals(List<VehicleData> viewList) {
@@ -53,7 +52,7 @@ class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
         final f = v.financiamento!;
         totalPago += f.totalPago + f.valorEntrada;
         totalRestante += f.totalRestante;
-        totalRecebido += f.recebimentoMensal * f.parcelasPagas;
+        totalRecebido += f.totalRecebido;
       }
       totalManut += v.custoTotalManutencao;
     }
@@ -71,16 +70,20 @@ class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
   Widget build(BuildContext context) {
     final repo = context.watch<FleetRepository>();
     
-    // Todos os veículos que possuem dados financeiros mapeados
-    final todosValidos = repo.frota.where((v) => v.financiamento != null).toList();
+    // Todos os veículos — com ou sem financiamento mapeado
+    final todosValidos = repo.frota.toList();
 
     List<VehicleData> viewList;
     switch (_filterMode) {
       case 'Financiados':
-        viewList = todosValidos.where((v) => v.financiamento!.valorParcela > 0.01).toList();
+        viewList = todosValidos
+            .where((v) => v.financiamento != null && v.financiamento!.valorParcela > 0.01)
+            .toList();
         break;
       case 'Quitados':
-        viewList = todosValidos.where((v) => v.financiamento!.valorParcela < 0.01).toList();
+        viewList = todosValidos
+            .where((v) => v.financiamento != null && v.financiamento!.valorParcela < 0.01)
+            .toList();
         break;
       default:
         viewList = todosValidos;
@@ -159,6 +162,16 @@ class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
                 return Colors.transparent;
               }),
             ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.atrOrange,
+              side: const BorderSide(color: AppColors.atrOrange),
+            ),
+            onPressed: () => context.push(AppRoutes.tco),
+            icon: const Icon(LucideIcons.pieChart, size: 16),
+            label: const Text('TCO'),
           ),
         ],
       ),
@@ -472,71 +485,7 @@ class _FinancialListView extends StatelessWidget {
     int delay,
     double width,
   ) {
-    double itemWidth = (width - 80) / 6;
-    if (width < 1300) itemWidth = (width - 80) / 4;
-    if (width < 900) itemWidth = (width - 40) / 3;
-    if (width < 700) itemWidth = (width - 20) / 2;
-    if (width < 450) itemWidth = width;
-
-    final isDark = Theme.of(ctx).brightness == Brightness.dark;
-
-    return SizedBox(
-      width: itemWidth,
-      child: BentoCard(
-        animationDelay: delay,
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text(
-                    title,
-                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                          fontSize: 10,
-                          color: isDark ? Colors.white70 : Colors.black87,
-                        ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(icon, color: color, size: 12),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                style: Theme.of(ctx).textTheme.displayLarge?.copyWith(
-                      fontSize: 16,
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              sub,
-              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                    fontSize: 9,
-                    color: isDark ? Colors.white38 : Colors.black45,
-                  ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ],
-        ),
-      ),
-    );
+    return _kpiShared(ctx, title, value, sub, icon, color, delay, width, null);
   }
 
   Widget _kpiClickable(
@@ -548,6 +497,23 @@ class _FinancialListView extends StatelessWidget {
     Color color,
     int delay,
     double width,
+  ) {
+    return _kpiShared(
+      ctx, title, value, sub, icon, color, delay, width,
+      () => _showMaintenanceModal(ctx),
+    );
+  }
+
+  Widget _kpiShared(
+    BuildContext ctx,
+    String title,
+    String value,
+    String sub,
+    IconData icon,
+    Color color,
+    int delay,
+    double width,
+    VoidCallback? onTap,
   ) {
     double itemWidth = (width - 80) / 6;
     if (width < 1300) itemWidth = (width - 80) / 4;
@@ -561,64 +527,80 @@ class _FinancialListView extends StatelessWidget {
       width: itemWidth,
       child: BentoCard(
         animationDelay: delay,
-        padding: const EdgeInsets.all(12),
-        onTap: () => _showMaintenanceModal(ctx),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text(
-                    title,
-                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                          fontSize: 10,
-                          color: isDark ? Colors.white70 : Colors.black87,
-                        ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(icon, color: color, size: 12),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                style: Theme.of(ctx).textTheme.displayLarge?.copyWith(
-                      fontSize: 16,
-                      color: color,
-                      fontWeight: FontWeight.bold,
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: color, width: 3)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          color.withValues(alpha: 0.2),
+                          color.withValues(alpha: 0.08),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: color, size: 13),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    sub,
-                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                          fontSize: 9,
-                          color: isDark ? Colors.white38 : Colors.black45,
-                        ),
-                    overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 10),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                    letterSpacing: -0.3,
                   ),
                 ),
-                const SizedBox(width: 4),
-                Icon(LucideIcons.externalLink, size: 8, color: color),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      sub,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isDark ? Colors.white38 : AppColors.textSecondaryLight,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (onTap != null) ...[
+                    const SizedBox(width: 4),
+                    Icon(LucideIcons.externalLink, size: 9, color: color),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -742,6 +724,10 @@ class _FinancialListView extends StatelessWidget {
   }
 
   Widget _vehicleCard(BuildContext ctx, VehicleData v, int index, bool isDark) {
+    // Veículo sem dados de financiamento (ex: frota própria sem contrato ativo)
+    if (v.financiamento == null) {
+      return _vehicleCardSemFinanciamento(ctx, v, index, isDark);
+    }
     final f = v.financiamento!;
     final saldoMensal = f.recebimentoMensal - f.valorParcela;
     // Quitado = sem parcela mensal (veículo próprio ou financiamento encerrado)
@@ -765,14 +751,6 @@ class _FinancialListView extends StatelessWidget {
     final int mesesLocacaoRestantes = f.locacaoRestantes;
     final bool isRenovacaoProxima = f.recebimentoMensal > 0 && mesesLocacaoRestantes <= 3;
     final String mesAnoAtual = "${_monthName(DateTime.now().month)}/${DateTime.now().year}";
-
-    final Color progressColor = isQuitado
-        ? AppColors.statusSuccess
-        : (progresso >= 0.8
-            ? AppColors.statusSuccess
-            : progresso >= 0.4
-                ? AppColors.atrOrange
-                : AppColors.statusError);
 
     return BentoCard(
       animationDelay: 300 + (index * 80),
@@ -849,53 +827,51 @@ class _FinancialListView extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             // Progresso de Recebimentos (Locação)
-            if (f.recebimentoMensal > 0) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Locação',
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: isDark ? Colors.white70 : Colors.black87)),
-                  Text(
-                    '${(progressoLoc * 100).toStringAsFixed(0)}%'
-                    '  (${f.mesesLocacaoPagos}/${f.mesesLocacaoTotais}) - $mesAnoAtual',
-                    style: const TextStyle(
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Locação',
+                    style: TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.statusSuccess),
+                        color: isDark ? Colors.white70 : Colors.black87)),
+                Text(
+                  '${(progressoLoc * 100).toStringAsFixed(0)}%'
+                  '  (${f.mesesLocacaoPagos}/${f.mesesLocacaoTotais}) - $mesAnoAtual',
+                  style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.statusSuccess),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progressoLoc,
+                minHeight: 4,
+                backgroundColor: isDark ? AppColors.borderDark : AppColors.borderLight,
+                valueColor: const AlwaysStoppedAnimation(AppColors.statusSuccess),
+              ),
+            ),
+            if (isRenovacaoProxima) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(LucideIcons.alertTriangle, size: 10, color: AppColors.statusWarning),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Faltam $mesesLocacaoRestantes parcelas para acabar os lançamentos',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: AppColors.statusWarning,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progressoLoc,
-                  minHeight: 4,
-                  backgroundColor: isDark ? AppColors.borderDark : AppColors.borderLight,
-                  valueColor: const AlwaysStoppedAnimation(AppColors.statusSuccess),
-                ),
-              ),
-              if (isRenovacaoProxima) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(LucideIcons.alertTriangle, size: 10, color: AppColors.statusWarning),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Faltam $mesesLocacaoRestantes parcelas para acabar os lançamentos',
-                      style: const TextStyle(
-                        fontSize: 9, 
-                        color: AppColors.statusWarning,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 8),
             ],
+            const SizedBox(height: 8),
 
             // Progresso de Pagamentos (Financiamento)
             Row(
@@ -934,18 +910,124 @@ class _FinancialListView extends StatelessWidget {
             const SizedBox(height: 4),
             _rowInfo(
               'Recebido/mês',
-              f.recebimentoMensal > 0
-                  ? formatCurrency(f.recebimentoMensal)
-                  : '—',
+              formatCurrency(f.recebimentoMensal),
+              AppColors.statusSuccess,
+            ),
+            const SizedBox(height: 4),
+            _rowInfo(
+              'Total Recebido',
+              formatCurrency(f.totalRecebido),
               AppColors.statusSuccess,
             ),
             const SizedBox(height: 4),
             _rowInfo(
               'Saldo mensal',
-              f.recebimentoMensal > 0
-                  ? formatCurrency(saldoMensal)
-                  : '—',
+              formatCurrency(saldoMensal),
               saldoMensal >= 0 ? AppColors.statusSuccess : AppColors.statusError,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _vehicleCardSemFinanciamento(
+      BuildContext ctx, VehicleData v, int index, bool isDark) {
+    final manutencaoCusto = v.custoTotalManutencao;
+    return BentoCard(
+      animationDelay: 300 + (index * 80),
+      onTap: () => ctx.go('/financial-admin/${v.placa}'),
+      padding: EdgeInsets.zero,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: AppColors.statusInfo, width: 3),
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [v.cor1, v.cor2]),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(LucideIcons.car,
+                      color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        v.placa,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      Text(
+                        v.nome,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? Colors.white38
+                              : AppColors.textSecondaryLight,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.statusInfo.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Frota',
+                    style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.statusInfo),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Manutenção total',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: isDark ? Colors.white70 : Colors.black87)),
+                Text(
+                  formatCurrency(manutencaoCusto),
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.statusError),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(LucideIcons.info, size: 10, color: AppColors.textSecondaryLight),
+                const SizedBox(width: 4),
+                Text(
+                  'Sem dados de financiamento no sistema',
+                  style: TextStyle(
+                      fontSize: 9,
+                      color: isDark ? Colors.white38 : AppColors.textSecondaryLight),
+                ),
+              ],
             ),
           ],
         ),
@@ -1288,8 +1370,26 @@ class _DetailViewState extends State<_DetailView> {
   @override
   Widget build(BuildContext context) {
     final v = widget.veiculo;
-    final f = v.financiamento!;
+    final f = v.financiamento;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Veículo sem dados de financiamento: visão simplificada
+    if (f == null) {
+      return Scaffold(
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _headerSemFinanciamento(context, v),
+              const SizedBox(height: 32),
+              _maintenanceCard(context, v, isDark),
+            ],
+          ),
+        ),
+      );
+    }
+
     final lucro =
         f.totalRecebido - f.totalPago - f.valorEntrada - v.custoTotalManutencao;
 
@@ -1448,6 +1548,119 @@ class _DetailViewState extends State<_DetailView> {
           type: f.progressoFinanciamento > 0.7
               ? BadgeType.success
               : BadgeType.info,
+        ),
+      ],
+    );
+  }
+
+  Widget _headerSemFinanciamento(BuildContext ctx, VehicleData v) {
+    return Row(
+      children: [
+        InkWell(
+          onTap: () => ctx.go('/financial-admin'),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Theme.of(ctx).colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Theme.of(ctx).dividerTheme.color!),
+            ),
+            child: const Icon(LucideIcons.arrowLeft, size: 18),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [v.cor1, v.cor2]),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(LucideIcons.car, color: Colors.white, size: 22),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      v.nome,
+                      style: Theme.of(ctx)
+                          .textTheme
+                          .displayLarge
+                          ?.copyWith(fontSize: 22),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Theme.of(ctx).dividerTheme.color!,
+                      ),
+                    ),
+                    child: Text(
+                      v.placa,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(
+                    LucideIcons.user,
+                    size: 13,
+                    color: AppColors.textSecondaryLight,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(v.motorista, style: Theme.of(ctx).textTheme.bodyMedium),
+                  const SizedBox(width: 16),
+                  const Icon(
+                    LucideIcons.gauge,
+                    size: 13,
+                    color: AppColors.textSecondaryLight,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    formatKm(v.kmAtual),
+                    style: Theme.of(ctx).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.statusInfo.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.statusInfo.withValues(alpha: 0.2),
+            ),
+          ),
+          child: const Text(
+            'Sem financiamento',
+            style: TextStyle(
+              color: AppColors.statusInfo,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       ],
     );
@@ -2048,7 +2261,8 @@ class _DetailViewState extends State<_DetailView> {
       );
 
   Widget _installmentTimeline(BuildContext ctx, VehicleData v, bool isDark) {
-    final f = v.financiamento!;
+    final f = v.financiamento;
+    if (f == null) return const SizedBox.shrink();
     return Column(
       children: [
         if (f.recebimentoMensal > 0) ...[
