@@ -200,7 +200,7 @@ class VehicleData {
   double get custoTotalGastosNaoCiclicos =>
       gastosNaoCiclicos.fold(0.0, (s, e) => s + e.valor);
   double get gastoTotalVeiculoKpi =>
-      custoTotalManutencao + custoTotalGastosNaoCiclicos;
+      custoTotalManutencao + custoTotalGastosNaoCiclicos + (financiamento?.totalPago ?? 0);
   double get kmParaProxRevisao => 10000 - (kmAtual % 10000);
 
   DateTime? get dataPrimeiroRecebimento {
@@ -228,7 +228,7 @@ class VehicleData {
   double get receitaTotalAcumulada =>
       mesesEmServico * (financiamento?.recebimentoMensal ?? 2000.0);
   double get custoTotalAcumulado =>
-      custoTotalManutencao + (financiamento?.totalPago ?? 0);
+      custoTotalManutencao + custoTotalGastosNaoCiclicos + (financiamento?.totalPago ?? 0);
   double get lucroAbsoluto => receitaTotalAcumulada - custoTotalAcumulado;
   double get roi {
     if (valorAquisicao <= 0) return 0;

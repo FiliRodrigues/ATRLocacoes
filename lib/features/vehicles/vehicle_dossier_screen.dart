@@ -249,6 +249,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
     final totalIpva = _sumByCategoria(v, 'IPVA');
     final totalSeguro = _sumByCategoria(v, 'Seguro');
     final totalMultas = _sumByCategoria(v, 'Multa');
+    final totalParcelas = v.financiamento?.totalPago ?? 0;
     final lucroColor = v.lucroPrejuizoAteAgora >= 0
         ? AppColors.statusSuccess
         : AppColors.statusError;
@@ -296,7 +297,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
               context,
                 'Gasto Total Veículo',
                 formatCurrency(v.gastoTotalVeiculoKpi),
-                'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Multas ${formatCurrency(totalMultas)}',
+                'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Parcelas ${formatCurrency(totalParcelas)}',
                 LucideIcons.wallet,
                 AppColors.atrOrange,
               300,
@@ -350,7 +351,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
                 context,
               'Gasto Total Veículo',
               formatCurrency(v.gastoTotalVeiculoKpi),
-              'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Multas ${formatCurrency(totalMultas)}',
+              'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Parcelas ${formatCurrency(totalParcelas)}',
               LucideIcons.wallet,
               AppColors.atrOrange,
                 300,
