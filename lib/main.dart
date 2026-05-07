@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -10,13 +11,19 @@ import 'core/navigation/app_router.dart';
 import 'core/data/fleet_data.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/supabase_service.dart';
+import 'core/constants.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/atr_theme_state.dart';
 import 'features/custos/custos_provider.dart';
 import 'core/data/supabase_custos_repository.dart';
+import 'core/data/regras_manutencao_repository.dart';
+import 'core/providers/regras_manutencao_provider.dart';
 import 'core/utils/error_tracker.dart';
 import 'core/data/locacao_repository.dart';
 import 'features/locacao/locacao_provider.dart';
+import 'core/data/combustivel_repository.dart';
+import 'core/providers/combustivel_provider.dart';
+import 'core/providers/score_motorista_provider.dart';
 
 export 'core/services/auth_service.dart' show AuthService;
 
@@ -36,14 +43,27 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('pt_BR');
 
+  // Fail-fast (P004): nunca rodar com URL/anon-key implícitas no código.
+  if (!kSupabaseConfigured) {
+    throw StateError(
+      'SUPABASE_URL e SUPABASE_ANON_KEY são obrigatórias. '
+      'Forneça-as via --dart-define no build/run (ex.: run_atr.local.bat).',
+    );
+  }
+
   // Inicializa o cliente Supabase
   await Supabase.initialize(
     url: kSupabaseUrl,
     anonKey: kSupabaseAnonKey,
   );
 
-  // Carrega a frota real em background (não bloqueia o app)
-  FleetRepository.instance.loadFromSupabase();
+  // RLS agora usa JWT (claim `tenant_id` em app_metadata). Não é mais
+  // necessário chamar set_app_tenant — o tenant viaja em todo request
+  // via Authorization: Bearer <jwt>. Migração 017.
+
+  // Carrega a frota em background — o app abre instantaneamente
+  // e as telas reagem ao estado isLoading do FleetRepository.
+  unawaited(FleetRepository.instance.loadFromSupabase());
 
   // ══════════════════════════════════════════════════════════════════
   // SISTEMA GLOBAL DE BLINDAGEM DE ERROS (Failsafe)
@@ -97,7 +117,19 @@ void main() async {
           create: (_) => CustosProvider(SupabaseCustosRepository()),
         ),
         ChangeNotifierProvider(
+          create: (ctx) => RegrasManutencaoProvider(
+            repo: RegrasManutencaoRepository(),
+            custosProvider: ctx.read<CustosProvider>(),
+          ),
+        ),
+        ChangeNotifierProvider(
           create: (_) => LocacaoProvider(LocacaoRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => CombustivelProvider(CombustivelRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ScoreMotoristaProvider(),
         ),
         ChangeNotifierProvider.value(value: FleetRepository.instance),
         ChangeNotifierProvider.value(value: authService),

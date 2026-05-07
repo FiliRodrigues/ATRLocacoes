@@ -82,6 +82,17 @@ if (-not $env:ATR_LOGIN_PASS) {
     throw 'ATR_LOGIN_PASS nao definido. Ajuste run_atr.local.bat antes de abrir o app.'
 }
 
+$supabaseArgs = @()
+if ($env:SUPABASE_URL) {
+    $supabaseArgs += "--dart-define=SUPABASE_URL=$($env:SUPABASE_URL)"
+}
+if ($env:SUPABASE_ANON_KEY) {
+    $supabaseArgs += "--dart-define=SUPABASE_ANON_KEY=$($env:SUPABASE_ANON_KEY)"
+}
+if ($env:SUPABASE_SERVICE_ROLE_KEY) {
+    Write-Warning 'SUPABASE_SERVICE_ROLE_KEY detectada no ambiente. Nao use service role no app Flutter/Desktop cliente.'
+}
+
 $flutterCmd = Resolve-FlutterCommand
 $exePath = Join-Path $projectRoot 'build\windows\x64\runner\Release\ATR.exe'
 $legacyExePath = Join-Path $projectRoot 'build\windows\x64\runner\Release\fleet_app.exe'
@@ -123,9 +134,8 @@ if (-not (Test-Path $exePath)) {
 
     Write-Host "Compilando ATR pela primeira vez, aguarde..."
     & $flutterCmd build windows --release `
-        --dart-define=ATR_LOGIN_USER=$env:ATR_LOGIN_USER `
-        --dart-define=ATR_LOGIN_PASS=$env:ATR_LOGIN_PASS `
-        --dart-define=ATR_DEV_QUICK_LOGIN=$env:ATR_DEV_QUICK_LOGIN
+        --dart-define=ATR_DEV_QUICK_LOGIN=$env:ATR_DEV_QUICK_LOGIN `
+        @supabaseArgs
     if ($LASTEXITCODE -ne 0) {
         throw 'Falha ao gerar a versao Windows do ATR.'
     }
@@ -147,9 +157,8 @@ if ($needsBuild) {
 
     Write-Host 'Atualizacoes detectadas. Recompilando ATR Desktop antes de abrir...'
     & $flutterCmd build windows --release `
-        --dart-define=ATR_LOGIN_USER=$env:ATR_LOGIN_USER `
-        --dart-define=ATR_LOGIN_PASS=$env:ATR_LOGIN_PASS `
-        --dart-define=ATR_DEV_QUICK_LOGIN=$env:ATR_DEV_QUICK_LOGIN
+        --dart-define=ATR_DEV_QUICK_LOGIN=$env:ATR_DEV_QUICK_LOGIN `
+        @supabaseArgs
     if ($LASTEXITCODE -ne 0) {
         throw 'Falha ao atualizar a versao Windows do ATR.'
     }
