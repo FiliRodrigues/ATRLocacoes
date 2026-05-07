@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/fleet_data.dart';
 import '../data/custos_models.dart';
 import '../data/regras_manutencao_models.dart';
@@ -24,6 +26,12 @@ class RegrasManutencaoProvider extends ChangeNotifier {
         _custos = custosProvider {
     _init();
     FleetRepository.instance.addListener(_onFrotaUpdated);
+    // Recarrega dados se o primeiro load foi bloqueado pela RLS (anon)
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn) {
+        _reloadFromSupabase();
+      }
+    });
   }
 
   final RegrasManutencaoRepository _repo;
@@ -42,11 +50,17 @@ class RegrasManutencaoProvider extends ChangeNotifier {
   // INIT / LIFECYCLE
   // ─────────────────────────────────────────────────────────────────
 
+  Future<void> _reloadFromSupabase() async {
+    if (_disposed) return;
+    _loading = true;
+    _safeNotify();
+    await _init();
+  }
+
   Future<void> _init() async {
     _regras = await _repo.fetchAll();
     _loading = false;
     _safeNotify();
-    // Verifica se há OS a gerar após carregar as regras
     if (FleetRepository.instance.frota.isNotEmpty) {
       await checkAndSchedule();
     }

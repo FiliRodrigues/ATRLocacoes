@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/data/locacao_models.dart';
 import '../../core/data/locacao_repository.dart';
 import '../../core/services/audit_service.dart';
@@ -10,6 +12,12 @@ import '../../core/utils/app_logger.dart';
 class LocacaoProvider extends ChangeNotifier {
   LocacaoProvider(this._repo) {
     _init();
+    // Recarrega dados se o primeiro load foi bloqueado pela RLS (anon)
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn) {
+        _reloadFromSupabase();
+      }
+    });
   }
 
   final LocacaoRepository _repo;
@@ -206,6 +214,13 @@ class LocacaoProvider extends ChangeNotifier {
   // ════════════════════════════════════════════════════
   // INTERNOS
   // ════════════════════════════════════════════════════
+
+  Future<void> _reloadFromSupabase() async {
+    if (_disposed) return;
+    _loading = true;
+    _safeNotify();
+    await _init();
+  }
 
   Future<void> _init() async {
     try {

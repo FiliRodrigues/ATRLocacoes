@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../enums/vehicle_status.dart';
 import '../enums/cnh_status.dart';
 import '../enums/alert_type.dart';
@@ -364,7 +366,16 @@ List<VehicleData> get veiculosFinanciados =>
     FleetRepository.instance.veiculosFinanciados;
 
 class FleetRepository extends ChangeNotifier {
-  FleetRepository._();
+  FleetRepository._() {
+    // Recarrega frota sempre que o utilizador faz login,
+    // porque o primeiro load (antes do auth) é bloqueado pela RLS.
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.tokenRefreshed) {
+        unawaited(loadFromSupabase());
+      }
+    });
+  }
 
   static final FleetRepository instance = FleetRepository._();
 
