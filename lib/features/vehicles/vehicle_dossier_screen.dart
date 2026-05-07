@@ -248,8 +248,10 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
   Widget _buildKPIs(BuildContext context, VehicleData v, double width) {
     final totalIpva = _sumByCategoria(v, 'IPVA');
     final totalSeguro = _sumByCategoria(v, 'Seguro');
-    final totalMultas = _sumByCategoria(v, 'Multa');
     final totalParcelas = v.financiamento?.totalPago ?? 0;
+    final parcelasInfo = v.financiamento != null
+        ? '${v.financiamento!.parcelasPagas}/${v.financiamento!.totalParcelas} parc. | ${formatCurrency(v.financiamento!.valorParcela)}/mês'
+        : 'Sem financiamento';
     final lucroColor = v.lucroPrejuizoAteAgora >= 0
         ? AppColors.statusSuccess
         : AppColors.statusError;
@@ -264,44 +266,20 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
         spacing: 20,
         runSpacing: 20,
         children: [
-          _kpi(
-              context,
-              'KM Rodados',
-              formatKm(v.kmAtual),
-              '${v.kmPorMes.toInt()} km/mês',
-              LucideIcons.gauge,
-              AppColors.statusInfo,
-              0,
-              width,),
-              _kpi(
-                context,
-                '$lucroLabel até Agora',
-                formatCurrency(v.lucroPrejuizoAteAgora),
-                'Recebe desde $primeiroReceb | Gasta desde $primeiroGasto',
-                v.lucroPrejuizoAteAgora >= 0
-                  ? LucideIcons.trendingUp
-                  : LucideIcons.trendingDown,
-                lucroColor,
-                100,
-                width,),
-          _kpi(
-              context,
-              'Custo Manutenção',
-              formatCurrency(v.custoTotalManutencao),
-                '${v.totalRevisoes} revisões | Próx. revisão em ${formatKm(v.kmParaProxRevisao)}',
-              LucideIcons.receipt,
-              AppColors.statusError,
-              200,
-              width,),
-          _kpi(
-              context,
-                'Gasto Total Veículo',
-                formatCurrency(v.gastoTotalVeiculoKpi),
-                'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Parcelas ${formatCurrency(totalParcelas)}',
-                LucideIcons.wallet,
-                AppColors.atrOrange,
-              300,
-              width,),
+          _kpi(context, 'KM Rodados', formatKm(v.kmAtual),
+              '${v.kmPorMes.toInt()} km/mês', LucideIcons.gauge, AppColors.statusInfo, 0, width),
+          _kpi(context, 'Valor Pago', formatCurrency(totalParcelas), parcelasInfo,
+              LucideIcons.landmark, AppColors.statusWarning, 50, width),
+          _kpi(context, 'Custo Manutenção', formatCurrency(v.custoTotalManutencao),
+              '${v.totalRevisoes} revisões | Próx. ${formatKm(v.kmParaProxRevisao)}',
+              LucideIcons.receipt, AppColors.statusError, 100, width),
+          _kpi(context, 'Gasto Total Veículo', formatCurrency(v.gastoTotalVeiculoKpi),
+              'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Parcelas ${formatCurrency(totalParcelas)}',
+              LucideIcons.wallet, AppColors.atrOrange, 150, width),
+          _kpi(context, '$lucroLabel até Agora', formatCurrency(v.lucroPrejuizoAteAgora),
+              'Recebe desde $primeiroReceb | Gasta desde $primeiroGasto',
+              v.lucroPrejuizoAteAgora >= 0 ? LucideIcons.trendingUp : LucideIcons.trendingDown,
+              lucroColor, 200, width),
         ],
       );
     }
@@ -309,54 +287,33 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
     return Row(
       children: [
         Expanded(
-            child: _kpi(
-                context,
-                'KM Rodados',
-                formatKm(v.kmAtual),
-                '${v.kmPorMes.toInt()} km/mês',
-                LucideIcons.gauge,
-                AppColors.statusInfo,
-                0,
-                width,
-                useExpanded: true,),),
-        const SizedBox(width: 20),
+            child: _kpi(context, 'KM Rodados', formatKm(v.kmAtual),
+                '${v.kmPorMes.toInt()} km/mês', LucideIcons.gauge, AppColors.statusInfo, 0, width,
+                useExpanded: true)),
+        const SizedBox(width: 16),
         Expanded(
-            child: _kpi(
-                context,
-            '$lucroLabel até Agora',
-            formatCurrency(v.lucroPrejuizoAteAgora),
-            'Recebe desde $primeiroReceb | Gasta desde $primeiroGasto',
-            v.lucroPrejuizoAteAgora >= 0
-              ? LucideIcons.trendingUp
-              : LucideIcons.trendingDown,
-            lucroColor,
-                100,
-                width,
-                useExpanded: true,),),
-        const SizedBox(width: 20),
+            child: _kpi(context, 'Valor Pago', formatCurrency(totalParcelas), parcelasInfo,
+                LucideIcons.landmark, AppColors.statusWarning, 50, width,
+                useExpanded: true)),
+        const SizedBox(width: 16),
         Expanded(
-            child: _kpi(
-                context,
-                'Custo Manutenção',
-                formatCurrency(v.custoTotalManutencao),
-                '${v.totalRevisoes} revisões | Próx. revisão em ${formatKm(v.kmParaProxRevisao)}',
-                LucideIcons.receipt,
-                AppColors.statusError,
-                200,
-                width,
-                useExpanded: true,),),
-        const SizedBox(width: 20),
+            child: _kpi(context, 'Custo Manutenção', formatCurrency(v.custoTotalManutencao),
+                '${v.totalRevisoes} revisões | Próx. ${formatKm(v.kmParaProxRevisao)}',
+                LucideIcons.receipt, AppColors.statusError, 100, width,
+                useExpanded: true)),
+        const SizedBox(width: 16),
         Expanded(
-            child: _kpi(
-                context,
-              'Gasto Total Veículo',
-              formatCurrency(v.gastoTotalVeiculoKpi),
-              'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Parcelas ${formatCurrency(totalParcelas)}',
-              LucideIcons.wallet,
-              AppColors.atrOrange,
-                300,
-                width,
-                useExpanded: true,),),
+            child: _kpi(context, 'Gasto Total Veículo', formatCurrency(v.gastoTotalVeiculoKpi),
+                'IPVA ${formatCurrency(totalIpva)} | Seguro ${formatCurrency(totalSeguro)} | Parcelas ${formatCurrency(totalParcelas)}',
+                LucideIcons.wallet, AppColors.atrOrange, 150, width,
+                useExpanded: true)),
+        const SizedBox(width: 16),
+        Expanded(
+            child: _kpi(context, '$lucroLabel até Agora', formatCurrency(v.lucroPrejuizoAteAgora),
+                'Recebe desde $primeiroReceb | Gasta desde $primeiroGasto',
+                v.lucroPrejuizoAteAgora >= 0 ? LucideIcons.trendingUp : LucideIcons.trendingDown,
+                lucroColor, 200, width,
+                useExpanded: true)),
       ],
     );
   }
