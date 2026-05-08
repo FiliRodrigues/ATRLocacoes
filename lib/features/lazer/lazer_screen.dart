@@ -1,9 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
 import '../../core/data/lazer_data.dart';
 import '../../core/widgets/bookable_area_shared.dart';
 
@@ -32,7 +33,7 @@ class _LazerScreenState extends State<LazerScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      body: Container(
+      body: AtrPageBackground(grid: true, child: Container(
         decoration: BoxDecoration(
           gradient: isDark
               ? const LinearGradient(
@@ -87,7 +88,7 @@ class _LazerScreenState extends State<LazerScreen> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 }
@@ -319,7 +320,7 @@ class _ReservaRow extends StatelessWidget {
             child: Text(
               dateFmt.format(reserva.data),
               style: TextStyle(
-                color: isDark ? Colors.white70 : AppColors.textSecondaryLight,
+                color: isDark ? AppColors.textPrimaryDark : AppColors.textSecondaryLight,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -523,7 +524,7 @@ class _DespesasTable extends StatelessWidget {
                       DateFormat('dd/MM/yy').format(d.data),
                       style: TextStyle(
                         color: isDark
-                            ? Colors.white70
+                            ? AppColors.textPrimaryDark
                             : AppColors.textSecondaryLight,
                         fontSize: 12,
                       ),
@@ -664,7 +665,7 @@ class _LazerAgendamentosState extends State<_LazerAgendamentos> {
               Text(
                 'Status:',
                 style: TextStyle(
-                  color: isDark ? Colors.white70 : AppColors.textSecondaryLight,
+                  color: isDark ? AppColors.textPrimaryDark : AppColors.textSecondaryLight,
                   fontSize: 13,
                 ),
               ),
@@ -765,7 +766,7 @@ class _ReservasTable extends StatelessWidget {
                       dateFmt.format(r.data),
                       style: TextStyle(
                         color: isDark
-                            ? Colors.white70
+                            ? AppColors.textPrimaryDark
                             : AppColors.textSecondaryLight,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

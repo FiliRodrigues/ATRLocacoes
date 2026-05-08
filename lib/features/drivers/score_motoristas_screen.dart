@@ -6,6 +6,8 @@ import '../../core/data/score_motorista_models.dart';
 import '../../core/enums/cnh_status.dart';
 import '../../core/providers/score_motorista_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -29,57 +31,42 @@ class ScoreMotoristaScreen extends StatelessWidget {
 
     return AppSidebar(
       child: Scaffold(
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(32, 32, 32, 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(context, isDark),
-                const SizedBox(height: 20),
-                _buildResumo(isDark, nExcelente, nBom, nRegular, nCritico),
-                const SizedBox(height: 24),
-                if (fleet.isLoading)
-                  const Expanded(child: Center(child: CircularProgressIndicator()))
-                else if (scores.isEmpty)
-                  _buildEmpty(isDark)
-                else
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: scores.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) => _ScoreCard(
-                        score: scores[i],
-                        posicao: i + 1,
-                        isDark: isDark,
+        body: AtrPageBackground(
+          grid: true,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(32, 32, 32, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const AtrTopBar(
+                    title: 'Score de Motoristas',
+                    subtitle: 'Ranking por desempenho e conformidade',
+                  ),
+                  _buildResumo(isDark, nExcelente, nBom, nRegular, nCritico),
+                  const SizedBox(height: 24),
+                  if (fleet.isLoading)
+                    const Expanded(child: Center(child: CircularProgressIndicator()))
+                  else if (scores.isEmpty)
+                    _buildEmpty(isDark)
+                  else
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: scores.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (_, i) => _ScoreCard(
+                          score: scores[i],
+                          posicao: i + 1,
+                          isDark: isDark,
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Score de Motoristas',
-          style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Ranking por desempenho e conformidade',
-          style: TextStyle(
-            fontSize: 14,
-            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-          ),
-        ),
-      ],
     );
   }
 
@@ -110,7 +97,7 @@ class ScoreMotoristaScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white54 : Colors.black54,
+                color: isDark ? AppColors.textSecondaryDark : Colors.black54,
               ),
             ),
           ],

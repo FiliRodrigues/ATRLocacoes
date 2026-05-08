@@ -4,7 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
+import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/bento_card.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/data/custos_models.dart';
@@ -81,19 +84,68 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
 
     return AppSidebar(
       child: Scaffold(
-        backgroundColor:
-            isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-        body: Column(
+        body: AtrPageBackground(
+          grid: true,
+          child: Column(
           children: [
-            // ── Header customizado ──
-            _buildTopHeader(context, isDark),
+            // ── Header ──
+            Builder(builder: (ctx) {
+              final frota = context.read<FleetRepository>().frota;
+              final pendentes = frota
+                  .where((v) => !_foiAtualizadoNaSemana(v.ultimaAtualizacaoKm))
+                  .length;
+              return AtrTopBar(
+                title: 'Controle de Frota',
+                subtitle: 'Semana fecha em $_diasRestantesSemana dia(s)',
+                actions: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: pendentes > 0
+                          ? AppColors.statusWarning.withValues(alpha: 0.12)
+                          : AppColors.statusSuccess.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: pendentes > 0
+                            ? AppColors.statusWarning.withValues(alpha: 0.3)
+                            : AppColors.statusSuccess.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          pendentes > 0
+                              ? LucideIcons.alertTriangle
+                              : LucideIcons.checkCircle2,
+                          size: 16,
+                          color: pendentes > 0
+                              ? AppColors.statusWarning
+                              : AppColors.statusSuccess,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          pendentes > 0 ? '$pendentes pendente(s)' : 'Tudo atualizado!',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: pendentes > 0
+                                ? AppColors.statusWarning
+                                : AppColors.statusSuccess,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ).animate().fadeIn(duration: 400.ms).moveY(begin: -8, end: 0);
+            }),
             // ── TabBar ──
             Container(
               color: isDark ? AppColors.atrNavyDarker : Colors.white,
               child: TabBar(
                 controller: _tabController,
                 labelColor: AppColors.atrOrange,
-                unselectedLabelColor: isDark ? Colors.white54 : Colors.black54,
+                unselectedLabelColor: isDark ? AppColors.textSecondaryDark : Colors.black54,
                 indicatorColor: AppColors.atrOrange,
                 indicatorWeight: 3,
                 labelStyle: const TextStyle(
@@ -129,114 +181,9 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // HEADER
-  // ─────────────────────────────────────────────────────────
-  Widget _buildTopHeader(BuildContext context, bool isDark) {
-    final frota = context.read<FleetRepository>().frota;
-    final pendentes = frota
-        .where((v) => !_foiAtualizadoNaSemana(v.ultimaAtualizacaoKm))
-        .length;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(32, 28, 32, 16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.atrNavyDarker : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
         ),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.atrOrange.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(
-              LucideIcons.truck,
-              color: AppColors.atrOrange,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Controle de Frota',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.3,
-                      ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Semana fecha em $_diasRestantesSemana dia(s)',
-                  style: TextStyle(
-                    color: isDark ? Colors.white54 : Colors.black54,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Badge de pendências
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 8,
-            ),
-            decoration: BoxDecoration(
-              color: pendentes > 0
-                  ? AppColors.statusWarning.withValues(alpha: 0.12)
-                  : AppColors.statusSuccess.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: pendentes > 0
-                    ? AppColors.statusWarning.withValues(alpha: 0.3)
-                    : AppColors.statusSuccess.withValues(alpha: 0.3),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  pendentes > 0
-                      ? LucideIcons.alertTriangle
-                      : LucideIcons.checkCircle2,
-                  size: 16,
-                  color: pendentes > 0
-                      ? AppColors.statusWarning
-                      : AppColors.statusSuccess,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  pendentes > 0 ? '$pendentes pendente(s)' : 'Tudo atualizado!',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    color: pendentes > 0
-                        ? AppColors.statusWarning
-                        : AppColors.statusSuccess,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 400.ms).moveY(begin: -8, end: 0);
+    );
   }
 
   // ─────────────────────────────────────────────────────────
@@ -318,9 +265,8 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                       const SizedBox(height: 4),
                       Text(
                         'Motorista: ${v.motorista}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white54 : Colors.black54,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                         ),
                       ),
                     ],
@@ -339,27 +285,10 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                     ),
                     const SizedBox(height: 8),
                     if (!atualizado)
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.atrOrange,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
+                      AtrPrimaryButton(
+                        label: 'Atualizar KM',
+                        icon: LucideIcons.edit2,
                         onPressed: () => _showUpdateKmDialog(v),
-                        icon: const Icon(LucideIcons.edit2, size: 14),
-                        label: const Text(
-                          'Atualizar KM',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        ),
                       )
                     else
                       Container(
@@ -487,20 +416,14 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
           ),
         ),
         actions: [
-          TextButton(
+          AtrGhostButton(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.atrOrange,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
+          const SizedBox(width: 8),
+          AtrPrimaryButton(
+            label: 'Confirmar',
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirmar'),
           ),
         ],
       ),
@@ -640,11 +563,10 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                         hasFilters
                             ? '${despesas.length} resultado(s) filtrado(s)'
                             : 'Lance os gastos com revisões, peças e serviços.',
-                        style: TextStyle(
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: hasFilters
                               ? AppColors.atrOrange
-                              : (isDark ? Colors.white54 : Colors.black54),
-                          fontSize: 12,
+                              : (isDark ? AppColors.textSecondaryDark : Colors.black54),
                           fontWeight: hasFilters
                               ? FontWeight.w600
                               : FontWeight.normal,
@@ -654,24 +576,10 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                   ),
                 ],
               ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.atrOrange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+              AtrPrimaryButton(
+                label: 'Novo Lançamento',
+                icon: LucideIcons.plus,
                 onPressed: () => _lancarNovaDespesa(tipo: 'Manutenção'),
-                icon: const Icon(LucideIcons.plus, size: 18),
-                label: const Text(
-                  'Novo Lançamento',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
               ),
             ],
           ),
@@ -712,24 +620,14 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                 ),
                 if (hasFilters) ...[
                   const SizedBox(width: 8),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.statusError,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
+                  AtrGhostButton(
+                    label: 'Limpar filtros',
+                    icon: LucideIcons.x,
                     onPressed: () => setState(() {
                       _filtroVeiculoPlaca = null;
                       _filtroTipoDespesa = null;
                       _filtroMesDespesa = null;
                     }),
-                    icon: const Icon(LucideIcons.x, size: 14),
-                    label: const Text(
-                      'Limpar filtros',
-                      style: TextStyle(fontSize: 12),
-                    ),
                   ),
                 ],
               ],
@@ -906,33 +804,18 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                       ),
                       Text(
                         subtitle,
-                        style: TextStyle(
-                          color: isDark ? Colors.white54 : Colors.black54,
-                          fontSize: 12,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.atrOrange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+              AtrPrimaryButton(
+                label: 'Novo Lançamento',
+                icon: LucideIcons.plus,
                 onPressed: onLancar,
-                icon: const Icon(LucideIcons.plus, size: 18),
-                label: const Text(
-                  'Novo Lançamento',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
               ),
             ],
           ),

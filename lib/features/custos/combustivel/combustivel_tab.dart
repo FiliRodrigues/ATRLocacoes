@@ -8,6 +8,7 @@ import '../../../core/data/fleet_data.dart';
 import '../../../core/providers/combustivel_provider.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/atr_button.dart';
 import '../../../core/widgets/bento_card.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -40,11 +41,10 @@ class CombustivelTab extends StatelessWidget {
           children: [
             Expanded(child: _buildKpiHeader(isDark, totalMes, totalGeral, totalLitros)),
             const SizedBox(width: 16),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.atrOrange),
+            AtrPrimaryButton(
+              label: 'Registrar',
+              icon: LucideIcons.plus,
               onPressed: () => _showForm(context, fleet),
-              icon: const Icon(LucideIcons.plus, size: 16),
-              label: const Text('Registrar'),
             ),
           ],
         ),
@@ -62,7 +62,7 @@ class CombustivelTab extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 15,
-                color: isDark ? Colors.white70 : Colors.black87,
+                color: isDark ? AppColors.textPrimaryDark : Colors.black87,
               ),
             ),
             const SizedBox(height: 10),
@@ -86,7 +86,7 @@ class CombustivelTab extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 15,
-                  color: isDark ? Colors.white70 : Colors.black87,
+                  color: isDark ? AppColors.textPrimaryDark : Colors.black87,
                 ),
               ),
               const Spacer(),
@@ -163,7 +163,7 @@ class CombustivelTab extends StatelessWidget {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white54 : Colors.black54,
+                color: isDark ? AppColors.textSecondaryDark : Colors.black54,
               ),
             ),
             const SizedBox(height: 6),
@@ -366,7 +366,7 @@ class _AbastecimentoTile extends StatelessWidget {
                   '${a.posto != null ? ' · ${a.posto}' : ''}',
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? Colors.white54 : Colors.black54,
+                    color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                   ),
                 ),
               ],
@@ -628,11 +628,14 @@ class _AbastecimentoFormDialogState extends State<AbastecimentoFormDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: AppColors.atrOrange),
+        AtrGhostButton(
+          label: 'Cancelar',
+          onPressed: () => Navigator.pop(context),
+        ),
+        const SizedBox(width: 8),
+        AtrPrimaryButton(
+          label: 'Salvar',
           onPressed: _submit,
-          child: const Text('Salvar'),
         ),
       ],
     );

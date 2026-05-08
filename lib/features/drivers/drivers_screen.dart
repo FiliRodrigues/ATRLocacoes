@@ -3,9 +3,12 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/app_sidebar.dart';
+import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/bento_card.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/atr_top_bar.dart';
 import '../../core/data/fleet_data.dart';
 
 class DriversScreen extends StatefulWidget {
@@ -50,24 +53,71 @@ class _DriversScreenState extends State<DriversScreen> {
 
     return AppSidebar(
       child: Scaffold(
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildBreadcrumbs(context),
-                const SizedBox(height: 8),
-                _buildHeader(context),
-                const SizedBox(height: 32),
-                Wrap(
-                  spacing: 24,
-                  runSpacing: 24,
-                  children: filteredDrivers
-                      .map((d) => _buildDriverCard(context, d, repo))
-                      .toList(),
-                ),
-              ],
+        body: AtrPageBackground(
+          grid: true,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const AtrTopBar(
+                    title: 'Motoristas Ativos',
+                    subtitle: 'Gestão de operadores e regularidade de CNH.',
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 300),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Theme.of(context).dividerTheme.color!),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(LucideIcons.search, size: 16, color: AppColors.textSecondaryLight),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _searchCtrl,
+                                      decoration: const InputDecoration(
+                                        isDense: true,
+                                        hintText: 'Buscar motorista...',
+                                        border: InputBorder.none,
+                                        filled: false,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        AtrPrimaryButton(
+                          label: 'Novo Motorista',
+                          icon: LucideIcons.userPlus,
+                          onPressed: () => _showNewDriverDialog(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 24,
+                    runSpacing: 24,
+                    children: filteredDrivers
+                        .map((d) => _buildDriverCard(context, d, repo))
+                        .toList(),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -94,95 +144,9 @@ class _DriversScreenState extends State<DriversScreen> {
     return filtered;
   }
 
-  Widget _buildBreadcrumbs(BuildContext context) {
-    return Row(
-      children: [
-        Text('Home',
-            style: TextStyle(
-                color: AppColors.textSecondaryLight.withValues(alpha: 0.6),
-                fontSize: 12,),),
-        Icon(LucideIcons.chevronRight,
-            size: 12,
-            color: AppColors.textSecondaryLight.withValues(alpha: 0.4),),
-        const Text('Motoristas Ativos',
-            style: TextStyle(
-                color: AppColors.atrOrange,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,),),
-      ],
-    );
-  }
+  
 
-  Widget _buildHeader(BuildContext context) {
-    return Wrap(
-      spacing: 16,
-      runSpacing: 16,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Motoristas Ativos',
-                style: Theme.of(context)
-                    .textTheme
-                    .displayLarge
-                    ?.copyWith(fontSize: 28),),
-            Text('Gestão de operadores e regularidade de CNH.',
-                style: Theme.of(context).textTheme.bodyMedium,),
-          ],
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 300),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: Theme.of(context).dividerTheme.color!,),),
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.search,
-                        size: 16, color: AppColors.textSecondaryLight,),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchCtrl,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          hintText: 'Buscar motorista...',
-                          border: InputBorder.none,
-                          filled: false,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.atrOrange,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),),),
-              onPressed: () => _showNewDriverDialog(context),
-              icon: const Icon(LucideIcons.userPlus, size: 18),
-              label: const Text('Novo Motorista',
-                  style: TextStyle(fontWeight: FontWeight.bold),),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+  
 
   Widget _buildDriverCard(
       BuildContext context, DriverData d, FleetRepository repo,) {
@@ -424,15 +388,13 @@ class _DriversScreenState extends State<DriversScreen> {
                   ),
                 ),
                 actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancelar'),),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.atrOrange,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),),),
+                  AtrGhostButton(
+                    label: 'Cancelar',
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                  const SizedBox(width: 8),
+                  AtrPrimaryButton(
+                    label: 'Salvar',
                     onPressed: () {
                       final name = nameCtrl.text.trim();
                       final phone = phoneCtrl.text.trim();
@@ -462,7 +424,6 @@ class _DriversScreenState extends State<DriversScreen> {
 
                       Navigator.pop(ctx);
                     },
-                    child: const Text('Cadastrar'),
                   ),
                 ],
               ),),

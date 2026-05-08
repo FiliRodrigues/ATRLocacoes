@@ -35,14 +35,14 @@ class StatusBadge extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: isDark ? 0.12 : 0.10),
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(100),
           border: Border.all(
             color: color.withValues(alpha: isDark ? 0.25 : 0.20),
           ),
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: 0.08),
+              color: color.withValues(alpha: 0.18),
               blurRadius: 8,
             ),
           ],

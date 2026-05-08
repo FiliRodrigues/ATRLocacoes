@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/data/custos_models.dart';
 import '../../../core/data/fleet_data.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/atr_button.dart';
 
 /// Modal de formulário para criar/editar uma [DespesaItem].
 ///
@@ -450,27 +451,14 @@ class ExpenseFormModal {
                 ),
               ),
               actions: [
-                TextButton(
+                AtrGhostButton(
+                  label: 'Cancelar',
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar'),
                 ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.atrOrange,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                  ),
-                  icon: const Icon(LucideIcons.save, size: 16),
-                  label: const Text(
-                    'Salvar',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                const SizedBox(width: 8),
+                AtrPrimaryButton(
+                  label: 'Salvar',
+                  icon: LucideIcons.save,
                   onPressed: () {
                     if (!formKey.currentState!.validate()) return;
 

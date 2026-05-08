@@ -4,6 +4,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
 import '../../core/widgets/bento_card.dart';
 
@@ -78,99 +80,48 @@ class _TcoDashboardScreenState extends State<TcoDashboardScreen> {
 
     return AppSidebar(
       child: Scaffold(
-        backgroundColor:
-            isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-        body: Column(
-          children: [
-            _buildHeader(context, isDark),
-            Expanded(
-              child: frota.isEmpty
-                  ? _buildEmpty(isDark)
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-                      children: [
-                        _buildSummary(
-                          isDark,
-                          totalCustoAquisicao: totalCustoAquisicao,
-                          totalManutencao: totalManutencao,
-                          totalNaoCiclico: totalNaoCiclico,
-                          totalReceita: totalReceita,
-                          totalLucro: totalLucro,
-                          cpkFrota: cpkFlota,
-                          nVeiculos: frota.length,
-                        ),
-                        const SizedBox(height: 20),
-                        _buildSortBar(isDark),
-                        const SizedBox(height: 12),
-                        ...itens.map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _VehicleTcoCard(
-                              item: item,
-                              isDark: isDark,
+        body: AtrPageBackground(
+          grid: true,
+          child: Column(
+            children: [
+              const AtrTopBar(
+                title: 'TCO — Custo Total de Propriedade',
+                subtitle: 'Análise completa de aquisição, manutenção, receita e lucro por veículo',
+              ),
+              Expanded(
+                child: frota.isEmpty
+                    ? _buildEmpty(isDark)
+                    : ListView(
+                        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                        children: [
+                          _buildSummary(
+                            isDark,
+                            totalCustoAquisicao: totalCustoAquisicao,
+                            totalManutencao: totalManutencao,
+                            totalNaoCiclico: totalNaoCiclico,
+                            totalReceita: totalReceita,
+                            totalLucro: totalLucro,
+                            cpkFrota: cpkFlota,
+                            nVeiculos: frota.length,
+                          ),
+                          const SizedBox(height: 20),
+                          _buildSortBar(isDark),
+                          const SizedBox(height: 12),
+                          ...itens.map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _VehicleTcoCard(
+                                item: item,
+                                isDark: isDark,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(32, 28, 32, 16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.atrNavyDarker : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.atrOrange.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(
-              LucideIcons.pieChart,
-              color: AppColors.atrOrange,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'TCO — Custo Total de Propriedade',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.3,
+                        ],
                       ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Análise completa de aquisição, manutenção, receita e lucro por veículo',
-                  style: TextStyle(
-                    color: isDark ? Colors.white54 : Colors.black54,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -287,7 +238,7 @@ class _TcoDashboardScreenState extends State<TcoDashboardScreen> {
               label,
               style: TextStyle(
                 fontSize: 11,
-                color: isDark ? Colors.white54 : Colors.black54,
+                color: isDark ? AppColors.textSecondaryDark : Colors.black54,
               ),
             ),
             Text(
@@ -312,7 +263,7 @@ class _TcoDashboardScreenState extends State<TcoDashboardScreen> {
             'Ordenar por:',
             style: TextStyle(
               fontSize: 12,
-              color: isDark ? Colors.white54 : Colors.black54,
+              color: isDark ? AppColors.textSecondaryDark : Colors.black54,
             ),
           ),
           const SizedBox(width: 10),
@@ -357,7 +308,7 @@ class _TcoDashboardScreenState extends State<TcoDashboardScreen> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white54 : Colors.black54,
+              color: isDark ? AppColors.textSecondaryDark : Colors.black54,
             ),
           ),
           const SizedBox(height: 6),
@@ -468,7 +419,7 @@ class _VehicleTcoCard extends StatelessWidget {
                       '${v.mesesEmServico} meses em serviço',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? Colors.white54 : Colors.black54,
+                        color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                       ),
                     ),
                   ],
@@ -599,7 +550,7 @@ class _VehicleTcoCard extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 11,
-              color: isDark ? Colors.white54 : Colors.black54,
+              color: isDark ? AppColors.textSecondaryDark : Colors.black54,
             ),
           ),
         ),

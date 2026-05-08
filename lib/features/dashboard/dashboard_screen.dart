@@ -5,6 +5,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/app_sidebar.dart';
 import '../../core/widgets/bento_card.dart';
+import '../../core/widgets/atr_kpi_card.dart';
+import '../../core/widgets/atr_page_background.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/widgets/status_badge.dart';
@@ -84,22 +86,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return AppSidebar(
       child: Scaffold(
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: isDark
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.backgroundDark,
-                      AppColors.atrNavyDarker,
-                      AppColors.backgroundDark,
-                    ],
-                    stops: [0, 0.5, 1],
-                  )
-                : null,
-            color: isDark ? null : AppColors.backgroundLight,
-          ),
+        body: AtrPageBackground(
+          grid: true,
           child: SafeArea(
             child: repo.isLoading
                 ? const Center(
@@ -236,12 +224,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(width: 8),
               Text(
                 alert.titulo,
-                style: TextStyle(
-                    color: color, fontWeight: FontWeight.bold, fontSize: 11,),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: color, fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: 6),
-              const Text('|',
-                  style: TextStyle(color: Colors.white24, fontSize: 11),),
+              Text('·',
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.24), fontSize: 11),),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
@@ -268,168 +256,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final disponibilidade =
         totalVeiculos == 0 ? 0 : ((ativos / totalVeiculos) * 100).round();
 
-    return Wrap(
-      spacing: 16,
-      runSpacing: 16,
-      children: [
-        _buildMetricCard(
-            context,
-            'Lucro da Operação',
-            formatCurrency(metrics.lucro),
-            _selectedMonth,
-            LucideIcons.trendingUp,
-            AppColors.statusSuccess,
-            0,
-            width,
-            isDark: isDark,
-            columns: 6,),
-        _buildMetricCard(
-            context,
-            'Receita Bruta',
-            formatCurrency(metrics.receita),
-            '${repo.frota.length} carros alugados',
-            LucideIcons.wallet,
-            AppColors.statusInfo,
-            100,
-            width,
-            isDark: isDark,
-            columns: 6,),
-        _buildMetricCard(
-            context,
-            'Parcelas no Mês',
-            formatCurrency(metrics.parcelas),
-            '${repo.veiculosFinanciados.length} carros financ.',
-            LucideIcons.landmark,
-            AppColors.statusError,
-            200,
-            width,
-            isDark: isDark,
-            columns: 6,),
-        _buildMetricCard(
-            context,
-            'Manut. no Mês',
-            formatCurrency(metrics.manutencao),
-            'Serviços em $_selectedMonth',
-            LucideIcons.wrench,
-            AppColors.statusWarning,
-            300,
-            width,
-            isDark: isDark,
-            columns: 6,),
-        _buildMetricCard(
-            context,
-            'Carros ativos',
-            '$ativos',
-            'Disponibilidade $disponibilidade%',
-            LucideIcons.checkCircle,
-            AppColors.statusSuccess,
-            400,
-            width,
-            isDark: isDark,
-            columns: 6,),
-        _buildMetricCard(
-            context,
-            'Financiados',
-            '${repo.veiculosFinanciados.length}',
-            'De $totalVeiculos totais',
-            LucideIcons.fileText,
-            AppColors.atrOrange,
-            500,
-            width,
-            isDark: isDark,
-            columns: 6,),
-      ],
-    );
-  }
-
-  Widget _buildMetricCard(BuildContext context, String title, String value,
-      String subtitle, IconData icon, Color color, int delay, double width,
-      {required bool isDark, int columns = 6, VoidCallback? onTap}) {
-    double itemWidth = (width - 80) / columns;
+    double itemWidth = (width - 80) / 6;
     if (width < 1300) itemWidth = (width - 80) / 4;
     if (width < 900) itemWidth = (width - 40) / 3;
     if (width < 700) itemWidth = (width - 20) / 2;
     if (width < 450) itemWidth = width;
 
+    return Wrap(
+      spacing: 16,
+      runSpacing: 16,
+      children: [
+        _metricCard(itemWidth, 'Lucro da Operação', formatCurrency(metrics.lucro), _selectedMonth, LucideIcons.trendingUp, KpiTone.success, isDark),
+        _metricCard(itemWidth, 'Receita Bruta', formatCurrency(metrics.receita), '${repo.frota.length} carros alugados', LucideIcons.wallet, KpiTone.info, isDark),
+        _metricCard(itemWidth, 'Parcelas no Mês', formatCurrency(metrics.parcelas), '${repo.veiculosFinanciados.length} carros financ.', LucideIcons.landmark, KpiTone.error, isDark),
+        _metricCard(itemWidth, 'Manut. no Mês', formatCurrency(metrics.manutencao), 'Serviços em $_selectedMonth', LucideIcons.wrench, KpiTone.warning, isDark),
+        _metricCard(itemWidth, 'Carros ativos', '$ativos', 'Disponibilidade $disponibilidade%', LucideIcons.checkCircle, KpiTone.success, isDark),
+        _metricCard(itemWidth, 'Financiados', '${repo.veiculosFinanciados.length}', 'De $totalVeiculos totais', LucideIcons.fileText, KpiTone.orange, isDark),
+      ],
+    );
+  }
+
+  Widget _metricCard(double itemWidth, String label, String value, String subtitle, IconData icon, KpiTone tone, bool isDark) {
     return SizedBox(
       width: itemWidth,
-      child: BentoCard(
-        animationDelay: delay,
-        padding: EdgeInsets.zero,
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: color, width: 3)),
-            borderRadius: BorderRadius.circular(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AtrKpiCard(
+            label: label,
+            value: value,
+            icon: icon,
+            tone: tone,
           ),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : Colors.black87,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          color.withValues(alpha: 0.2),
-                          color.withValues(alpha: 0.08),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, color: color, size: 13),
-                  ),
-                ],
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 4),
+            child: Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 10,
+                color: isDark ? Colors.white38 : AppColors.textSecondaryLight,
               ),
-              const SizedBox(height: 10),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: isDark ? Colors.white38 : AppColors.textSecondaryLight,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (onTap != null) ...[
-                    const SizedBox(width: 4),
-                    Icon(LucideIcons.externalLink, size: 9, color: color),
-                  ],
-                ],
-              ),
-            ],
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -556,7 +427,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                     color: isDark
-                                        ? Colors.white70
+                                        ? AppColors.textPrimaryDark
                                         : Colors.black87,),),
                           ],
                         ),
@@ -817,9 +688,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             itemBuilder: (ctx, i) {
               if (listItems.isEmpty) {
                 return Text('Nenhuma despesa extra lançada.',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? Colors.white38 : Colors.black45,),);
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: isDark ? Colors.white38 : Colors.black45),);
               }
               final item = listItems[i];
               final v = item.v;
@@ -838,7 +708,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: TextStyle(
                                 fontSize: 10,
                                 color:
-                                    isDark ? Colors.white54 : Colors.black54,),),
+                                    isDark ? AppColors.textSecondaryDark : Colors.black54,),),
                       ],),),
                   Text(formatCurrency(m.custo),
                       style: const TextStyle(
@@ -957,7 +827,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Recebido', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87)),
+                  Text('Recebido', style: TextStyle(fontSize: 10, color: isDark ? AppColors.textPrimaryDark : Colors.black87)),
                   Text(formatCurrency(f.totalRecebido),
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.statusSuccess)),
                 ],
@@ -966,7 +836,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Parcela/mês', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87)),
+                  Text('Parcela/mês', style: TextStyle(fontSize: 10, color: isDark ? AppColors.textPrimaryDark : Colors.black87)),
                   Text(formatCurrency(f.valorParcela),
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.statusError)),
                 ],

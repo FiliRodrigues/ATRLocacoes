@@ -3,9 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/app_sidebar.dart';
+import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/bento_card.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
 import '../../core/data/fleet_data.dart';
 
 class _VehicleHistoryEntry {
@@ -54,8 +56,10 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
 
     return AppSidebar(
       child: Scaffold(
-        body: SafeArea(
-          child: SingleChildScrollView(
+        body: AtrPageBackground(
+          grid: true,
+          child: SafeArea(
+            child: SingleChildScrollView(
             padding: EdgeInsets.all(width < 600 ? 16.0 : 32.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,6 +111,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
@@ -349,7 +354,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : Colors.black87,
+                        color: isDark ? AppColors.textPrimaryDark : Colors.black87,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -470,23 +475,13 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
                 _profileRow(context, 'Progresso',
                     '${(v.financiamento!.progressoFinanciamento * 100).toStringAsFixed(0)}%',),
                 const SizedBox(height: 12),
-                SizedBox(
+                AtrSecondaryButton(
+                  label: 'Ver Financiamento',
+                  icon: LucideIcons.landmark,
                   width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      context.go('/financial-admin/${v.placa}');
-                    },
-                    icon: const Icon(LucideIcons.landmark, size: 16),
-                    label: const Text('Ver Financiamento'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.atrOrange,
-                      side: BorderSide(
-                          color: AppColors.atrOrange.withValues(alpha: 0.3),),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
+                  onPressed: () {
+                    context.go('/financial-admin/${v.placa}');
+                  },
                 ),
               ],
             ],),
@@ -803,7 +798,7 @@ class _VehicleDossierScreenState extends State<VehicleDossierScreen> {
           Text(formatDate(data),
               style: TextStyle(
                   fontSize: 12,
-                  color: isDark ? Colors.white54 : Colors.black54,),),
+                  color: isDark ? AppColors.textSecondaryDark : Colors.black54,),),
           const SizedBox(width: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

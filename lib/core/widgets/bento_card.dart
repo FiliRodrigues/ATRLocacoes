@@ -79,7 +79,28 @@ class _BentoCardState extends State<BentoCard> {
           ),
         ],
       ),
-      child: widget.child,
+      child: Stack(
+        children: [
+          widget.child,
+          Positioned(
+            top: 0,
+            left: 12,
+            right: 12,
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    Colors.white.withValues(alpha: 0.10),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
 
     // Otimização: Uso de RepaintBoundary isola o card do restante da árvore durante o build do hover.

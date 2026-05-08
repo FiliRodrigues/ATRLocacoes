@@ -4,6 +4,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_button.dart';
+import '../../core/widgets/atr_page_background.dart';
 import '../../core/data/obras_data.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -40,8 +42,8 @@ class _ObrasScreenState extends State<ObrasScreen> {
   final _fmtDateLong = DateFormat('EEEE, dd/MM/yyyy', 'pt_BR');
 
   static const _coresCidade = {
-    'Dourados': Color(0xFF34D399),
-    'Paulínia': Color(0xFF60A5FA),
+    'Dourados': AppColors.statusSuccess,
+    'Paulínia': AppColors.statusInfo,
     'Jarinu': Color(0xFFA78BFA),
     'Indaiatuba': Color(0xFFFB923C),
     'Salto': Color(0xFF2DD4BF),
@@ -88,7 +90,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           'label': 'Pintura Fria',
           'valor': _fmtDec.format(r.pinturaFria),
           'unit': 'm²',
-          'cor': const Color(0xFF60A5FA),
+          'cor': AppColors.statusInfo,
           'icon': LucideIcons.paintbrush,
           'servico': 'Pintura Fria',
         },
@@ -97,7 +99,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           'label': 'Pintura Quente',
           'valor': _fmtDec.format(r.pinturaQuente),
           'unit': 'm²',
-          'cor': const Color(0xFFF87171),
+          'cor': AppColors.statusError,
           'icon': LucideIcons.flame,
           'servico': 'Pintura Quente',
           'sub':
@@ -144,7 +146,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           'label': 'Acessibilidade (Vol)',
           'valor': _fmtDec.format(r.acessVolume),
           'unit': 'm³',
-          'cor': const Color(0xFF34D399),
+          'cor': AppColors.statusSuccess,
           'icon': LucideIcons.accessibility,
           'servico': 'Acessibilidade (Volume)',
         },
@@ -162,7 +164,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           'label': 'Semafórica',
           'valor': _fmtInt.format(r.semaforica),
           'unit': 'uni',
-          'cor': const Color(0xFFFBBF24),
+          'cor': AppColors.statusWarning,
           'icon': LucideIcons.construction,
           'servico': 'Semafórica',
         },
@@ -198,7 +200,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
     final kpis = _kpis(resumo);
 
     return Scaffold(
-      body: Container(
+      body: AtrPageBackground(grid: true, child: Container(
         decoration: BoxDecoration(
           gradient: isDark
               ? const LinearGradient(
@@ -275,7 +277,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 
@@ -288,7 +290,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
         IconButton(
           icon: Icon(
             LucideIcons.arrowLeft,
-            color: isDark ? Colors.white70 : Colors.black54,
+            color: isDark ? AppColors.textPrimaryDark : Colors.black54,
           ),
           onPressed: () => context.go('/selector'),
           tooltip: 'Voltar',
@@ -324,7 +326,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                             ? 'Filtro: $_cidade'
                             : 'Jan — Abr 2026 · Consolidado',
                 style: TextStyle(
-                  color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                   fontSize: 12,
                 ),
               ),
@@ -335,14 +337,10 @@ class _ObrasScreenState extends State<ObrasScreen> {
             _equipeFiltro != null ||
             _servicoFiltro != null ||
             _mesFiltro != null)
-          TextButton.icon(
+          AtrGhostButton(
+            label: 'Limpar Filtro',
+            icon: LucideIcons.x,
             onPressed: _limparFiltros,
-            icon: const Icon(LucideIcons.x, size: 14),
-            label: const Text('Limpar Filtro'),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.statusError,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
           ),
       ],
     );
@@ -397,7 +395,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                       a.detalhe!,
                       style: TextStyle(
                         color: isDark
-                            ? Colors.white54
+                            ? AppColors.textSecondaryDark
                             : AppColors.textSecondaryLight,
                         fontSize: 11,
                       ),
@@ -437,15 +435,12 @@ class _ObrasScreenState extends State<ObrasScreen> {
               ),
             ),
           ),
-          TextButton(
+          AtrGhostButton(
+            label: 'Sair da Visão',
             onPressed: () => setState(() {
               _equipeFiltro = null;
               _drillDia = null;
             }),
-            child: const Text(
-              'Sair da Visão',
-              style: TextStyle(color: AppColors.atrOrange, fontSize: 12),
-            ),
           ),
         ],
       ),
@@ -530,7 +525,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                                           color: isSelected
                                               ? cor
                                               : (isDark
-                                                  ? Colors.white54
+                                                  ? AppColors.textSecondaryDark
                                                   : AppColors
                                                       .textSecondaryLight),
                                           fontSize: 9,
@@ -573,7 +568,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                                       k['unit'] as String,
                                       style: TextStyle(
                                         color: isDark
-                                            ? Colors.white54
+                                            ? AppColors.textSecondaryDark
                                             : AppColors.textSecondaryLight,
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -587,7 +582,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                                     sub,
                                     style: TextStyle(
                                       color: isDark
-                                          ? Colors.white54
+                                          ? AppColors.textSecondaryDark
                                           : AppColors.textSecondaryLight,
                                       fontSize: 9,
                                     ),
@@ -631,13 +626,13 @@ class _ObrasScreenState extends State<ObrasScreen> {
             Icon(
               LucideIcons.mapPin,
               size: 15,
-              color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
             ),
             const SizedBox(width: 8),
             Text(
               'Filtrar por Cidade',
               style: TextStyle(
-                color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -653,7 +648,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
             // Fallback seguro: slate-400 caso uma cidade nova seja adicionada
             // em obras_data.dart sem atualizar _coresCidade.
             final cor =
-                _coresCidade[cidade] ?? const Color(0xFF94A3B8);
+                _coresCidade[cidade] ?? AppColors.textTertiaryDark;
             final resumoCidade = resumosPorCidade[cidade]!;
             return MouseRegion(
               cursor: SystemMouseCursors.click,
@@ -703,7 +698,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                         '${_fmtDec.format(resumoCidade.pinturaFria + resumoCidade.pinturaQuente)} m² pintura',
                         style: TextStyle(
                           color: isDark
-                              ? Colors.white54
+                              ? AppColors.textSecondaryDark
                               : AppColors.textSecondaryLight,
                           fontSize: 10,
                         ),
@@ -756,7 +751,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
         Text(
           'Regra: folha/30 + jantar (R\$34 por pessoa) + hotel por pessoa/cidade.',
           style: TextStyle(
-            color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
             fontSize: 11,
           ),
         ),
@@ -848,7 +843,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           Text(
             title,
             style: TextStyle(
-              color: isDark ? Colors.white70 : AppColors.textSecondaryLight,
+              color: isDark ? AppColors.textPrimaryDark : AppColors.textSecondaryLight,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -866,7 +861,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           Text(
             subtitle,
             style: TextStyle(
-              color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
               fontSize: 10,
             ),
             overflow: TextOverflow.ellipsis,
@@ -1105,7 +1100,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                     child: Text(
                       'Dia: ${_fmtMoney.format(d.custoTotalDia)}',
                       style: TextStyle(
-                        color: isDark ? Colors.white70 : AppColors.textPrimaryLight,
+                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                         fontSize: 10,
                       ),
                     ),
@@ -1142,7 +1137,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
         color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFFF87171).withValues(alpha: 0.3),
+          color: AppColors.statusError.withValues(alpha: 0.3),
           width: 1.5,
         ),
       ),
@@ -1151,7 +1146,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
         children: [
           Row(
             children: [
-              const Icon(LucideIcons.flame, size: 16, color: Color(0xFFF87171)),
+              const Icon(LucideIcons.flame, size: 16, color: AppColors.statusError),
               const SizedBox(width: 8),
               Text(
                 'Detalhamento Pintura Quente',
@@ -1289,7 +1284,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                   unit,
                   style: TextStyle(
                     color:
-                        isDark ? Colors.white54 : AppColors.textSecondaryLight,
+                        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                     fontSize: 10,
                   ),
                 ),
@@ -1411,7 +1406,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                               '${_fmtDec.format(e.value['area'] ?? 0)} m²',
                               style: TextStyle(
                                 color: isDark
-                                    ? Colors.white54
+                                    ? AppColors.textSecondaryDark
                                     : AppColors.textSecondaryLight,
                                 fontSize: 11,
                               ),
@@ -1430,7 +1425,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
         _sectionTitle(
           'Ferragens e Materiais Auxiliares',
           LucideIcons.wrench,
-          const Color(0xFF94A3B8),
+          AppColors.textTertiaryDark,
           isDark,
         ),
         const SizedBox(height: 12),
@@ -1449,7 +1444,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                   child: _itemCard(
                     e.key,
                     '${e.value.toStringAsFixed(0)} uni',
-                    const Color(0xFF94A3B8),
+                    AppColors.textTertiaryDark,
                     isDark,
                   ),
                 );
@@ -1472,7 +1467,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
         _sectionTitle(
           'Acessibilidade — Itens Executados',
           LucideIcons.accessibility,
-          const Color(0xFF34D399),
+          AppColors.statusSuccess,
           isDark,
         ),
         const SizedBox(height: 8),
@@ -1481,7 +1476,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
             _miniKpi(
               'Volume Total',
               '${_fmtDec.format(totalVol)} m³',
-              const Color(0xFF34D399),
+              AppColors.statusSuccess,
               isDark,
             ),
             const SizedBox(width: 12),
@@ -1536,7 +1531,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                         Text(
                           '${(e.value['qtd'] ?? 0).toStringAsFixed(0)} uni · ${_fmtDec.format(e.value['volume'] ?? 0)} m³',
                           style: const TextStyle(
-                            color: Color(0xFF34D399),
+                            color: AppColors.statusSuccess,
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
                           ),
@@ -1563,14 +1558,14 @@ class _ObrasScreenState extends State<ObrasScreen> {
         _sectionTitle(
           'Semafórica — Itens Instalados',
           LucideIcons.construction,
-          const Color(0xFFFBBF24),
+          AppColors.statusWarning,
           isDark,
         ),
         const SizedBox(height: 8),
         _miniKpi(
           'Total Instalado',
           '${total.toStringAsFixed(0)} uni',
-          const Color(0xFFFBBF24),
+          AppColors.statusWarning,
           isDark,
         ),
         const SizedBox(height: 16),
@@ -1590,7 +1585,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                       child: _itemCard(
                         e.key,
                         '${e.value.toStringAsFixed(0)} uni',
-                        const Color(0xFFFBBF24),
+                        AppColors.statusWarning,
                         isDark,
                       ),
                     ),
@@ -1684,7 +1679,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           Text(
             label,
             style: TextStyle(
-              color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
               fontSize: 11,
             ),
           ),
@@ -1821,7 +1816,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                       'Total${_mesFiltro != null ? " ${_nomeMes(_mesFiltro!)}" : ""}: ${unidade == "uni" || unidade == "m" ? total.toStringAsFixed(0) : _fmtDec.format(total)} $unidade',
                       style: TextStyle(
                         color: isDark
-                            ? Colors.white54
+                            ? AppColors.textSecondaryDark
                             : AppColors.textSecondaryLight,
                         fontSize: 12,
                       ),
@@ -1830,18 +1825,10 @@ class _ObrasScreenState extends State<ObrasScreen> {
                 ),
               ),
               if (_drillDia != null)
-                TextButton.icon(
+                AtrGhostButton(
+                  label: 'Fechar detalhe',
+                  icon: LucideIcons.x,
                   onPressed: () => setState(() => _drillDia = null),
-                  icon: const Icon(LucideIcons.x, size: 13),
-                  label: const Text(
-                    'Fechar detalhe',
-                    style: TextStyle(fontSize: 11),
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.atrOrange,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  ),
                 ),
             ],
           ),
@@ -1885,7 +1872,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                   'Nenhum dado para exibir',
                   style: TextStyle(
                     color:
-                        isDark ? Colors.white54 : AppColors.textSecondaryLight,
+                        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                   ),
                 ),
               ),
@@ -1947,7 +1934,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
             style: TextStyle(
               color: ativo
                   ? Colors.white
-                  : (isDark ? Colors.white54 : AppColors.textSecondaryLight),
+                  : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
               fontSize: 11,
               fontWeight: ativo ? FontWeight.w800 : FontWeight.w500,
             ),
@@ -2048,7 +2035,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                           abr,
                           style: TextStyle(
                             color: isDark
-                                ? Colors.white70
+                                ? AppColors.textPrimaryDark
                                 : AppColors.textPrimaryLight,
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -2153,16 +2140,16 @@ class _ObrasScreenState extends State<ObrasScreen> {
                                         AppColors.atrOrange,
                                       ]
                                     : [
-                                        const Color(0xFF3B82F6)
+                                        AppColors.accentBlue
                                             .withValues(alpha: 0.55),
-                                        const Color(0xFF60A5FA),
+                                        AppColors.statusInfo,
                                       ],
                               ),
                               boxShadow: [
                                 BoxShadow(
                                   color: (isDrill
                                           ? AppColors.atrOrange
-                                          : const Color(0xFF60A5FA))
+                                          : AppColors.statusInfo)
                                       .withValues(alpha: isDrill ? 0.45 : 0.2),
                                   blurRadius: isDrill ? 12 : 6,
                                   offset: const Offset(0, -2),
@@ -2268,7 +2255,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
               Text(
                 '${registros.length} registros',
                 style: TextStyle(
-                  color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                   fontSize: 12,
                 ),
               ),
@@ -2279,7 +2266,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
             Text(
               'Nenhum registro neste dia.',
               style: TextStyle(
-                color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
               ),
             )
           else
@@ -2292,12 +2279,12 @@ class _ObrasScreenState extends State<ObrasScreen> {
                 dataRowMinHeight: 40,
                 dataRowMaxHeight: 52,
                 headingTextStyle: TextStyle(
-                  color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
                 dataTextStyle: TextStyle(
-                  color: isDark ? Colors.white70 : AppColors.textPrimaryLight,
+                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                   fontSize: 11,
                 ),
                 columns: const [
@@ -2428,7 +2415,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           style: TextStyle(
             color: ativo
                 ? Colors.white
-                : (isDark ? Colors.white70 : AppColors.textSecondaryLight),
+                : (isDark ? AppColors.textPrimaryDark : AppColors.textSecondaryLight),
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
@@ -2518,7 +2505,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           Text(
             'Sem dados',
             style: TextStyle(
-              color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
             ),
           )
         else ...[
@@ -2550,7 +2537,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
           style: TextStyle(
             color: ativo
                 ? Colors.white
-                : (isDark ? Colors.white54 : AppColors.textSecondaryLight),
+                : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
@@ -2564,8 +2551,8 @@ class _ObrasScreenState extends State<ObrasScreen> {
     final medal = ['🥈', '🥇', '🥉'];
     final alturas = [110.0, 140.0, 90.0];
     final cores = [
-      const Color(0xFF94A3B8),
-      const Color(0xFFFBBF24),
+      AppColors.textTertiaryDark,
+      AppColors.statusWarning,
       const Color(0xFFCD7F32),
     ];
 
@@ -2709,7 +2696,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                     '$pos',
                     style: TextStyle(
                       color: isDark
-                          ? Colors.white54
+                          ? AppColors.textSecondaryDark
                           : AppColors.textSecondaryLight,
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
@@ -2735,7 +2722,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                       '${eq.diasTrabalhados} dias · ${eq.servicoPrincipal}',
                       style: TextStyle(
                         color: isDark
-                            ? Colors.white54
+                            ? AppColors.textSecondaryDark
                             : AppColors.textSecondaryLight,
                         fontSize: 10,
                       ),
@@ -2783,7 +2770,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
         child: Text(
           'Sem dados',
           style: TextStyle(
-            color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
           ),
         ),
       );
@@ -2851,7 +2838,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                         local.cidade,
                         style: TextStyle(
                           color: isDark
-                              ? Colors.white54
+                              ? AppColors.textSecondaryDark
                               : AppColors.textSecondaryLight,
                           fontSize: 10,
                         ),
@@ -2892,7 +2879,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                       '${e.key + 4}',
                       style: TextStyle(
                         color: isDark
-                            ? Colors.white54
+                            ? AppColors.textSecondaryDark
                             : AppColors.textSecondaryLight,
                         fontSize: 9,
                         fontWeight: FontWeight.w800,
@@ -2906,7 +2893,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                     '${local.local} · ${local.cidade}',
                     style: TextStyle(
                       color:
-                          isDark ? Colors.white70 : AppColors.textPrimaryLight,
+                          isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                       fontSize: 11,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -2916,7 +2903,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                   _fmtDec.format(local.volumeTotal),
                   style: TextStyle(
                     color:
-                        isDark ? Colors.white54 : AppColors.textSecondaryLight,
+                        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -3102,7 +3089,7 @@ class _ObrasScreenState extends State<ObrasScreen> {
                           (d.weekday == DateTime.saturday ? ' (Sáb)' : ''),
                       style: TextStyle(
                         color: isDark
-                            ? Colors.white70
+                            ? AppColors.textPrimaryDark
                             : AppColors.textPrimaryLight,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,

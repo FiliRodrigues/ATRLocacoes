@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_button.dart';
 import '../../core/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -136,9 +137,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFF0B0F19),
-                  Color(0xFF111827),
-                  Color(0xFF0B0F19),
+                  AppColors.backgroundDark,
+                  AppColors.atrNavyBlue,
+                  AppColors.backgroundDark,
                 ],
               ),
             ),
@@ -288,77 +289,24 @@ class _LoginScreenState extends State<LoginScreen> {
                         children: [
                           SizedBox(
                             width: 280,
-                            height: 50,
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () {
-                                  setState(() => _showLoginForm = true);
-                                  HapticFeedback.lightImpact();
-                                },
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        AppColors.atrOrange.withValues(alpha: 0.92),
-                                        AppColors.atrOrange,
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppColors.atrOrange
-                                            .withValues(alpha: 0.25),
-                                        blurRadius: 20,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Center(
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          'Fazer Login',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 15,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                        SizedBox(width: 8),
-                                        Icon(
-                                          LucideIcons.arrowRight,
-                                          color: Colors.white,
-                                          size: 18,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
+                            child: AtrPrimaryButton(
+                              label: 'Fazer Login',
+                              icon: LucideIcons.arrowRight,
+                              onPressed: () {
+                                setState(() => _showLoginForm = true);
+                                HapticFeedback.lightImpact();
+                              },
                             ),
                           ),
                           if (context.read<AuthService>().canUseDevShortcut) ...[
                             const SizedBox(height: 10),
                             SizedBox(
                               width: 280,
-                              height: 44,
-                              child: OutlinedButton.icon(
+                              child: AtrSecondaryButton(
+                                label: 'Entrar sem senha (teste)',
+                                icon: LucideIcons.zap,
                                 onPressed: _loading ? null : _loginWithDevShortcut,
-                                icon: const Icon(LucideIcons.zap, size: 16),
-                                label: const Text('Entrar sem senha (teste)'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white70,
-                                  side: BorderSide(
-                                    color: Colors.white.withValues(alpha: 0.25),
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
+                                loading: _loading,
                               ),
                             ),
                           ],
@@ -403,7 +351,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     _obscurePass
                                         ? LucideIcons.eye
                                         : LucideIcons.eyeOff,
-                                    color: Colors.white54,
+                                    color: AppColors.textSecondaryDark,
                                     size: 18,
                                   ),
                                 ),
@@ -513,7 +461,7 @@ class _AuthInput extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white54, size: 17),
+          Icon(icon, color: AppColors.textSecondaryDark, size: 17),
           const SizedBox(width: 9),
           Expanded(
             child: TextField(

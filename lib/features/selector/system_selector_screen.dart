@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
 import '../../core/services/auth_service.dart';
 
 class SystemSelectorScreen extends StatelessWidget {
@@ -16,7 +17,7 @@ class SystemSelectorScreen extends StatelessWidget {
     final crossAxisCount = cards.length == 1 ? 1 : 2;
 
     return Scaffold(
-      body: Stack(
+      body: AtrPageBackground(grid: true, child: Stack(
         children: [
           // Background gradient
           Container(
@@ -25,9 +26,9 @@ class SystemSelectorScreen extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFF0B0F19),
-                  Color(0xFF111827),
-                  Color(0xFF0B0F19),
+                  AppColors.backgroundDark,
+                  AppColors.surfaceCardDark,
+                  AppColors.backgroundDark,
                 ],
               ),
             ),
@@ -162,7 +163,7 @@ class SystemSelectorScreen extends StatelessWidget {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 

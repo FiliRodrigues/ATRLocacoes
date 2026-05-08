@@ -4,7 +4,7 @@ import '../../../core/data/custos_models.dart';
 import '../../../core/data/fleet_data.dart';
 import '../../../core/enums/kanban_column.dart';
 import '../../../core/enums/maintenance_priority.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/atr_button.dart';
 
 class MaintenanceFormModal {
   static Future<ManutencaoItem?> show(
@@ -317,15 +317,13 @@ class MaintenanceFormModal {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            TextButton(
+                            AtrGhostButton(
+                              label: 'Cancelar',
                               onPressed: () => Navigator.of(context).pop(),
-                              child: const Text('Cancelar'),
                             ),
                             const SizedBox(width: 12),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.atrOrange,
-                              ),
+                            AtrPrimaryButton(
+                              label: 'Salvar',
                               onPressed: () {
                                 if (!formKey.currentState!.validate()) return;
                                 final veiculo =
@@ -370,7 +368,6 @@ class MaintenanceFormModal {
                                 );
                                 Navigator.of(context).pop(result);
                               },
-                              child: const Text('Salvar'),
                             ),
                           ],
                         ),

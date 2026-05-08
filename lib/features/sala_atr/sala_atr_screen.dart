@@ -5,6 +5,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_button.dart';
+import '../../core/widgets/atr_page_background.dart';
 import '../../core/data/sala_atr_data.dart';
 import '../../core/widgets/bookable_area_shared.dart';
 
@@ -48,13 +50,13 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      body: Container(
+      body: AtrPageBackground(grid: true, child: Container(
         decoration: BoxDecoration(
           gradient: isDark
               ? const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF0A0E21), Color(0xFF0D1530), Color(0xFF0A0E21)],
+                  colors: [AppColors.backgroundDark, AppColors.surfaceDeepNavy, AppColors.backgroundDark],
                   stops: [0, 0.5, 1],
                 )
               : const LinearGradient(
@@ -109,7 +111,7 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 
@@ -126,11 +128,11 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF111827) : Colors.white,
-        border: Border(bottom: BorderSide(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB))),
+        color: isDark ? AppColors.surfaceCardDark : Colors.white,
+        border: Border(bottom: BorderSide(color: isDark ? AppColors.surfaceHoverDark : AppColors.borderLightHex)),
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black26 : const Color(0xFF64748B).withValues(alpha: 0.04),
+            color: isDark ? Colors.black26 : AppColors.textMutedDark.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -141,7 +143,7 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
           Text(
             titulo,
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF111827),
+              color: isDark ? Colors.white : AppColors.surfaceCardDark,
               fontSize: 17,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
@@ -177,12 +179,12 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
           ],
           if (_tabIndex == 1) ...[
             const SizedBox(width: 16),
-            Container(width: 1, height: 24, color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB)),
+            Container(width: 1, height: 24, color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex),
             const SizedBox(width: 16),
-            _PillButton(
-              icon: LucideIcons.calendarDays,
+            AtrSecondaryButton(
               label: 'Mês',
-              onTap: () async {
+              icon: LucideIcons.calendarDays,
+              onPressed: () async {
                 final data = await showDatePicker(
                   context: context,
                   initialDate: _dataFiltro,
@@ -194,10 +196,10 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
               },
             ),
             const SizedBox(width: 8),
-            _PillButton(
-              icon: LucideIcons.listTodo,
+            AtrSecondaryButton(
               label: 'Hoje',
-              onTap: () => setState(() => _dataFiltro = DateTime.now()),
+              icon: LucideIcons.listTodo,
+              onPressed: () => setState(() => _dataFiltro = DateTime.now()),
             ),
           ],
         ],
@@ -230,47 +232,13 @@ class _HeaderButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: isPrimary
                 ? AppColors.atrOrange.withValues(alpha: 0.12)
-                : (isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6)),
+                : (isDark ? AppColors.surfaceHoverDark : const Color(0xFFF3F4F6)),
             borderRadius: BorderRadius.circular(10),
             border: isPrimary
                 ? Border.all(color: AppColors.atrOrange.withValues(alpha: 0.2))
                 : null,
           ),
-          child: Icon(icon, size: 18, color: isPrimary ? AppColors.atrOrange : (isDark ? Colors.white70 : const Color(0xFF6B7280))),
-        ),
-      ),
-    );
-  }
-}
-
-class _PillButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _PillButton({required this.icon, required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.atrOrange.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.atrOrange.withValues(alpha: 0.2)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 14, color: AppColors.atrOrange),
-              const SizedBox(width: 6),
-              Text(label, style: const TextStyle(color: AppColors.atrOrange, fontSize: 12, fontWeight: FontWeight.w600)),
-            ],
-          ),
+          child: Icon(icon, size: 18, color: isPrimary ? AppColors.atrOrange : (isDark ? AppColors.textPrimaryDark : const Color(0xFF6B7280))),
         ),
       ),
     );
@@ -297,9 +265,9 @@ class _ResumoDiarioDialog extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           gradient: isDark
-              ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF111827), Color(0xFF0F172A)])
+              ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.surfaceCardDark, AppColors.surfaceDarkAlt])
               : const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white, Color(0xFFF8FAFC)]),
-          border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB)),
+          border: Border.all(color: isDark ? AppColors.surfaceHoverDark : AppColors.borderLightHex),
           boxShadow: [
             BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 30, offset: const Offset(0, 12)),
             BoxShadow(color: AppColors.atrOrange.withValues(alpha: 0.06), blurRadius: 60, offset: const Offset(0, 20)),
@@ -322,9 +290,9 @@ class _ResumoDiarioDialog extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Bom dia! ☀️', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                    Text('Bom dia! ☀️', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                     Text(DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(resumo.data).toUpperCase(),
-                        style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600)),
+                        style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark, fontSize: 12, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ],
@@ -333,17 +301,17 @@ class _ResumoDiarioDialog extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0A0E21) : const Color(0xFFF8FAFC),
+                color: isDark ? AppColors.backgroundDark : const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB)),
+                border: Border.all(color: isDark ? AppColors.surfaceHoverDark : AppColors.borderLightHex),
               ),
               child: Row(
                 children: [
                   _MiniStat(icon: LucideIcons.calendarCheck, value: '${resumo.totalSessoes}', label: 'sessões hoje', color: AppColors.atrOrange, isDark: isDark),
-                  Container(width: 1, height: 40, color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB)),
+                  Container(width: 1, height: 40, color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex),
 
                   _MiniStat(icon: LucideIcons.checkCircle2, value: '${resumo.confirmadas}', label: 'confirmadas', color: AppColors.statusSuccess, isDark: isDark),
-                  Container(width: 1, height: 40, color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB)),
+                  Container(width: 1, height: 40, color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex),
 
                   _MiniStat(icon: LucideIcons.dollarSign, value: fmt.format(resumo.receitaParticularHoje), label: 'receita particular', color: AppColors.statusInfo, isDark: isDark),
                 ],
@@ -366,8 +334,8 @@ class _ResumoDiarioDialog extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Próximo: ${resumo.proximaSessao!.clienteNome}', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontWeight: FontWeight.w600)),
-                          Text('${DateFormat('HH:mm').format(resumo.proximaSessao!.inicio)} • ${resumo.proximaSessao!.tipoPagamento.nome}', style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B), fontSize: 12)),
+                          Text('Próximo: ${resumo.proximaSessao!.clienteNome}', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontWeight: FontWeight.w600)),
+                          Text('${DateFormat('HH:mm').format(resumo.proximaSessao!.inicio)} • ${resumo.proximaSessao!.tipoPagamento.nome}', style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -389,25 +357,16 @@ class _ResumoDiarioDialog extends StatelessWidget {
                     const Icon(LucideIcons.cake, color: Colors.pink, size: 16),
                     const SizedBox(width: 10),
                     Text('🎂 ${resumo.aniversariantes.join(', ')} faz aniversário hoje!',
-                        style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF64748B), fontSize: 13)),
+                        style: TextStyle(color: isDark ? AppColors.textPrimaryDark : AppColors.textMutedDark, fontSize: 13)),
                   ],
                 ),
               ),
             ],
             const SizedBox(height: 24),
-            SizedBox(
+            AtrPrimaryButton(
+              label: 'Ver Agenda Completa',
               width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.atrOrange,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Ver Agenda Completa', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              ),
+              onPressed: () => Navigator.pop(context),
             ),
           ],
         ),
@@ -431,9 +390,9 @@ class _MiniStat extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: color),
           const SizedBox(height: 6),
-          Text(value, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+          Text(value, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(color: isDark ? Colors.white38 : const Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w500)),
+          Text(label, style: TextStyle(color: isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 11, fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -519,10 +478,10 @@ class _SalaDashboard extends StatelessWidget {
           // Próximo Atendimento
           Row(
             children: [
-              Text('Próximo Atendimento', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+              Text('Próximo Atendimento', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
               const Spacer(),
               if (proximo != null)
-                _PillButton(icon: LucideIcons.messageCircle, label: 'WhatsApp', onTap: () => _abrirWhatsApp(context, proximo.whatsappUrl)),
+                AtrSecondaryButton(icon: LucideIcons.messageCircle, label: 'WhatsApp', onPressed: () => _abrirWhatsApp(context, proximo.whatsappUrl)),
             ],
           ),
           const SizedBox(height: 14),
@@ -537,12 +496,12 @@ class _SalaDashboard extends StatelessWidget {
           if (state.pacotes.where((p) => p.ativo && !p.isEsgotado).isNotEmpty) ...[
             Row(
               children: [
-                Text('Pacotes de Sessões', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+                Text('Pacotes de Sessões', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
                 const Spacer(),
-                _PillButton(
+                AtrSecondaryButton(
                   icon: LucideIcons.plus,
                   label: 'Novo Pacote',
-                  onTap: () => _abrirCriarPacote(context, isDark),
+                  onPressed: () => _abrirCriarPacote(context, isDark),
                 ),
               ],
             ),
@@ -583,9 +542,9 @@ class _KpiPremiumCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: isDark
-            ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF111827), Color(0xFF0F172A)])
+            ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.surfaceCardDark, AppColors.surfaceDarkAlt])
             : const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white, Color(0xFFF8FAFC)]),
-        border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9)),
+        border: Border.all(color: isDark ? AppColors.surfaceHoverDark : const Color(0xFFF1F5F9)),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04), blurRadius: 12, offset: const Offset(0, 4)),
           BoxShadow(color: iconColor.withValues(alpha: 0.04), blurRadius: 40, offset: const Offset(0, 8)),
@@ -614,12 +573,12 @@ class _KpiPremiumCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Text(value, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+          Text(value, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
           const SizedBox(height: 4),
-          Text(label, style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w500)),
+          Text(label, style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark, fontSize: 12, fontWeight: FontWeight.w500)),
           if (subtitle != null) ...[
             const SizedBox(height: 2),
-            Text(subtitle!, style: TextStyle(color: isDark ? Colors.white38 : const Color(0xFF94A3B8), fontSize: 11)),
+            Text(subtitle!, style: TextStyle(color: isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 11)),
           ],
         ],
       ),
@@ -640,7 +599,7 @@ class _ProximoClienteCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: isDark
-            ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF111827), Color(0xFF0D1530)])
+            ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.surfaceCardDark, AppColors.surfaceDeepNavy])
             : const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white, Color(0xFFFAFAFA)]),
         border: Border.all(color: AppColors.atrOrange.withValues(alpha: 0.2)),
         boxShadow: [
@@ -663,7 +622,7 @@ class _ProximoClienteCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(proximo.clienteNome, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+                Text(proximo.clienteNome, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -720,9 +679,9 @@ class _PacoteCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         gradient: isDark
-            ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF111827), Color(0xFF0D1530)])
+            ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.surfaceCardDark, AppColors.surfaceDeepNavy])
             : const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white, Color(0xFFF8FAFC)]),
-        border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB)),
+        border: Border.all(color: isDark ? AppColors.surfaceHoverDark : AppColors.borderLightHex),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -739,8 +698,8 @@ class _PacoteCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(pacote.clienteNome, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontWeight: FontWeight.w700)),
-                    Text('${pacote.totalSessoes} sessões • ${fmt.format(pacote.valorPago)}', style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B), fontSize: 12)),
+                    Text(pacote.clienteNome, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontWeight: FontWeight.w700)),
+                    Text('${pacote.totalSessoes} sessões • ${fmt.format(pacote.valorPago)}', style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark, fontSize: 12)),
                   ],
                 ),
               ),
@@ -758,13 +717,13 @@ class _PacoteCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
               value: progresso,
-              backgroundColor: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
+              backgroundColor: isDark ? AppColors.surfaceHoverDark : const Color(0xFFF1F5F9),
               valueColor: AlwaysStoppedAnimation<Color>(progresso > 0.8 ? AppColors.statusWarning : AppColors.statusInfo),
               minHeight: 4,
             ),
           ),
           const SizedBox(height: 4),
-          Text('${(progresso * 100).toStringAsFixed(0)}% utilizado', style: TextStyle(color: isDark ? Colors.white38 : const Color(0xFF94A3B8), fontSize: 10)),
+          Text('${(progresso * 100).toStringAsFixed(0)}% utilizado', style: TextStyle(color: isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 10)),
         ],
       ),
     );
@@ -799,7 +758,7 @@ class _SalaAgenda extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF111827) : Colors.white,
+            color: isDark ? AppColors.surfaceCardDark : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
@@ -808,41 +767,37 @@ class _SalaAgenda extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text('Notas da Sessão', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 18, fontWeight: FontWeight.w700)),
+                  Text('Notas da Sessão', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 18, fontWeight: FontWeight.w700)),
                   const Spacer(),
                   Text(ag.clienteNome, style: const TextStyle(color: AppColors.atrOrange, fontWeight: FontWeight.w600)),
                 ],
               ),
               const SizedBox(height: 6),
-              Text(DateFormat("dd/MM/yyyy 'às' HH:mm", 'pt_BR').format(ag.inicio), style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B), fontSize: 13)),
+              Text(DateFormat("dd/MM/yyyy 'às' HH:mm", 'pt_BR').format(ag.inicio), style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark, fontSize: 13)),
               const SizedBox(height: 16),
               TextField(
                 controller: ctrl,
                 autofocus: true,
                 maxLines: 4,
-                style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 14),
+                style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 14),
                 decoration: InputDecoration(
                   hintText: 'Regista aqui as notas da sessão...',
-                  hintStyle: TextStyle(color: isDark ? Colors.white24 : const Color(0xFF94A3B8)),
+                  hintStyle: TextStyle(color: isDark ? Colors.white24 : AppColors.textTertiaryDark),
                   filled: true,
-                  fillColor: isDark ? const Color(0xFF0A0E21) : const Color(0xFFF8FAFC),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB))),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB))),
+                  fillColor: isDark ? AppColors.backgroundDark : const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex)),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.atrOrange)),
                 ),
               ),
               const SizedBox(height: 20),
-              SizedBox(
+              AtrPrimaryButton(
+                label: 'Salvar Nota',
                 width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.atrOrange, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                  onPressed: () {
-                    SalaAtrState.instance.adicionarNotaSessao(ag.id, ctrl.text);
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Salvar Nota', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                ),
+                onPressed: () {
+                  SalaAtrState.instance.adicionarNotaSessao(ag.id, ctrl.text);
+                  Navigator.pop(ctx);
+                },
               ),
             ],
           ),
@@ -881,7 +836,7 @@ class _SalaAgenda extends StatelessWidget {
                 child: Text(
                   '${hora.toString().padLeft(2, '0')}:00',
                   style: TextStyle(
-                    color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                    color: isDark ? Colors.white38 : AppColors.textTertiaryDark,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
@@ -971,7 +926,7 @@ class _BlocoOcupadoPremium extends StatelessWidget {
                     Row(
                       children: [
                         Flexible(
-                          child: Text(ag.clienteNome, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
+                          child: Text(ag.clienteNome, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
                         ),
                         if (temPacote) ...[
                           const SizedBox(width: 6),
@@ -1050,9 +1005,9 @@ class _BlocoOcupadoPremium extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: (ag.lembrete24h || ag.lembrete1h) ? AppColors.statusSuccess.withValues(alpha: 0.1) : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: (ag.lembrete24h || ag.lembrete1h) ? AppColors.statusSuccess.withValues(alpha: 0.2) : (isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB))),
+                      border: Border.all(color: (ag.lembrete24h || ag.lembrete1h) ? AppColors.statusSuccess.withValues(alpha: 0.2) : (isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex)),
                     ),
-                    child: Icon(LucideIcons.bellOff, size: 13, color: (ag.lembrete24h || ag.lembrete1h) ? AppColors.statusSuccess : (isDark ? Colors.white24 : const Color(0xFF94A3B8))),
+                    child: Icon(LucideIcons.bellOff, size: 13, color: (ag.lembrete24h || ag.lembrete1h) ? AppColors.statusSuccess : (isDark ? Colors.white24 : AppColors.textTertiaryDark)),
                   ),
                 ),
               ],
@@ -1128,9 +1083,9 @@ class _BlocoLivrePremium extends StatelessWidget {
       child: Container(
         height: 65,
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
+          color: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFFAFAFA),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB), style: BorderStyle.solid),
+          border: Border.all(color: isDark ? AppColors.surfaceHoverDark : AppColors.borderLightHex, style: BorderStyle.solid),
         ),
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1184,8 +1139,8 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bg = widget.isDark ? const Color(0xFF111827) : Colors.white;
-    final txtColor = widget.isDark ? Colors.white : const Color(0xFF111827);
+    final bg = widget.isDark ? AppColors.surfaceCardDark : Colors.white;
+    final txtColor = widget.isDark ? Colors.white : AppColors.surfaceCardDark;
     final pacote = _nomeCtrl.text.isNotEmpty ? SalaAtrState.instance.pacoteAtivoDoCliente(_clienteId) : null;
 
     return Padding(
@@ -1242,7 +1197,7 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                 children: [1, 2, 4].map((h) => ChoiceChip(
                   label: Text('${h}h', style: TextStyle(color: _duracao == h ? Colors.white : txtColor, fontWeight: FontWeight.w600, fontSize: 13)),
                   selectedColor: AppColors.atrOrange,
-                  backgroundColor: widget.isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+                  backgroundColor: widget.isDark ? AppColors.surfaceHoverDark : const Color(0xFFF3F4F6),
                   selected: _duracao == h,
                   onSelected: (s) => setState(() => _duracao = h),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1260,7 +1215,7 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                 children: TipoPagamento.values.map((t) => ChoiceChip(
                   label: Text(t.nome, style: TextStyle(color: _tipoPagamento == t ? Colors.white : txtColor, fontSize: 11, fontWeight: FontWeight.w600)),
                   selectedColor: AppColors.statusSuccess,
-                  backgroundColor: widget.isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+                  backgroundColor: widget.isDark ? AppColors.surfaceHoverDark : const Color(0xFFF3F4F6),
                   selected: _tipoPagamento == t,
                   onSelected: (s) => setState(() => _tipoPagamento = t),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1287,7 +1242,7 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Pacote ativo: ${pacote.sessoesRestantes} sessões restantes', style: const TextStyle(color: AppColors.statusInfo, fontWeight: FontWeight.w700, fontSize: 13)),
-                            Text('Será deduzido automaticamente ao marcar como Pago', style: TextStyle(color: widget.isDark ? Colors.white38 : const Color(0xFF94A3B8), fontSize: 11)),
+                            Text('Será deduzido automaticamente ao marcar como Pago', style: TextStyle(color: widget.isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 11)),
                           ],
                         ),
                       ),
@@ -1306,7 +1261,7 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                   ChoiceChip(
                     label: Text('Única', style: TextStyle(color: _vezesRecorrencia == 1 ? Colors.white : txtColor, fontWeight: FontWeight.w600, fontSize: 12)),
                     selectedColor: AppColors.atrOrange,
-                    backgroundColor: widget.isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+                    backgroundColor: widget.isDark ? AppColors.surfaceHoverDark : const Color(0xFFF3F4F6),
                     selected: _vezesRecorrencia == 1,
                     onSelected: (s) => setState(() { _vezesRecorrencia = 1; }),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1315,7 +1270,7 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                   ChoiceChip(
                     label: const Text('4 Sessões', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
                     selectedColor: AppColors.atrOrange,
-                    backgroundColor: widget.isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+                    backgroundColor: widget.isDark ? AppColors.surfaceHoverDark : const Color(0xFFF3F4F6),
                     selected: _vezesRecorrencia == 4,
                     onSelected: (s) => setState(() { _vezesRecorrencia = 4; }),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1330,8 +1285,8 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                   children: [
                     ChoiceChip(
                       label: Text('Semanal', style: TextStyle(color: _diasIntervalo == 7 ? Colors.white : txtColor, fontWeight: FontWeight.w600, fontSize: 12)),
-                      selectedColor: const Color(0xFF3B82F6),
-                      backgroundColor: widget.isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+                      selectedColor: AppColors.accentBlue,
+                      backgroundColor: widget.isDark ? AppColors.surfaceHoverDark : const Color(0xFFF3F4F6),
                       selected: _diasIntervalo == 7,
                       onSelected: (s) => setState(() { _diasIntervalo = 7; }),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1339,8 +1294,8 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                     ),
                     ChoiceChip(
                       label: Text('Quinzenal', style: TextStyle(color: _diasIntervalo == 15 ? Colors.white : txtColor, fontWeight: FontWeight.w600, fontSize: 12)),
-                      selectedColor: const Color(0xFF3B82F6),
-                      backgroundColor: widget.isDark ? const Color(0xFF1F2937) : const Color(0xFFF3F4F6),
+                      selectedColor: AppColors.accentBlue,
+                      backgroundColor: widget.isDark ? AppColors.surfaceHoverDark : const Color(0xFFF3F4F6),
                       selected: _diasIntervalo == 15,
                       onSelected: (s) => setState(() { _diasIntervalo = 15; }),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1357,9 +1312,9 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: widget.isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                  color: widget.isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: widget.isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB)),
+                  border: Border.all(color: widget.isDark ? AppColors.surfaceHoverDark : AppColors.borderLightHex),
                 ),
                 child: Column(
                   children: [
@@ -1367,7 +1322,7 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                       contentPadding: EdgeInsets.zero,
                       dense: true,
                       title: Text('Lembrete 24h antes', style: TextStyle(color: txtColor, fontSize: 13, fontWeight: FontWeight.w600)),
-                      subtitle: Text('O paciente recebe um WhatsApp automático', style: TextStyle(color: widget.isDark ? Colors.white38 : const Color(0xFF94A3B8), fontSize: 11)),
+                      subtitle: Text('O paciente recebe um WhatsApp automático', style: TextStyle(color: widget.isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 11)),
                       value: _lembrete24h,
                       activeThumbColor: AppColors.statusSuccess,
                       onChanged: (v) => setState(() => _lembrete24h = v),
@@ -1377,7 +1332,7 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                       contentPadding: EdgeInsets.zero,
                       dense: true,
                       title: Text('Lembrete 1h antes', style: TextStyle(color: txtColor, fontSize: 13, fontWeight: FontWeight.w600)),
-                      subtitle: Text('Reforço próximo ao horário da sessão', style: TextStyle(color: widget.isDark ? Colors.white38 : const Color(0xFF94A3B8), fontSize: 11)),
+                      subtitle: Text('Reforço próximo ao horário da sessão', style: TextStyle(color: widget.isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 11)),
                       value: _lembrete1h,
                       activeThumbColor: AppColors.atrOrange,
                       onChanged: (v) => setState(() => _lembrete1h = v),
@@ -1387,35 +1342,25 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
               ),
 
               const SizedBox(height: 28),
-              SizedBox(
+              AtrPrimaryButton(
+                label: 'Confirmar Agendamento',
                 width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.atrOrange,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shadowColor: AppColors.atrOrange.withValues(alpha: 0.3),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  onPressed: () {
-                    if (_nomeCtrl.text.trim().isEmpty) return;
-                    SalaAtrState.instance.adicionarAgendamento(
-                      inicio: widget.inicio,
-                      duracaoHoras: _duracao,
-                      clienteNome: _nomeCtrl.text.trim(),
-                      clienteTelefone: _telCtrl.text.trim(),
-                      valorPorHora: double.tryParse(_valorCtrl.text) ?? 150.0,
-                      tipoPagamento: _tipoPagamento,
-                      vezesRecorrencia: _vezesRecorrencia,
-                      diasIntervalo: _diasIntervalo,
-                      lembrete24h: _lembrete24h,
-                      lembrete1h: _lembrete1h,
-                    );
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Confirmar Agendamento', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                ),
+                onPressed: () {
+                  if (_nomeCtrl.text.trim().isEmpty) return;
+                  SalaAtrState.instance.adicionarAgendamento(
+                    inicio: widget.inicio,
+                    duracaoHoras: _duracao,
+                    clienteNome: _nomeCtrl.text.trim(),
+                    clienteTelefone: _telCtrl.text.trim(),
+                    valorPorHora: double.tryParse(_valorCtrl.text) ?? 150.0,
+                    tipoPagamento: _tipoPagamento,
+                    vezesRecorrencia: _vezesRecorrencia,
+                    diasIntervalo: _diasIntervalo,
+                    lembrete24h: _lembrete24h,
+                    lembrete1h: _lembrete1h,
+                  );
+                  Navigator.pop(context);
+                },
               ),
             ],
           ),
@@ -1469,12 +1414,12 @@ class _CampoPremium extends StatelessWidget {
         labelText: label,
         hintText: hint,
         labelStyle: const TextStyle(color: AppColors.atrOrange, fontSize: 12, fontWeight: FontWeight.w600),
-        hintStyle: TextStyle(color: isDark ? Colors.white24 : const Color(0xFF94A3B8), fontSize: 13),
+        hintStyle: TextStyle(color: isDark ? Colors.white24 : AppColors.textTertiaryDark, fontSize: 13),
         prefixIcon: Icon(icon, size: 18, color: AppColors.atrOrange.withValues(alpha: 0.6)),
         filled: true,
-        fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB))),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB))),
+        fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex)),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.atrOrange, width: 1.5)),
       ),
     );
@@ -1510,9 +1455,9 @@ class _SalaCrm extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             gradient: isDark
-                ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF111827), Color(0xFF0F172A)])
+                ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.surfaceCardDark, AppColors.surfaceDarkAlt])
                 : const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white, Color(0xFFFAFAFA)]),
-            border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9)),
+            border: Border.all(color: isDark ? AppColors.surfaceHoverDark : const Color(0xFFF1F5F9)),
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03), blurRadius: 8, offset: const Offset(0, 3))],
           ),
           child: Column(
@@ -1533,9 +1478,9 @@ class _SalaCrm extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(c.nome, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontWeight: FontWeight.w700, fontSize: 15, letterSpacing: -0.2)),
+                        Text(c.nome, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontWeight: FontWeight.w700, fontSize: 15, letterSpacing: -0.2)),
                         const SizedBox(height: 2),
-                        Text(c.telefone, style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B), fontSize: 12)),
+                        Text(c.telefone, style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -1543,7 +1488,7 @@ class _SalaCrm extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text('LTV: ${fmt.format(c.totalGasto)}', style: const TextStyle(color: AppColors.statusSuccess, fontWeight: FontWeight.bold, fontSize: 14)),
-                      Text('${c.qtdeAgendamentos} sessões', style: TextStyle(color: isDark ? Colors.white38 : const Color(0xFF94A3B8), fontSize: 11)),
+                      Text('${c.qtdeAgendamentos} sessões', style: TextStyle(color: isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 11)),
                       if (c.qtdeNoShows > 0)
                         Text('${c.qtdeNoShows} faltas (${taxaNoShow.toStringAsFixed(0)}%)', style: const TextStyle(color: AppColors.statusError, fontSize: 11, fontWeight: FontWeight.w600)),
                     ],
@@ -1619,7 +1564,7 @@ void _abrirCriarPacoteParaCliente(BuildContext context, String clienteId, String
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF111827) : Colors.white,
+          color: isDark ? AppColors.surfaceCardDark : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
@@ -1634,19 +1579,19 @@ void _abrirCriarPacoteParaCliente(BuildContext context, String clienteId, String
                   child: const Icon(LucideIcons.package, color: AppColors.statusInfo, size: 20),
                 ),
                 const SizedBox(width: 12),
-                Text('Criar Pacote de Sessões', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 19, fontWeight: FontWeight.w700)),
+                Text('Criar Pacote de Sessões', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 19, fontWeight: FontWeight.w700)),
               ],
             ),
 
             const SizedBox(height: 24),
             TextField(
               controller: nomeCtrl,
-              style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827)),
+              style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
               decoration: InputDecoration(
                 labelText: 'Paciente',
                 prefixIcon: const Icon(LucideIcons.user, size: 18),
                 filled: true,
-                fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
@@ -1657,11 +1602,11 @@ void _abrirCriarPacoteParaCliente(BuildContext context, String clienteId, String
                   child: TextField(
                     controller: sessoesCtrl,
                     keyboardType: TextInputType.number,
-                    style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827)),
+                    style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
                     decoration: InputDecoration(
                       labelText: 'Nº de Sessões',
                       filled: true,
-                      fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
@@ -1671,11 +1616,11 @@ void _abrirCriarPacoteParaCliente(BuildContext context, String clienteId, String
                   child: TextField(
                     controller: valorCtrl,
                     keyboardType: TextInputType.number,
-                    style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827)),
+                    style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
                     decoration: InputDecoration(
                       labelText: 'Valor do Pacote (R\$)',
                       filled: true,
-                      fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
@@ -1684,28 +1629,24 @@ void _abrirCriarPacoteParaCliente(BuildContext context, String clienteId, String
             ),
             const SizedBox(height: 8),
             Text('Valor avulso: R\$ 150,00/sessão • Desconto aplicado automaticamente',
-                style: TextStyle(color: isDark ? Colors.white38 : const Color(0xFF94A3B8), fontSize: 11)),
+                style: TextStyle(color: isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 11)),
             const SizedBox(height: 24),
-            SizedBox(
+            AtrPrimaryButton(
+              label: 'Criar Pacote',
               width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.atrOrange, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                onPressed: () {
-                  if (nomeCtrl.text.trim().isEmpty) return;
-                  final total = int.tryParse(sessoesCtrl.text) ?? 10;
-                  final valor = double.tryParse(valorCtrl.text) ?? 1200;
-                  SalaAtrState.instance.criarPacote(
-                    clienteId: 'cli_${nomeCtrl.text.replaceAll(' ', '_').toLowerCase()}',
-                    clienteNome: nomeCtrl.text.trim(),
-                    totalSessoes: total,
-                    valorPago: valor,
-                    valorAvulso: 150.0,
-                  );
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Criar Pacote', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              ),
+              onPressed: () {
+                if (nomeCtrl.text.trim().isEmpty) return;
+                final total = int.tryParse(sessoesCtrl.text) ?? 10;
+                final valor = double.tryParse(valorCtrl.text) ?? 1200;
+                SalaAtrState.instance.criarPacote(
+                  clienteId: 'cli_${nomeCtrl.text.replaceAll(' ', '_').toLowerCase()}',
+                  clienteNome: nomeCtrl.text.trim(),
+                  totalSessoes: total,
+                  valorPago: valor,
+                  valorAvulso: 150.0,
+                );
+                Navigator.pop(ctx);
+              },
             ),
           ],
         ),
@@ -1752,7 +1693,7 @@ class _SalaFinanceiro extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
-          Text('Extrato de Despesas', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('Extrato de Despesas', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           ...listDespesas.map((d) => Container(
             margin: const EdgeInsets.only(bottom: 6),
@@ -1763,8 +1704,8 @@ class _SalaFinanceiro extends StatelessWidget {
                 decoration: BoxDecoration(color: AppColors.statusError.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
                 child: const Icon(LucideIcons.receipt, color: AppColors.statusError, size: 18),
               ),
-              title: Text(d.descricao, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontWeight: FontWeight.w600)),
-              subtitle: Text(DateFormat('dd/MM/yyyy').format(d.data), style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B))),
+              title: Text(d.descricao, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontWeight: FontWeight.w600)),
+              subtitle: Text(DateFormat('dd/MM/yyyy').format(d.data), style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark)),
               trailing: Text(fmt.format(d.valor), style: const TextStyle(color: AppColors.statusError, fontWeight: FontWeight.bold, fontSize: 15)),
             ),
           )),
@@ -1808,9 +1749,9 @@ class _SalaRecebimentosFuturos extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   gradient: isDark
-                      ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF111827), Color(0xFF0F172A)])
+                      ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.surfaceCardDark, AppColors.surfaceDarkAlt])
                       : const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white, Color(0xFFFAFAFA)]),
-                  border: Border.all(color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9)),
+                  border: Border.all(color: isDark ? AppColors.surfaceHoverDark : const Color(0xFFF1F5F9)),
                 ),
                 child: Column(
                   children: [
@@ -1829,14 +1770,14 @@ class _SalaRecebimentosFuturos extends StatelessWidget {
                       ),
                     ),
                     ...r.itens.map((ag) => ListTile(
-                      title: Text(ag.clienteNome, style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontSize: 14, fontWeight: FontWeight.w600)),
+                      title: Text(ag.clienteNome, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 14, fontWeight: FontWeight.w600)),
                       subtitle: Text('${ag.tipoPagamento.nome} • Atendido em ${DateFormat('dd/MM/yy').format(ag.inicio)}',
-                          style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B), fontSize: 12)),
+                          style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark, fontSize: 12)),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(fmt.format(ag.valorTotal), style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827), fontWeight: FontWeight.bold)),
+                          Text(fmt.format(ag.valorTotal), style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontWeight: FontWeight.bold)),
                           Text('Recebe: ${DateFormat('dd/MM/yy').format(ag.dataRecebimento)}',
                               style: const TextStyle(color: AppColors.statusSuccess, fontSize: 11, fontWeight: FontWeight.w600)),
                         ],

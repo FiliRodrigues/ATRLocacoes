@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../../core/widgets/app_sidebar.dart';
 import '../../core/widgets/bento_card.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/navigation/app_router.dart';
@@ -93,37 +95,40 @@ class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
 
     return AppSidebar(
       child: Scaffold(
-        body: SafeArea(
-          child: widget.vehiclePlate == null
-              ? Column(
-                  children: [
-                    _buildFilterRow(context),
-                    Expanded(
-                      child: viewList.isEmpty
-                          ? Center(
-                              child: Text(
-                                'Nenhum veículo encontrado para este filtro.',
-                                style: Theme.of(context).textTheme.titleMedium,
+        body: AtrPageBackground(
+          grid: true,
+          child: SafeArea(
+            child: widget.vehiclePlate == null
+                ? Column(
+                    children: [
+                      _buildFilterRow(context),
+                      Expanded(
+                        child: viewList.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'Nenhum veículo encontrado para este filtro.',
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                              )
+                            : _FinancialListView(
+                                frota: viewList, // Para a tabela de manutenções usar a lista filtrada
+                                financiados: viewList, // A grid principal usa essa lista
+                                totalPago: totals.totalPago,
+                                totalRestante: totals.totalRestante,
+                                totalManut: totals.totalManut,
+                                totalRecebido: totals.totalRecebido,
+                                lucroLiquido: totals.lucroLiquido,
                               ),
-                            )
-                          : _FinancialListView(
-                              frota: viewList, // Para a tabela de manutenções usar a lista filtrada
-                              financiados: viewList, // A grid principal usa essa lista
-                              totalPago: totals.totalPago,
-                              totalRestante: totals.totalRestante,
-                              totalManut: totals.totalManut,
-                              totalRecebido: totals.totalRecebido,
-                              lucroLiquido: totals.lucroLiquido,
-                            ),
+                      ),
+                    ],
+                  )
+                : _DetailView(
+                    veiculo: repo.frota.firstWhere(
+                      (v) => v.placa == widget.vehiclePlate,
+                      orElse: () => repo.frota.first,
                     ),
-                  ],
-                )
-              : _DetailView(
-                  veiculo: repo.frota.firstWhere(
-                    (v) => v.placa == widget.vehiclePlate,
-                    orElse: () => repo.frota.first,
                   ),
-                ),
+          ),
         ),
       ),
     );
@@ -164,14 +169,10 @@ class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.atrOrange,
-              side: const BorderSide(color: AppColors.atrOrange),
-            ),
+          AtrSecondaryButton(
+            label: 'TCO',
+            icon: LucideIcons.pieChart,
             onPressed: () => context.push(AppRoutes.tco),
-            icon: const Icon(LucideIcons.pieChart, size: 16),
-            label: const Text('TCO'),
           ),
         ],
       ),
@@ -547,7 +548,7 @@ class _FinancialListView extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : Colors.black87,
+                        color: isDark ? AppColors.textPrimaryDark : Colors.black87,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -833,7 +834,7 @@ class _FinancialListView extends StatelessWidget {
                 Text('Locação',
                     style: TextStyle(
                         fontSize: 10,
-                        color: isDark ? Colors.white70 : Colors.black87)),
+                        color: isDark ? AppColors.textPrimaryDark : Colors.black87)),
                 Text(
                   '${(progressoLoc * 100).toStringAsFixed(0)}%'
                   '  (${f.mesesLocacaoPagos}/${f.mesesLocacaoTotais}) - $mesAnoAtual',
@@ -880,7 +881,7 @@ class _FinancialListView extends StatelessWidget {
                 Text('Financiamento',
                     style: TextStyle(
                         fontSize: 10,
-                        color: isDark ? Colors.white70 : Colors.black87)),
+                        color: isDark ? AppColors.textPrimaryDark : Colors.black87)),
                 Text(
                   isQuitado 
                       ? 'Quitado (100%)'
@@ -1006,7 +1007,7 @@ class _FinancialListView extends StatelessWidget {
                 Text('Manutenção total',
                     style: TextStyle(
                         fontSize: 10,
-                        color: isDark ? Colors.white70 : Colors.black87)),
+                        color: isDark ? AppColors.textPrimaryDark : Colors.black87)),
                 Text(
                   formatCurrency(manutencaoCusto),
                   style: const TextStyle(
@@ -1512,34 +1513,10 @@ class _DetailViewState extends State<_DetailView> {
             ],
           ),
         ),
-        InkWell(
-          onTap: () => ctx.go('/vehicles/${v.placa}'),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.atrOrange.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.atrOrange.withValues(alpha: 0.2),
-              ),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(LucideIcons.car, size: 14, color: AppColors.atrOrange),
-                SizedBox(width: 6),
-                Text(
-                  'Ver Dossiê',
-                  style: TextStyle(
-                    color: AppColors.atrOrange,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        AtrSecondaryButton(
+          label: 'Ver Dossiê',
+          icon: LucideIcons.car,
+          onPressed: () => ctx.go('/vehicles/${v.placa}'),
         ),
         const SizedBox(width: 12),
         StatusBadge(
@@ -2370,7 +2347,7 @@ class _DetailViewState extends State<_DetailView> {
                     Expanded(
                       child: Text(
                         "Faltam apenas $mesesFaltantes ${mesesFaltantes == 1 ? 'parcela' : 'parcelas'} para acabar os lançamentos registrados.",
-                        style: TextStyle(fontSize: 12, color: AppColors.atrOrange, fontWeight: FontWeight.w600),
+                        style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: AppColors.atrOrange, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],

@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../core/data/locacao_models.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/atr_button.dart';
 import '../locacao_provider.dart';
 
 class ChecklistFormSheet extends StatefulWidget {
@@ -175,29 +176,10 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
               ),
               const SizedBox(height: 28),
 
-              SizedBox(
-                height: 48,
-                child: FilledButton(
-                  onPressed: _saving ? null : _salvar,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.atrOrange,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text(
-                          'Registrar ${_tipo.label}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 15),
-                        ),
-                ),
+              AtrPrimaryButton(
+                label: 'Registrar ${_tipo.label}',
+                loading: _saving,
+                onPressed: _salvar,
               ),
             ],
           ),

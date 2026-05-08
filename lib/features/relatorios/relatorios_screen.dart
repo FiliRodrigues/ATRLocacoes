@@ -7,8 +7,12 @@ import '../../core/data/fleet_data.dart';
 import '../../core/providers/combustivel_provider.dart';
 import '../../core/services/relatorio_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
 import '../../core/widgets/bento_card.dart';
+import '../../core/widgets/atr_button.dart';
+import '../../core/widgets/atr_kpi_card.dart';
 import '../custos/custos_provider.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -41,14 +45,16 @@ class _RelatoriosScreenState extends State<RelatoriosScreen> {
 
     return AppSidebar(
       child: Scaffold(
-        body: SafeArea(
+        body: AtrPageBackground(grid: true, child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(32, 32, 32, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(context, isDark),
-                const SizedBox(height: 28),
+                const AtrTopBar(
+                  title: 'Relatórios',
+                  subtitle: 'Exporte os dados da frota em PDF por período',
+                ),
                 _buildFiltros(context, isDark),
                 const SizedBox(height: 28),
                 _buildKpiRow(isDark, data),
@@ -57,30 +63,8 @@ class _RelatoriosScreenState extends State<RelatoriosScreen> {
               ],
             ),
           ),
-        ),
+        )),
       ),
-    );
-  }
-
-  // ── Cabeçalho ──────────────────────────────────────────────────────
-
-  Widget _buildHeader(BuildContext context, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Relatórios',
-          style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Exporte os dados da frota em PDF por período',
-          style: TextStyle(
-            fontSize: 14,
-            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-          ),
-        ),
-      ],
     );
   }
 
@@ -101,27 +85,11 @@ class _RelatoriosScreenState extends State<RelatoriosScreen> {
             setState(() => _ate = d);
           }),
           const SizedBox(width: 8),
-          SizedBox(
-            height: 44,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.atrOrange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-              ),
-              onPressed: _gerando ? null : () => _onGerar(context),
-              icon: _gerando
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(LucideIcons.fileDown, size: 16),
-              label: Text(_gerando ? 'Gerando…' : 'Gerar e Baixar PDF'),
-            ),
+          AtrPrimaryButton(
+            label: _gerando ? 'Gerando…' : 'Gerar e Baixar PDF',
+            icon: _gerando ? null : LucideIcons.fileDown,
+            loading: _gerando,
+            onPressed: () => _onGerar(context),
           ),
         ],
       ),
@@ -189,10 +157,10 @@ class _RelatoriosScreenState extends State<RelatoriosScreen> {
       spacing: 12,
       runSpacing: 12,
       children: [
-        _KpiCard(label: 'Manutenção', value: _brl.format(data.totalManutencao), color: AppColors.statusError, icon: LucideIcons.wrench),
-        _KpiCard(label: 'Despesas', value: _brl.format(data.totalDespesas), color: AppColors.statusWarning, icon: LucideIcons.receipt),
-        _KpiCard(label: 'Combustível', value: _brl.format(data.totalCombustivel), color: AppColors.atrOrange, icon: LucideIcons.fuel),
-        _KpiCard(label: 'Total Geral', value: _brl.format(data.totalGeral), color: AppColors.statusInfo, icon: LucideIcons.circleDollarSign),
+        SizedBox(width: 180, child: AtrKpiCard(label: 'Manutenção', value: _brl.format(data.totalManutencao), tone: KpiTone.error, icon: LucideIcons.wrench)),
+        SizedBox(width: 180, child: AtrKpiCard(label: 'Despesas', value: _brl.format(data.totalDespesas), tone: KpiTone.warning, icon: LucideIcons.receipt)),
+        SizedBox(width: 180, child: AtrKpiCard(label: 'Combustível', value: _brl.format(data.totalCombustivel), tone: KpiTone.orange, icon: LucideIcons.fuel)),
+        SizedBox(width: 180, child: AtrKpiCard(label: 'Total Geral', value: _brl.format(data.totalGeral), tone: KpiTone.info, icon: LucideIcons.circleDollarSign)),
       ],
     );
   }
@@ -212,7 +180,7 @@ class _RelatoriosScreenState extends State<RelatoriosScreen> {
               Text(
                 'Nenhum dado no período selecionado',
                 style: TextStyle(
-                  color: isDark ? Colors.white54 : Colors.black54,
+                  color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                   fontSize: 14,
                 ),
               ),
@@ -234,7 +202,7 @@ class _RelatoriosScreenState extends State<RelatoriosScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 14,
-                color: isDark ? Colors.white70 : Colors.black87,
+                color: isDark ? AppColors.textPrimaryDark : Colors.black87,
               ),
             ),
           ),
@@ -386,84 +354,6 @@ class _RelatoriosScreenState extends State<RelatoriosScreen> {
     } finally {
       if (mounted) setState(() => _gerando = false);
     }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Widgets privados
-// ─────────────────────────────────────────────────────────────────────
-
-class _KpiCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  final IconData icon;
-
-  const _KpiCard({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return SizedBox(
-      width: 180,
-      child: BentoCard(
-        padding: EdgeInsets.zero,
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: color, width: 3)),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      color.withValues(alpha: 0.2),
-                      color.withValues(alpha: 0.08),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 16, color: color),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                      ),
-                    ),
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                        color: color,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 

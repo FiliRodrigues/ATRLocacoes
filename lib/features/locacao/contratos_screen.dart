@@ -3,7 +3,11 @@ import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
+import '../../core/widgets/atr_button.dart';
+import '../../core/widgets/atr_kpi_card.dart';
 import 'locacao_provider.dart';
 import '../../core/data/locacao_models.dart';
 import 'widgets/contrato_form_sheet.dart';
@@ -36,104 +40,97 @@ class _ContratosScreenState extends State<ContratosScreen> {
             c.veiculoPlaca.toLowerCase().contains(_busca.toLowerCase()))
         .toList();
 
-    final bgColor = isDark ? AppColors.backgroundDark : AppColors.backgroundLight;
-
     return AppSidebar(
       child: Scaffold(
-        backgroundColor: bgColor,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context, isDark, provider),
-            _buildFiltros(isDark),
-            Expanded(
-              child: provider.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : contratos.isEmpty
-                      ? _buildEmpty(isDark)
-                      : _buildLista(contratos, isDark),
-            ),
-          ],
+        body: AtrPageBackground(
+          grid: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context, isDark, provider),
+                    _buildMetrics(isDark, provider),
+                  ],
+                ),
+              ),
+              _buildFiltros(isDark),
+              Expanded(
+                child: provider.isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : contratos.isEmpty
+                        ? _buildEmpty(isDark)
+                        : _buildLista(contratos, isDark),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context, bool isDark, LocacaoProvider provider) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(28, 28, 28, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Contratos de Locação',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${provider.contratosAtivos.length} contratos ativos · ${_brl.format(provider.receitaMensalAtiva)}/mês',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: () => _abrirFormContrato(context),
-                icon: const Icon(LucideIcons.plus, size: 16),
-                label: const Text('Novo Contrato'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.atrOrange,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildMetrics(isDark, provider),
-          const SizedBox(height: 20),
-        ],
-      ),
+    return AtrTopBar(
+      title: 'Contratos de Locação',
+      subtitle: '${provider.contratosAtivos.length} contratos ativos · ${_brl.format(provider.receitaMensalAtiva)}/mês',
+      actions: [
+        AtrPrimaryButton(
+          label: 'Novo Contrato',
+          icon: LucideIcons.plus,
+          onPressed: () => _abrirFormContrato(context),
+        ),
+      ],
     );
   }
 
   Widget _buildMetrics(bool isDark, LocacaoProvider provider) {
-    final cards = [
-      _MetricData('Contratos Ativos', '${provider.contratosAtivos.length}',
-          LucideIcons.fileCheck2, AppColors.statusSuccess),
-      _MetricData('Receita Mensal', _brl.format(provider.receitaMensalAtiva),
-          LucideIcons.trendingUp, AppColors.atrOrange),
-      _MetricData('Ocorrências Abertas', '${provider.ocorrenciasAbertas}',
-          LucideIcons.alertTriangle, AppColors.statusWarning),
-      _MetricData('Impacto Financeiro',
-          _brl.format(provider.impactoFinanceiroTotal),
-          LucideIcons.alertCircle, AppColors.statusError),
-    ];
     return Row(
-      children: cards
-          .map((d) => Expanded(child: Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: _MetricCard(data: d, isDark: isDark),
-              )))
-          .toList(),
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: AtrKpiCard(
+              label: 'Contratos Ativos',
+              value: '${provider.contratosAtivos.length}',
+              icon: LucideIcons.fileCheck2,
+              tone: KpiTone.success,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: AtrKpiCard(
+              label: 'Receita Mensal',
+              value: _brl.format(provider.receitaMensalAtiva),
+              icon: LucideIcons.trendingUp,
+              tone: KpiTone.orange,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: AtrKpiCard(
+              label: 'Ocorrências Abertas',
+              value: '${provider.ocorrenciasAbertas}',
+              icon: LucideIcons.alertTriangle,
+              tone: KpiTone.warning,
+            ),
+          ),
+        ),
+        Expanded(
+          child: AtrKpiCard(
+            label: 'Impacto Financeiro',
+            value: _brl.format(provider.impactoFinanceiroTotal),
+            icon: LucideIcons.alertCircle,
+            tone: KpiTone.error,
+          ),
+        ),
+      ],
     );
   }
 
@@ -230,73 +227,6 @@ class _ContratosScreenState extends State<ContratosScreen> {
 }
 
 // ── Widgets internos ──────────────────────────────────
-
-class _MetricData {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-  const _MetricData(this.label, this.value, this.icon, this.color);
-}
-
-class _MetricCard extends StatelessWidget {
-  final _MetricData data;
-  final bool isDark;
-  const _MetricCard({required this.data, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark ? AppColors.borderDark : AppColors.borderLight,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: data.color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(data.icon, size: 18, color: data.color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  data.value,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: isDark
-                        ? AppColors.textPrimaryDark
-                        : AppColors.textPrimaryLight,
-                  ),
-                ),
-                Text(
-                  data.label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _ContratoCard extends StatelessWidget {
   final Contrato contrato;

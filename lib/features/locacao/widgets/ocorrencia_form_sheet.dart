@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/data/locacao_models.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/atr_button.dart';
 import '../locacao_provider.dart';
 
 class OcorrenciaFormSheet extends StatefulWidget {
@@ -233,29 +234,10 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
               ),
               const SizedBox(height: 28),
 
-              SizedBox(
-                height: 48,
-                child: FilledButton(
-                  onPressed: _saving ? null : _salvar,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.statusError,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text(
-                          'Registrar Ocorrência',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 15),
-                        ),
-                ),
+              AtrPrimaryButton(
+                label: 'Registrar Ocorrência',
+                loading: _saving,
+                onPressed: _salvar,
               ),
             ],
           ),

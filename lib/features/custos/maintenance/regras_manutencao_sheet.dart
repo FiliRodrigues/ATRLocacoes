@@ -7,6 +7,7 @@ import '../../../core/data/regras_manutencao_models.dart';
 import '../../../core/enums/maintenance_priority.dart';
 import '../../../core/providers/regras_manutencao_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/atr_button.dart';
 
 class RegrasManutencaoSheet extends StatelessWidget {
   const RegrasManutencaoSheet({super.key});
@@ -114,21 +115,16 @@ class RegrasManutencaoSheet extends StatelessWidget {
                   'OS geradas automaticamente quando KM ou prazo é atingido',
                   style: TextStyle(
                     fontSize: 11,
-                    color: isDark ? Colors.white54 : Colors.black54,
+                    color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                   ),
                 ),
               ],
             ),
           ),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.atrOrange,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            ),
+          AtrPrimaryButton(
+            label: 'Adicionar',
+            icon: LucideIcons.plus,
             onPressed: () => _showAddRegra(context),
-            icon: const Icon(LucideIcons.plus, size: 16),
-            label: const Text('Adicionar', style: TextStyle(fontSize: 13)),
           ),
         ],
       ),
@@ -149,7 +145,7 @@ class RegrasManutencaoSheet extends StatelessWidget {
           Text(
             'Nenhuma regra configurada',
             style: TextStyle(
-              color: isDark ? Colors.white54 : Colors.black54,
+              color: isDark ? AppColors.textSecondaryDark : Colors.black54,
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
@@ -253,7 +249,7 @@ class _RegraTile extends StatelessWidget {
                   criterio,
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? Colors.white54 : Colors.black54,
+                    color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                   ),
                 ),
                 if (regra.veiculoPlaca != null)
@@ -322,14 +318,14 @@ class _RegraTile extends StatelessWidget {
         title: const Text('Excluir Regra'),
         content: Text('Deseja excluir a regra "${regra.titulo}"?'),
         actions: [
-          TextButton(
+          AtrGhostButton(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+          const SizedBox(width: 8),
+          AtrGhostButton(
+            label: 'Excluir',
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir'),
           ),
         ],
       ),
@@ -543,7 +539,7 @@ class _RegraFormDialogState extends State<_RegraFormDialog> {
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
-                    color: isDark ? Colors.white70 : Colors.black87,
+                    color: isDark ? AppColors.textPrimaryDark : Colors.black87,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -570,7 +566,7 @@ class _RegraFormDialogState extends State<_RegraFormDialog> {
                       child: Text(
                         'ou',
                         style: TextStyle(
-                          color: isDark ? Colors.white54 : Colors.black54,
+                          color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                         ),
                       ),
                     ),
@@ -634,15 +630,14 @@ class _RegraFormDialogState extends State<_RegraFormDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        AtrGhostButton(
+          label: 'Cancelar',
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
         ),
-        FilledButton(
-          style:
-              FilledButton.styleFrom(backgroundColor: AppColors.atrOrange),
+        const SizedBox(width: 8),
+        AtrPrimaryButton(
+          label: 'Criar Regra',
           onPressed: _submit,
-          child: const Text('Criar Regra'),
         ),
       ],
     );

@@ -70,11 +70,26 @@ class _AppSidebarState extends State<AppSidebar> {
               curve: Curves.easeInOut,
               width: _isCollapsed ? 80 : 260,
               clipBehavior: Clip.hardEdge,
-              decoration: const BoxDecoration(
-                color: AppColors.atrNavyBlue,
-                border: Border(
-                  right: BorderSide(color: AppColors.atrNavyDarker),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xF21A2332),
+                    Color(0xF20D1420),
+                  ],
                 ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.05),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.50),
+                    blurRadius: 24,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Column(
                 children: [
@@ -115,20 +130,23 @@ class _AppSidebarState extends State<AppSidebar> {
                                     children: [
                                       Text(
                                         'ATR',
-                                        style: TextStyle(
+                                        style: const TextStyle(
+                                          fontFamily: 'Plus Jakarta Sans',
                                           color: Colors.white,
                                           fontWeight: FontWeight.w900,
-                                          fontSize: 20,
-                                          letterSpacing: 1.2,
+                                          fontSize: 14,
+                                          letterSpacing: 3,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       Text(
-                                        '(Locações)',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 10,
+                                        'LOCAÇÕES',
+                                        style: const TextStyle(
+                                          fontFamily: 'Plus Jakarta Sans',
+                                          color: AppColors.textSecondaryDark,
+                                          fontSize: 9,
                                           fontWeight: FontWeight.w500,
+                                          letterSpacing: 1,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -148,7 +166,7 @@ class _AppSidebarState extends State<AppSidebar> {
                             _isCollapsed
                                 ? LucideIcons.chevronRight
                                 : LucideIcons.chevronLeft,
-                            color: Colors.white54,
+                            color: AppColors.textSecondaryDark,
                             size: 18,
                           ),
                           onPressed: _toggleSidebar,
@@ -344,6 +362,79 @@ class _AppSidebarState extends State<AppSidebar> {
                       context.go(AppRoutes.login);
                     },
                   ),
+                  const SizedBox(height: 8),
+                  Builder(
+                    builder: (context) {
+                      final user = context.watch<AuthService>().currentUser;
+                      final initials = (user?.username ?? 'ATR')
+                          .split(' ')
+                          .take(2)
+                          .map((s) => s.isNotEmpty ? s[0].toUpperCase() : '')
+                          .join();
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.06),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(colors: AppColors.warmGradient),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  initials,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            if (!_isCollapsed)
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      user?.username ?? 'ATR',
+                                      style: const TextStyle(
+                                        fontFamily: 'Plus Jakarta Sans',
+                                        color: AppColors.textPrimaryDark,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      user?.role.name ?? '',
+                                      style: const TextStyle(
+                                        fontFamily: 'Plus Jakarta Sans',
+                                        color: AppColors.textSecondaryDark,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -415,13 +506,13 @@ class _AppSidebarState extends State<AppSidebar> {
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         initiallyExpanded: isVehiclesActive,
-        iconColor: Colors.white,
-        collapsedIconColor: Colors.white54,
+        iconColor: AppColors.textPrimaryDark,
+        collapsedIconColor: AppColors.textSecondaryDark,
         title: Row(
           children: [
             Icon(
               LucideIcons.car,
-              color: isVehiclesActive ? AppColors.atrOrange : Colors.white54,
+              color: isVehiclesActive ? AppColors.atrOrange : AppColors.textSecondaryDark,
               size: 20,
             ),
             const SizedBox(width: 16),
@@ -429,7 +520,7 @@ class _AppSidebarState extends State<AppSidebar> {
               child: Text(
                 'Acessar Veículos',
                 style: TextStyle(
-                  color: isVehiclesActive ? Colors.white : Colors.white70,
+                  color: isVehiclesActive ? AppColors.textPrimaryDark : AppColors.textSecondaryDark,
                   fontWeight:
                       isVehiclesActive ? FontWeight.w600 : FontWeight.w500,
                   fontSize: 13,
@@ -445,12 +536,13 @@ class _AppSidebarState extends State<AppSidebar> {
             Padding(
               padding: const EdgeInsets.only(top: 6, bottom: 6),
               child: Text(
-                'Carros ${group.key}',
+                'CARROS ${group.key.toUpperCase()}',
                 style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
+                  fontFamily: 'Plus Jakarta Sans',
+                  color: Color(0xFF5B6478),
+                  fontSize: 9,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
+                  letterSpacing: 1.2,
                 ),
               ),
             ),
@@ -481,13 +573,13 @@ class _AppSidebarState extends State<AppSidebar> {
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         initiallyExpanded: isFinActive,
-        iconColor: Colors.white,
-        collapsedIconColor: Colors.white54,
+        iconColor: AppColors.textPrimaryDark,
+        collapsedIconColor: AppColors.textSecondaryDark,
         title: Row(
           children: [
             Icon(
               LucideIcons.landmark,
-              color: isFinActive ? AppColors.atrOrange : Colors.white54,
+              color: isFinActive ? AppColors.atrOrange : AppColors.textSecondaryDark,
               size: 20,
             ),
             const SizedBox(width: 16),
@@ -495,7 +587,7 @@ class _AppSidebarState extends State<AppSidebar> {
               child: Text(
                 'Adm Financeiro',
                 style: TextStyle(
-                  color: isFinActive ? Colors.white : Colors.white70,
+                  color: isFinActive ? AppColors.textPrimaryDark : AppColors.textSecondaryDark,
                   fontWeight: isFinActive ? FontWeight.w600 : FontWeight.w500,
                   fontSize: 13,
                 ),
@@ -516,12 +608,13 @@ class _AppSidebarState extends State<AppSidebar> {
             Padding(
               padding: const EdgeInsets.only(top: 6, bottom: 6),
               child: Text(
-                'Carros ${group.key}',
+                'CARROS ${group.key.toUpperCase()}',
                 style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
+                  fontFamily: 'Plus Jakarta Sans',
+                  color: Color(0xFF5B6478),
+                  fontSize: 9,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
+                  letterSpacing: 1.2,
                 ),
               ),
             ),
@@ -625,8 +718,10 @@ class _SidebarItemState extends State<_SidebarItem> {
     final isHover = _hovering || widget.isActive;
     final iconColor = widget.isActive
         ? AppColors.atrOrange
-        : (isHover ? Colors.white : Colors.white54);
-    final textColor = isHover ? Colors.white : Colors.white54;
+        : (isHover ? AppColors.textPrimaryDark : AppColors.textSecondaryDark);
+    final textColor = widget.isActive
+        ? AppColors.atrOrange
+        : (isHover ? AppColors.textPrimaryDark : AppColors.textSecondaryDark);
 
     return RepaintBoundary(
       child: Padding(
@@ -658,6 +753,15 @@ class _SidebarItemState extends State<_SidebarItem> {
                     ? Border.all(
                         color: AppColors.atrOrange.withValues(alpha: 0.2),
                       )
+                    : null,
+                boxShadow: widget.isActive
+                    ? [
+                        BoxShadow(
+                          color: AppColors.glowOrange,
+                          blurRadius: 12,
+                          spreadRadius: 0,
+                        ),
+                      ]
                     : null,
               ),
               child: Row(
@@ -742,7 +846,7 @@ class _SubSidebarItemState extends State<_SubSidebarItem> {
     final isHover = _hovering || widget.isActive;
     final dotColor = widget.isActive
         ? AppColors.atrOrange
-        : (isHover ? Colors.white70 : Colors.white30);
+        : (isHover ? AppColors.textPrimaryDark : AppColors.textSecondaryDark.withValues(alpha: 0.3));
 
     return RepaintBoundary(
       child: MouseRegion(
@@ -756,7 +860,7 @@ class _SubSidebarItemState extends State<_SubSidebarItem> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: _hovering
-                  ? Colors.white.withValues(alpha: 0.03)
+                  ? Colors.white.withValues(alpha: 0.04)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(8),
             ),
@@ -785,8 +889,8 @@ class _SubSidebarItemState extends State<_SubSidebarItem> {
                     widget.title,
                     style: TextStyle(
                       color: widget.isActive
-                          ? Colors.white
-                          : (isHover ? Colors.white70 : Colors.white54),
+                          ? AppColors.textPrimaryDark
+                          : (isHover ? AppColors.textPrimaryDark : AppColors.textSecondaryDark),
                       fontSize: 12,
                       fontWeight:
                           widget.isActive ? FontWeight.w600 : FontWeight.w500,

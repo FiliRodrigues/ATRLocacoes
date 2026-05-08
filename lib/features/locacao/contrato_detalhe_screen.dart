@@ -6,6 +6,8 @@ import '../../core/data/fleet_data.dart';
 import '../../core/data/locacao_models.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_button.dart';
+import '../../core/widgets/atr_page_background.dart';
 import 'locacao_provider.dart';
 import 'widgets/checklist_form_sheet.dart';
 import 'widgets/ocorrencia_form_sheet.dart';
@@ -53,13 +55,14 @@ class _ContratoDetalheScreenState extends State<ContratoDetalheScreen>
     if (contrato == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Contrato')),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const AtrPageBackground(
+          grid: true,
+          child: Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(
         backgroundColor:
             isDark ? AppColors.atrNavyBlue : Colors.white,
@@ -98,13 +101,16 @@ class _ContratoDetalheScreenState extends State<ContratoDetalheScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _ResumoTab(contrato: contrato, isDark: isDark, provider: provider),
-          _ChecklistTab(contrato: contrato, isDark: isDark, provider: provider),
-          _OcorrenciasTab(contrato: contrato, isDark: isDark, provider: provider),
-        ],
+      body: AtrPageBackground(
+        grid: true,
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _ResumoTab(contrato: contrato, isDark: isDark, provider: provider),
+            _ChecklistTab(contrato: contrato, isDark: isDark, provider: provider),
+            _OcorrenciasTab(contrato: contrato, isDark: isDark, provider: provider),
+          ],
+        ),
       ),
     );
   }
@@ -439,9 +445,9 @@ class _OcorrenciaCard extends StatelessWidget {
               ),
               const Spacer(),
               if (ocorrencia.status == OcorrenciaStatus.aberta)
-                TextButton(
+                AtrGhostButton(
+                  label: 'Resolver',
                   onPressed: () => _resolverOcorrencia(context),
-                  child: const Text('Resolver'),
                 ),
             ],
           ),
@@ -499,13 +505,14 @@ class _OcorrenciaCard extends StatelessWidget {
           ],
         ),
         actions: [
-          TextButton(
+          AtrGhostButton(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
           ),
-          FilledButton(
+          const SizedBox(width: 8),
+          AtrPrimaryButton(
+            label: 'Confirmar',
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirmar'),
           ),
         ],
       ),
@@ -644,7 +651,7 @@ class _SlaKmCard extends StatelessWidget {
                           'de ${_km.format(kmContratadoPeriodo.toInt())} km SLA',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? Colors.white54 : Colors.black54,
+                            color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                           ),
                         ),
                       ],
@@ -680,7 +687,7 @@ class _SlaKmCard extends StatelessWidget {
                       '${(pct * 100).toStringAsFixed(1)}% do SLA utilizado no período',
                       style: TextStyle(
                         fontSize: 11,
-                        color: isDark ? Colors.white54 : Colors.black54,
+                        color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                       ),
                     ),
                   ],

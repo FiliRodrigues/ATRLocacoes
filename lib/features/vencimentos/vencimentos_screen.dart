@@ -4,6 +4,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
 import '../../core/widgets/bento_card.dart';
 
@@ -130,111 +132,80 @@ class _VencimentosScreenState extends State<VencimentosScreen> {
 
     return AppSidebar(
       child: Scaffold(
-        backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-        body: Column(
-          children: [
-            _buildHeader(context, isDark, nVencido + nCritico),
-            _buildSummaryRow(isDark, nVencido, nCritico, nAlerta, nOk, total: todos.length),
-            _buildFilterBar(isDark, nVencido, nCritico, nAlerta, nOk),
-            Expanded(
-              child: filtrados.isEmpty
-                  ? _buildEmpty(isDark)
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-                      itemCount: filtrados.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) => _VencCard(
-                        item: filtrados[i],
-                        isDark: isDark,
-                        dateFmt: _dateFmt,
+        body: AtrPageBackground(
+          grid: true,
+          child: Column(
+            children: [
+              _buildHeader(context, isDark, nVencido + nCritico),
+              _buildSummaryRow(isDark, nVencido, nCritico, nAlerta, nOk, total: todos.length),
+              _buildFilterBar(isDark, nVencido, nCritico, nAlerta, nOk),
+              Expanded(
+                child: filtrados.isEmpty
+                    ? _buildEmpty(isDark)
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+                        itemCount: filtrados.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) => _VencCard(
+                          item: filtrados[i],
+                          isDark: isDark,
+                          dateFmt: _dateFmt,
+                        ),
                       ),
-                    ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context, bool isDark, int nUrgentes) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(32, 28, 32, 16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.atrNavyDarker : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: (nUrgentes > 0 ? AppColors.statusError : AppColors.statusSuccess)
-                      .withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  LucideIcons.calendarClock,
-                  color: nUrgentes > 0 ? AppColors.statusError : AppColors.statusSuccess,
-                  size: 24,
+    return AtrTopBar(
+      title: 'Painel de Vencimentos',
+      subtitle: 'IPVA · Seguro · Licenciamento · CNH — tudo em um só lugar',
+      actions: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: (nUrgentes > 0 ? AppColors.statusError : AppColors.statusSuccess)
+                    .withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                LucideIcons.calendarClock,
+                color: nUrgentes > 0 ? AppColors.statusError : AppColors.statusSuccess,
+                size: 24,
+              ),
+            ),
+            if (nUrgentes > 0)
+              Positioned(
+                top: -4,
+                right: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: AppColors.statusError,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                  child: Text(
+                    '$nUrgentes',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
               ),
-              if (nUrgentes > 0)
-                Positioned(
-                  top: -4,
-                  right: -4,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: AppColors.statusError,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                    child: Text(
-                      '$nUrgentes',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Painel de Vencimentos',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.3,
-                      ),
-                ),
-                Text(
-                  'IPVA · Seguro · Licenciamento · CNH — tudo em um só lugar',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.white54 : Colors.black54,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -370,7 +341,7 @@ class _VencimentosScreenState extends State<VencimentosScreen> {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white54 : Colors.black54,
+              color: isDark ? AppColors.textSecondaryDark : Colors.black54,
             ),
           ),
         ],
@@ -440,7 +411,7 @@ class _SummaryTile extends StatelessWidget {
                   label,
                   style: TextStyle(
                     fontSize: 11,
-                    color: isDark ? Colors.white54 : Colors.black54,
+                    color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                   ),
                 ),
               ],
@@ -514,7 +485,7 @@ class _VencCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white54 : Colors.black54,
+                          color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                         ),
                       ),
                     ),
@@ -525,7 +496,7 @@ class _VencCard extends StatelessWidget {
                   item.subtitulo,
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? Colors.white54 : Colors.black54,
+                    color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                   ),
                 ),
               ],

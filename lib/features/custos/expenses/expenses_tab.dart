@@ -17,8 +17,10 @@ import '../../../core/data/custos_models.dart';
 import '../custos_provider.dart';
 import '../../../core/data/fleet_data.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/atr_button.dart';
 import '../../../core/widgets/bento_card.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/widgets/atr_top_bar.dart';
 
 import '../widgets/custos_filter_bar.dart';
 import 'expense_form_modal.dart';
@@ -142,7 +144,80 @@ class _ExpensesTabState extends State<ExpensesTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(context, todasDespesas),
+        AtrTopBar(
+          title: 'Despesas Operacionais',
+          subtitle: 'Gestão de custos e comprovantes.',
+          actions: [
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'csv') {
+                  _exportCsv(todasDespesas);
+                } else if (value == 'pdf') {
+                  _exportPdf(todasDespesas);
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'csv',
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.fileSpreadsheet, size: 16),
+                      SizedBox(width: 8),
+                      Text('Exportar CSV'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'pdf',
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.fileText, size: 16),
+                      SizedBox(width: 8),
+                      Text('Exportar PDF'),
+                    ],
+                  ),
+                ),
+              ],
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.borderLight),
+                  borderRadius: BorderRadius.circular(12),
+                  color: Theme.of(context).colorScheme.surface,
+                ),
+                child: const Row(
+                  children: [
+                    Icon(LucideIcons.download,
+                        size: 16, color: AppColors.textSecondaryLight),
+                    SizedBox(width: 8),
+                    Text(
+                      'Exportar',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            AtrPrimaryButton(
+              label: 'Lançamento Rápido',
+              icon: LucideIcons.plus,
+              onPressed: () async {
+                final newItem = await ExpenseFormModal.show(context);
+                if (newItem != null && context.mounted) {
+                  context.read<CustosProvider>().addDespesa(newItem);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Despesa adicionada com sucesso!')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
         const SizedBox(height: 24),
 
         // ── Filtros ──
@@ -211,120 +286,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
                 _buildTableFooter(todasDespesas.length, totalPaginas),
             ],
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHeader(BuildContext context, List<DespesaItem> currentList) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Despesas Operacionais',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Gestão de custos e comprovantes.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondaryLight,
-                  ),
-            ),
-          ],
-        ),
-        Row(
-          children: [
-            // Botão Exportar
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'csv') {
-                  _exportCsv(currentList);
-                } else if (value == 'pdf') {
-                  _exportPdf(currentList);
-                }
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(
-                  value: 'csv',
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.fileSpreadsheet, size: 16),
-                      SizedBox(width: 8),
-                      Text('Exportar CSV'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'pdf',
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.fileText, size: 16),
-                      SizedBox(width: 8),
-                      Text('Exportar PDF'),
-                    ],
-                  ),
-                ),
-              ],
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.borderLight),
-                  borderRadius: BorderRadius.circular(12),
-                  color: Theme.of(context).colorScheme.surface,
-                ),
-                child: const Row(
-                  children: [
-                    Icon(LucideIcons.download,
-                        size: 16, color: AppColors.textSecondaryLight),
-                    SizedBox(width: 8),
-                    Text(
-                      'Exportar',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondaryLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Lançamento Rápido
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.atrOrange,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () async {
-                final newItem = await ExpenseFormModal.show(context);
-                if (newItem != null && context.mounted) {
-                  context.read<CustosProvider>().addDespesa(newItem);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Despesa adicionada com sucesso!')),
-                  );
-                }
-              },
-              icon: const Icon(LucideIcons.plus, size: 18),
-              label: const Text(
-                'Lançamento Rápido',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
         ),
       ],
     );
@@ -642,14 +603,14 @@ class _ExpensesTabState extends State<ExpensesTab> {
               content:
                   Text('Excluir despesa de ${formatCurrency(item.valor)}?'),
               actions: [
-                TextButton(
+                AtrGhostButton(
+                  label: 'Cancelar',
                   onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancelar'),
                 ),
-                TextButton(
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                const SizedBox(width: 8),
+                AtrGhostButton(
+                  label: 'Excluir',
                   onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Excluir'),
                 ),
               ],
             ),

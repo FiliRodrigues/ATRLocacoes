@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/atr_button.dart';
 
 /// Barra de filtros reutilizável para a aba de despesas/custos.
 ///
@@ -126,37 +127,10 @@ class CustosFilterBar extends StatelessWidget {
 
         // ── Botão Limpar Filtros (visível se algum filtro ativo) ──
         if (_temFiltroAtivo)
-          TextButton.icon(
+          AtrGhostButton(
+            label: 'Limpar Filtros',
+            icon: LucideIcons.x,
             onPressed: onLimparFiltros,
-            icon: Icon(
-              LucideIcons.x,
-              size: 14,
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight,
-            ),
-            label: Text(
-              'Limpar Filtros',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isDark
-                    ? AppColors.textSecondaryDark
-                    : AppColors.textSecondaryLight,
-              ),
-            ),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: BorderSide(
-                  color: (isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight)
-                      .withValues(alpha: 0.3),
-                ),
-              ),
-            ),
           ),
       ],
     );

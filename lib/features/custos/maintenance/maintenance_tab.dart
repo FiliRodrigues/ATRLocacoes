@@ -7,6 +7,7 @@ import '../../../core/enums/kanban_column.dart';
 import '../../../core/enums/maintenance_priority.dart';
 import '../../../core/providers/regras_manutencao_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/atr_button.dart';
 import '../../../core/widgets/bento_card.dart';
 import '../custos_provider.dart';
 import 'maintenance_form_modal.dart';
@@ -133,13 +134,11 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
         if (extras > 0 || _mostrarTodosAlertas)
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(
+            child: AtrGhostButton(
+              label: _mostrarTodosAlertas ? 'Ver menos' : 'Ver todos (+$extras)',
               onPressed: () {
                 setState(() => _mostrarTodosAlertas = !_mostrarTodosAlertas);
               },
-              child: Text(
-                _mostrarTodosAlertas ? 'Ver menos' : 'Ver todos (+$extras)',
-              ),
             ),
           ),
       ],
@@ -208,27 +207,23 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
           ),
         ),
         const Spacer(),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.atrOrange,
-            side: const BorderSide(color: AppColors.atrOrange),
-          ),
-          onPressed: () {
-            // ignora se RegrasManutencaoProvider ainda não está registrado
-            if (!context.mounted) return;
-            RegrasManutencaoSheet.show(context);
+        Consumer<RegrasManutencaoProvider>(
+          builder: (_, p, __) {
+            final n = p.regrasAtivas.length;
+            return AtrSecondaryButton(
+              label: 'Regras${n > 0 ? ' ($n)' : ''}',
+              icon: LucideIcons.alarmClock,
+              onPressed: () {
+                if (!context.mounted) return;
+                RegrasManutencaoSheet.show(context);
+              },
+            );
           },
-          icon: const Icon(LucideIcons.alarmClock, size: 16),
-          label: Consumer<RegrasManutencaoProvider>(
-            builder: (_, p, __) {
-              final n = p.regrasAtivas.length;
-              return Text('Regras${n > 0 ? ' ($n)' : ''}');
-            },
-          ),
         ),
         const SizedBox(width: 8),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.atrOrange),
+        AtrPrimaryButton(
+          label: 'Nova OS',
+          icon: LucideIcons.plus,
           onPressed: () async {
             final result = await MaintenanceFormModal.show(
               context,
@@ -237,8 +232,6 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
             if (!context.mounted || result == null) return;
             await context.read<CustosProvider>().addManutencao(result);
           },
-          icon: const Icon(LucideIcons.plus),
-          label: const Text('Nova OS'),
         ),
       ],
     );
@@ -465,13 +458,14 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
                           title: const Text('Confirmar exclusao'),
                           content: Text("Excluir OS '${item.titulo}'?"),
                           actions: [
-                            TextButton(
+                            AtrGhostButton(
+                              label: 'Cancelar',
                               onPressed: () => Navigator.of(context).pop(false),
-                              child: const Text('Cancelar'),
                             ),
-                            ElevatedButton(
+                            const SizedBox(width: 8),
+                            AtrPrimaryButton(
+                              label: 'Excluir',
                               onPressed: () => Navigator.of(context).pop(true),
-                              child: const Text('Excluir'),
                             ),
                           ],
                         ),

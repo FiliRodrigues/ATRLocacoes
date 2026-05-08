@@ -6,8 +6,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/data/fleet_data.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
+import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/bento_card.dart';
+import '../../core/widgets/atr_kpi_card.dart';
 
 class FrotaRevisaoScreen extends StatefulWidget {
   const FrotaRevisaoScreen({super.key});
@@ -50,11 +54,14 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
 
     return AppSidebar(
       child: Scaffold(
-        backgroundColor:
-            isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-        body: Column(
+        body: AtrPageBackground(
+          grid: true,
+          child: Column(
           children: [
-            _buildTopHeader(context, isDark),
+            const AtrTopBar(
+              title: 'Controle de Revisão',
+              subtitle: 'Visão geral da frota e acompanhamento por veículo',
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
@@ -63,35 +70,50 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
                     spacing: 12,
                     runSpacing: 12,
                     children: [
-                      _kpiCard(
-                        title: 'Total de Carros',
-                        value: '${frota.length}',
-                        icon: LucideIcons.truck,
-                        color: AppColors.statusInfo,
+                      SizedBox(
+                        width: 220,
+                        child: AtrKpiCard(
+                          label: 'Total de Carros',
+                          value: '${frota.length}',
+                          icon: LucideIcons.truck,
+                          tone: KpiTone.info,
+                        ),
                       ),
-                      _kpiCard(
-                        title: 'Atualizados na Semana',
-                        value: '$atualizadosSemana',
-                        icon: LucideIcons.checkCircle2,
-                        color: AppColors.statusSuccess,
+                      SizedBox(
+                        width: 220,
+                        child: AtrKpiCard(
+                          label: 'Atualizados na Semana',
+                          value: '$atualizadosSemana',
+                          icon: LucideIcons.checkCircle2,
+                          tone: KpiTone.success,
+                        ),
                       ),
-                      _kpiCard(
-                        title: 'Revisão Urgente',
-                        value: '$urgentes',
-                        icon: LucideIcons.alertCircle,
-                        color: AppColors.statusError,
+                      SizedBox(
+                        width: 220,
+                        child: AtrKpiCard(
+                          label: 'Revisão Urgente',
+                          value: '$urgentes',
+                          icon: LucideIcons.alertCircle,
+                          tone: KpiTone.error,
+                        ),
                       ),
-                      _kpiCard(
-                        title: 'Em Atenção',
-                        value: '$atencao',
-                        icon: LucideIcons.alertTriangle,
-                        color: AppColors.statusWarning,
+                      SizedBox(
+                        width: 220,
+                        child: AtrKpiCard(
+                          label: 'Em Atenção',
+                          value: '$atencao',
+                          icon: LucideIcons.alertTriangle,
+                          tone: KpiTone.warning,
+                        ),
                       ),
-                      _kpiCard(
-                        title: 'Em Dia',
-                        value: '$emDia',
-                        icon: LucideIcons.shieldCheck,
-                        color: AppColors.atrOrange,
+                      SizedBox(
+                        width: 220,
+                        child: AtrKpiCard(
+                          label: 'Em Dia',
+                          value: '$emDia',
+                          icon: LucideIcons.shieldCheck,
+                          tone: KpiTone.orange,
+                        ),
                       ),
                     ],
                   ),
@@ -123,121 +145,6 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTopHeader(BuildContext context, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(32, 28, 32, 16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.atrNavyDarker : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.atrOrange.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(
-              LucideIcons.calendarCheck2,
-              color: AppColors.atrOrange,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Controle de Revisão',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.3,
-                      ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Visão geral da frota e acompanhamento por veículo',
-                  style: TextStyle(
-                    color: isDark ? Colors.white54 : Colors.black54,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _kpiCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return SizedBox(
-      width: 220,
-      child: BentoCard(
-        padding: EdgeInsets.zero,
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: color, width: 3)),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      color.withValues(alpha: 0.2),
-                      color.withValues(alpha: 0.08),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 16, color: color),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: color,
-                      ),
-                    ),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -251,14 +158,14 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
           Icon(
             LucideIcons.filter,
             size: 15,
-            color: isDark ? Colors.white54 : Colors.black54,
+            color: isDark ? AppColors.textSecondaryDark : Colors.black54,
           ),
           const SizedBox(width: 8),
           Text(
             'Mês:',
             style: TextStyle(
               fontSize: 12,
-              color: isDark ? Colors.white54 : Colors.black54,
+              color: isDark ? AppColors.textSecondaryDark : Colors.black54,
             ),
           ),
           const SizedBox(width: 8),
@@ -271,13 +178,10 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
           ),
           if (_filtroMes != null) ...[
             const SizedBox(width: 8),
-            TextButton.icon(
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.statusError,
-              ),
+            AtrGhostButton(
+              label: 'Limpar',
+              icon: LucideIcons.x,
               onPressed: () => setState(() => _filtroMes = null),
-              icon: const Icon(LucideIcons.x, size: 12),
-              label: const Text('Limpar'),
             ),
           ],
         ],
@@ -334,7 +238,7 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
                       'Motorista: ${v.motorista}',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? Colors.white54 : Colors.black54,
+                        color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                       ),
                     ),
                   ],
@@ -384,10 +288,10 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
           const SizedBox(height: 10),
           Align(
             alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
+            child: AtrSecondaryButton(
+              label: 'Ver detalhes',
+              icon: LucideIcons.eye,
               onPressed: () => _showVehicleDetails(v, hist, statusText, statusColor),
-              icon: const Icon(LucideIcons.eye, size: 15),
-              label: const Text('Ver detalhes'),
             ),
           ),
         ],
@@ -460,9 +364,9 @@ class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
           ),
         ),
         actions: [
-          TextButton(
+          AtrGhostButton(
+            label: 'Fechar',
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Fechar'),
           ),
         ],
       ),
