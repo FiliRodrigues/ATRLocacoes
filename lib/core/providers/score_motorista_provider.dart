@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../data/fleet_data.dart';
 import '../data/score_motorista_models.dart';
-import '../enums/cnh_status.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Provider de Score de Motoristas — cálculo síncrono puro

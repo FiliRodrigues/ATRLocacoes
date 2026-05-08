@@ -18,6 +18,8 @@ import '../../features/sala_atr/sala_atr_screen.dart';
 import '../../features/lazer/lazer_screen.dart';
 import '../../features/locacao/contratos_screen.dart';
 import '../../features/locacao/contrato_detalhe_screen.dart';
+import '../../features/admin/users_screen.dart';
+import '../../features/auth/change_password_screen.dart';
 
 abstract class AppRoutes {
   static const login = '/login';
@@ -43,10 +45,28 @@ abstract class AppRoutes {
   static const vencimentos = '/vencimentos';
   static const relatorios = '/relatorios';
   static const scoreMoto = '/score-motoristas';
+  static const adminUsers = '/admin/users';
+  static const trocarSenha = '/trocar-senha';
 
   static bool isFleetRoute(String path) {
-    // Frota users are restricted to the fleet dashboard and review control.
     return path == home || path == frotaRevisao;
+  }
+
+  static String? featureForPath(String path) {
+    if (path == home || path == selector) return 'dashboard';
+    if (path == frotaRevisao) return 'frota';
+    if (path.startsWith('/vehicles')) return 'vehicles';
+    if (path.startsWith('/drivers') || path == scoreMoto) return 'drivers';
+    if (path.startsWith(custosRoot)) return 'custos';
+    if (path.startsWith(contratos)) return 'contratos';
+    if (path == vencimentos) return 'vencimentos';
+    if (path == relatorios) return 'relatorios';
+    if (path.startsWith('/$financialAdminRoot') || path == tco) return 'financial_admin';
+    if (path == obras) return 'obras';
+    if (path == salaAtr) return 'sala_atr';
+    if (path == lazer) return 'lazer';
+    if (path.startsWith('/admin')) return 'users_admin';
+    return null;
   }
 }
 
@@ -71,6 +91,11 @@ class AppRouter {
       }
       if (authenticated && !_canAccessPath(authService, path)) {
         return _defaultRouteFor(authService);
+      }
+      if (authenticated &&
+          authService.currentUser?.mustChangePassword == true &&
+          path != AppRoutes.trocarSenha) {
+        return AppRoutes.trocarSenha;
       }
       return null;
     },
@@ -184,6 +209,14 @@ class AppRouter {
         path: AppRoutes.scoreMoto,
         builder: (context, state) => const ScoreMotoristaScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.adminUsers,
+        builder: (context, state) => const UsersScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.trocarSenha,
+        builder: (context, state) => const ChangePasswordScreen(),
+      ),
     ],
   );
 
@@ -192,10 +225,9 @@ class AppRouter {
   }
 
   bool _canAccessPath(AuthService authService, String path) {
-    if (!authService.isFleetOnlyUser) {
-      return true;
-    }
-
-    return AppRoutes.isFleetRoute(path);
+    if (authService.currentRole == AuthUserRole.admin) return true;
+    final featureId = AppRoutes.featureForPath(path);
+    if (featureId == null) return true;
+    return authService.currentUser?.canAccess(featureId) ?? false;
   }
 }

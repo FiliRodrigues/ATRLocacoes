@@ -300,3 +300,53 @@ Trace:
 <asynchronous suspension>
 
 --------------------------------------------
+[2026-05-08T09:38:27.786995]
+Async Crash Prevented: PostgrestException(message: Could not find the 'coluna' column of 'manutencoes' in the schema cache, code: PGRST204, details: Bad Request, hint: null)
+Trace:
+#0      PostgrestBuilder._parseResponse (package:postgrest/src/postgrest_builder.dart:359)
+#1      PostgrestBuilder._execute (package:postgrest/src/postgrest_builder.dart:198)
+<asynchronous suspension>
+#2      PostgrestBuilder.then (package:postgrest/src/postgrest_builder.dart:458)
+<asynchronous suspension>
+
+--------------------------------------------
+[2026-05-08T10:02:14.434802]
+Async Crash Prevented: PostgrestException(message: Could not find the 'coluna' column of 'manutencoes' in the schema cache, code: PGRST204, details: Bad Request, hint: null)
+Trace:
+#0      PostgrestBuilder._parseResponse (package:postgrest/src/postgrest_builder.dart:359)
+#1      PostgrestBuilder._execute (package:postgrest/src/postgrest_builder.dart:198)
+<asynchronous suspension>
+#2      PostgrestBuilder.then (package:postgrest/src/postgrest_builder.dart:458)
+<asynchronous suspension>
+
+--------------------------------------------
+[2026-05-08T10:02:15.638524]
+Async Crash Prevented: PostgrestException(message: Could not find the 'coluna' column of 'manutencoes' in the schema cache, code: PGRST204, details: Bad Request, hint: null)
+Trace:
+#0      PostgrestBuilder._parseResponse (package:postgrest/src/postgrest_builder.dart:359)
+#1      PostgrestBuilder._execute (package:postgrest/src/postgrest_builder.dart:198)
+<asynchronous suspension>
+#2      PostgrestBuilder.then (package:postgrest/src/postgrest_builder.dart:458)
+<asynchronous suspension>
+
+--------------------------------------------
+[2026-05-08T11:01:54.804146]
+Async Crash Prevented: PostgrestException(message: Could not find the 'coluna' column of 'manutencoes' in the schema cache, code: PGRST204, details: Bad Request, hint: null)
+Trace:
+#0      PostgrestBuilder._parseResponse (package:postgrest/src/postgrest_builder.dart:359)
+#1      PostgrestBuilder._execute (package:postgrest/src/postgrest_builder.dart:198)
+<asynchronous suspension>
+#2      PostgrestBuilder.then (package:postgrest/src/postgrest_builder.dart:458)
+<asynchronous suspension>
+
+--------------------------------------------
+[2026-05-08T11:01:55.908015]
+Async Crash Prevented: PostgrestException(message: Could not find the 'coluna' column of 'manutencoes' in the schema cache, code: PGRST204, details: Bad Request, hint: null)
+Trace:
+#0      PostgrestBuilder._parseResponse (package:postgrest/src/postgrest_builder.dart:359)
+#1      PostgrestBuilder._execute (package:postgrest/src/postgrest_builder.dart:198)
+<asynchronous suspension>
+#2      PostgrestBuilder.then (package:postgrest/src/postgrest_builder.dart:458)
+<asynchronous suspension>
+
+--------------------------------------------

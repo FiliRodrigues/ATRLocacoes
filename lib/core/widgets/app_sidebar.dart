@@ -62,35 +62,37 @@ class _AppSidebarState extends State<AppSidebar> {
     final bool isDesktop = MediaQuery.of(context).size.width >= 800;
 
     return Scaffold(
-      body: Row(
+      body: Stack(
         children: [
-          if (isDesktop)
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              width: _isCollapsed ? 80 : 260,
-              clipBehavior: Clip.hardEdge,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xF21A2332),
-                    Color(0xF20D1420),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.05),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.50),
-                    blurRadius: 24,
-                    offset: const Offset(0, 4),
+          Row(
+            children: [
+              if (isDesktop)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  width: _isCollapsed ? 80 : 260,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xF21A2332),
+                        Color(0xF20D1420),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.05),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.50),
+                        blurRadius: 24,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                ],
-              ),
               child: Column(
                 children: [
                   const SizedBox(height: 24),
@@ -190,8 +192,7 @@ class _AppSidebarState extends State<AppSidebar> {
                                   repo.veiculosFinanciados;
                                 final contratos =
                                   context.watch<LocacaoProvider>().contratos;
-                              final isFleetOnly =
-                                  context.read<AuthService>().isFleetOnlyUser;
+                              final auth = context.read<AuthService>();
                               // Calcula alertas urgentes para o badge de vencimentos
                               final hoje = DateTime.now();
                               final hoje0 = DateTime(hoje.year, hoje.month, hoje.day);
@@ -206,18 +207,21 @@ class _AppSidebarState extends State<AppSidebar> {
                                 final dias = d.vencimentoCNH.difference(hoje0).inDays;
                                 if (dias <= 7) nUrgentes++;
                               }
+                              final nonAdmin = !auth.currentUser!.canAccess('dashboard');
+
                               return Column(
                                 children: [
-                                  _SidebarItem(
-                                    icon: LucideIcons.layoutDashboard,
-                                    title: isFleetOnly
-                                        ? 'Controle de Frota'
-                                        : 'Dashboard Executivo',
-                                    isCollapsed: _isCollapsed,
-                                    isActive: uri == AppRoutes.home,
-                                    onTap: () => context.go(AppRoutes.home),
-                                  ),
-                                  if (isFleetOnly)
+                                  if (auth.currentUser!.canAccess('dashboard'))
+                                    _SidebarItem(
+                                      icon: LucideIcons.layoutDashboard,
+                                      title: nonAdmin
+                                          ? 'Controle de Frota'
+                                          : 'Dashboard Executivo',
+                                      isCollapsed: _isCollapsed,
+                                      isActive: uri == AppRoutes.home,
+                                      onTap: () => context.go(AppRoutes.home),
+                                    ),
+                                  if (auth.currentUser!.canAccess('frota'))
                                     _SidebarItem(
                                       icon: LucideIcons.calendarCheck2,
                                       title: 'Controle Revisão',
@@ -226,7 +230,7 @@ class _AppSidebarState extends State<AppSidebar> {
                                       onTap: () =>
                                           context.go(AppRoutes.frotaRevisao),
                                     ),
-                                  if (!isFleetOnly) ...[
+                                  if (auth.currentUser!.canAccess('vehicles')) ...[
                                     if (_showExpandedContent)
                                       _buildVehicleExpansionTile(
                                         context,
@@ -247,72 +251,105 @@ class _AppSidebarState extends State<AppSidebar> {
                                         }
                                       },
                                     ),
-                                  _SidebarItem(
-                                    icon: LucideIcons.users,
-                                    title: 'Motoristas',
-                                    isCollapsed: _isCollapsed,
-                                    isActive:
-                                        uri.startsWith('/${AppRoutes.drivers}'),
-                                    onTap: () =>
-                                        context.go('/${AppRoutes.drivers}'),
-                                  ),
-                                  _SidebarItem(
-                                    icon: LucideIcons.star,
-                                    title: 'Score',
-                                    isCollapsed: _isCollapsed,
-                                    isActive: uri == AppRoutes.scoreMoto,
-                                    onTap: () => context.go(AppRoutes.scoreMoto),
-                                  ),
-                                  _SidebarItem(
-                                    icon: LucideIcons.wrench,
-                                    title: 'Custos da Frota',
-                                    isCollapsed: _isCollapsed,
-                                    isActive:
-                                        uri.startsWith(AppRoutes.custosRoot),
-                                    onTap: () =>
-                                        context.go(AppRoutes.custosRoot),
-                                  ),
-                                  _SidebarItem(
-                                    icon: LucideIcons.fileText,
-                                    title: 'Contratos B2B',
-                                    isCollapsed: _isCollapsed,
-                                    isActive:
-                                        uri.startsWith(AppRoutes.contratos),
-                                    onTap: () =>
-                                        context.go(AppRoutes.contratos),
-                                  ),
-                                  _SidebarItem(
-                                    icon: LucideIcons.calendarClock,
-                                    title: 'Vencimentos',
-                                    isCollapsed: _isCollapsed,
-                                    isActive: uri == AppRoutes.vencimentos,
-                                    onTap: () => context.go(AppRoutes.vencimentos),
-                                    badgeCount: nUrgentes,
-                                  ),
-                                  _SidebarItem(
-                                    icon: LucideIcons.fileDown,
-                                    title: 'Relatórios',
-                                    isCollapsed: _isCollapsed,
-                                    isActive: uri == AppRoutes.relatorios,
-                                    onTap: () => context.go(AppRoutes.relatorios),
-                                  ),
-                                  if (_showExpandedContent)
-                                    _buildFinancialExpansionTile(
-                                      context,
-                                      uri,
-                                      veiculosFinanciados,
-                                      contratos,
-                                    )
-                                  else
+                                  ],
+                                  if (auth.currentUser!.canAccess('drivers')) ...[
                                     _SidebarItem(
-                                      icon: LucideIcons.landmark,
-                                      title: 'Adm Financeiro',
+                                      icon: LucideIcons.users,
+                                      title: 'Motoristas',
                                       isCollapsed: _isCollapsed,
-                                      isActive: uri.startsWith(
-                                          '/${AppRoutes.financialAdmin}'),
-                                      onTap: () => context
-                                          .go('/${AppRoutes.financialAdmin}'),
+                                      isActive:
+                                          uri.startsWith('/${AppRoutes.drivers}'),
+                                      onTap: () =>
+                                          context.go('/${AppRoutes.drivers}'),
                                     ),
+                                    _SidebarItem(
+                                      icon: LucideIcons.star,
+                                      title: 'Score',
+                                      isCollapsed: _isCollapsed,
+                                      isActive: uri == AppRoutes.scoreMoto,
+                                      onTap: () => context.go(AppRoutes.scoreMoto),
+                                    ),
+                                  ],
+                                  if (auth.currentUser!.canAccess('custos'))
+                                    _SidebarItem(
+                                      icon: LucideIcons.wrench,
+                                      title: 'Custos da Frota',
+                                      isCollapsed: _isCollapsed,
+                                      isActive:
+                                          uri.startsWith(AppRoutes.custosRoot),
+                                      onTap: () =>
+                                          context.go(AppRoutes.custosRoot),
+                                    ),
+                                  if (auth.currentUser!.canAccess('contratos'))
+                                    _SidebarItem(
+                                      icon: LucideIcons.fileText,
+                                      title: 'Contratos B2B',
+                                      isCollapsed: _isCollapsed,
+                                      isActive:
+                                          uri.startsWith(AppRoutes.contratos),
+                                      onTap: () =>
+                                          context.go(AppRoutes.contratos),
+                                    ),
+                                  if (auth.currentUser!.canAccess('vencimentos'))
+                                    _SidebarItem(
+                                      icon: LucideIcons.calendarClock,
+                                      title: 'Vencimentos',
+                                      isCollapsed: _isCollapsed,
+                                      isActive: uri == AppRoutes.vencimentos,
+                                      onTap: () => context.go(AppRoutes.vencimentos),
+                                      badgeCount: nUrgentes,
+                                    ),
+                                  if (auth.currentUser!.canAccess('relatorios'))
+                                    _SidebarItem(
+                                      icon: LucideIcons.fileDown,
+                                      title: 'Relatórios',
+                                      isCollapsed: _isCollapsed,
+                                      isActive: uri == AppRoutes.relatorios,
+                                      onTap: () => context.go(AppRoutes.relatorios),
+                                    ),
+                                  if (auth.currentUser!.canAccess('financial_admin')) ...[
+                                    if (_showExpandedContent)
+                                      _buildFinancialExpansionTile(
+                                        context,
+                                        uri,
+                                        veiculosFinanciados,
+                                        contratos,
+                                      )
+                                    else
+                                      _SidebarItem(
+                                        icon: LucideIcons.landmark,
+                                        title: 'Adm Financeiro',
+                                        isCollapsed: _isCollapsed,
+                                        isActive: uri.startsWith(
+                                            '/${AppRoutes.financialAdmin}'),
+                                        onTap: () => context
+                                            .go('/${AppRoutes.financialAdmin}'),
+                                      ),
+                                  ] else ...[
+                                    if (auth.currentUser!.canAccess('obras'))
+                                      _SidebarItem(
+                                        icon: LucideIcons.building2,
+                                        title: 'Obras',
+                                        isCollapsed: _isCollapsed,
+                                        isActive: uri == AppRoutes.obras,
+                                        onTap: () => context.go(AppRoutes.obras),
+                                      ),
+                                    if (auth.currentUser!.canAccess('sala_atr'))
+                                      _SidebarItem(
+                                        icon: LucideIcons.monitorPlay,
+                                        title: 'Sala ATR',
+                                        isCollapsed: _isCollapsed,
+                                        isActive: uri == AppRoutes.salaAtr,
+                                        onTap: () => context.go(AppRoutes.salaAtr),
+                                      ),
+                                    if (auth.currentUser!.canAccess('lazer'))
+                                      _SidebarItem(
+                                        icon: LucideIcons.palmtree,
+                                        title: 'Lazer',
+                                        isCollapsed: _isCollapsed,
+                                        isActive: uri == AppRoutes.lazer,
+                                        onTap: () => context.go(AppRoutes.lazer),
+                                      ),
                                   ],
                                 ],
                               );
@@ -442,7 +479,9 @@ class _AppSidebarState extends State<AppSidebar> {
           Expanded(child: widget.child),
         ],
       ),
-      bottomNavigationBar: (!isDesktop && !context.read<AuthService>().isFleetOnlyUser)
+    ],
+  ),
+  bottomNavigationBar: (!isDesktop && !context.read<AuthService>().isFleetOnlyUser)
           ? BottomNavigationBar(
               currentIndex: _getBottomNavIndex(context),
               selectedItemColor: AppColors.atrOrange,

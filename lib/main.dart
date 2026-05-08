@@ -4,6 +4,8 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,7 +13,7 @@ import 'core/navigation/app_router.dart';
 import 'core/data/fleet_data.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/supabase_service.dart';
-import 'core/constants.dart';
+import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/atr_theme_state.dart';
 import 'features/custos/custos_provider.dart';
@@ -43,7 +45,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('pt_BR');
 
-  // Fail-fast (P004): nunca rodar com URL/anon-key implícitas no código.
   if (!kSupabaseConfigured) {
     throw StateError(
       'SUPABASE_URL e SUPABASE_ANON_KEY são obrigatórias. '
@@ -51,25 +52,7 @@ void main() async {
     );
   }
 
-  // Inicializa o cliente Supabase
-  await Supabase.initialize(
-    url: kSupabaseUrl,
-    anonKey: kSupabaseAnonKey,
-  );
-
-  // RLS agora usa JWT (claim `tenant_id` em app_metadata). Não é mais
-  // necessário chamar set_app_tenant — o tenant viaja em todo request
-  // via Authorization: Bearer <jwt>. Migração 017.
-
-  // Carrega a frota em background — o app abre instantaneamente
-  // e as telas reagem ao estado isLoading do FleetRepository.
-  unawaited(FleetRepository.instance.loadFromSupabase());
-
-  // ══════════════════════════════════════════════════════════════════
-  // SISTEMA GLOBAL DE BLINDAGEM DE ERROS (Failsafe)
-  // ══════════════════════════════════════════════════════════════════
-
-  // 1. Sobrescreve a famosa "Tela Vermelha da Morte" por algo gracioso e calmo
+  // ── Blindagem de erros antes de qualquer widget ──
   ErrorWidget.builder = (FlutterErrorDetails details) {
     saveErrorLog(
         'UI Build Error: ${details.exceptionAsString()}\nTrace:\n${details.stack}');
@@ -88,26 +71,32 @@ void main() async {
           color: Colors.redAccent,
           fontSize: 14,
           fontWeight: FontWeight.bold,
-          decoration: TextDecoration
-              .none, // Opcional para não quebrar sem um Scaffold pai
+          decoration: TextDecoration.none,
         ),
       ),
     );
   };
 
-  // 2. Interceptador de Erros do Flutter (Fronteira Gráfica / Layout)
   FlutterError.onError = (FlutterErrorDetails details) {
     saveErrorLog(
         'Flutter Error: ${details.exceptionAsString()}\nTrace:\n${details.stack}');
-    FlutterError.presentError(
-        details); // Despeja no console para o desenvolvedor ver
+    FlutterError.presentError(details);
   };
 
-  // 3. Interceptador de Erros Assíncronos Não-Tratados (O que fecha/trava a janela do OS)
   PlatformDispatcher.instance.onError = (error, stack) {
     saveErrorLog('Async Crash Prevented: $error\nTrace:\n$stack');
-    return true; // Retorna true para o Flutter indicando: "Nós contemos a bomba, não feche o app."
+    return true;
   };
+
+  // ── Mostra splash instantaneamente enquanto Supabase conecta ──
+  runApp(const _SplashApp());
+
+  await Supabase.initialize(
+    url: kSupabaseUrl,
+    anonKey: kSupabaseAnonKey,
+  );
+
+  unawaited(FleetRepository.instance.loadFromSupabase());
 
   final authService = AuthService();
   runApp(
@@ -137,6 +126,42 @@ void main() async {
       child: ATRApp(authService: authService),
     ),
   );
+}
+
+/// Splash mínimo que aparece enquanto o Supabase conecta.
+class _SplashApp extends StatelessWidget {
+  const _SplashApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(),
+      home: const Scaffold(
+        backgroundColor: AppColors.backgroundDark,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                color: AppColors.atrOrange,
+                strokeWidth: 2.5,
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Carregando...',
+                style: TextStyle(
+                  fontFamily: 'Plus Jakarta Sans',
+                  color: AppColors.textSecondaryDark,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class ATRApp extends StatefulWidget {
@@ -186,7 +211,12 @@ class _ATRAppState extends State<ATRApp> {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           builder: (context, child) {
-            return EscapeKeyGuard(child: child ?? const SizedBox.shrink());
+            return Stack(
+              children: [
+                EscapeKeyGuard(child: child ?? const SizedBox.shrink()),
+                _AdminCircleButton(authService: widget.authService),
+              ],
+            );
           },
           routerConfig: _appRouter.router,
         );
@@ -222,6 +252,46 @@ class EscapeKeyGuard extends StatelessWidget {
           ),
         },
         child: Focus(child: child),
+      ),
+    );
+  }
+}
+
+class _AdminCircleButton extends StatelessWidget {
+  final AuthService authService;
+  const _AdminCircleButton({required this.authService});
+
+  @override
+  Widget build(BuildContext context) {
+    if (authService.currentRole != AuthUserRole.admin) return const SizedBox.shrink();
+    return Positioned(
+      bottom: 28,
+      right: 28,
+      child: GestureDetector(
+        onTap: () => GoRouter.of(context).go('/admin/users'),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.surfaceDarkAlt.withValues(alpha: 0.55),
+            border: Border.all(
+              color: AppColors.atrOrange.withValues(alpha: 0.18),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.atrOrange.withValues(alpha: 0.08),
+                blurRadius: 16,
+              ),
+            ],
+          ),
+          child: const Icon(
+            LucideIcons.users,
+            color: AppColors.textSecondaryDark,
+            size: 18,
+          ),
+        ),
       ),
     );
   }

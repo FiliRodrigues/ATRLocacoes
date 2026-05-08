@@ -16,7 +16,7 @@ const int _kMaxAttempts = 5;
 /// que foram migrados para `<username>@atr.local` na migration 017.
 const String _kDefaultEmailDomain = '@atr.local';
 
-enum AuthUserRole { admin, fleet }
+enum AuthUserRole { admin, member, fleet }
 
 enum AuthFailureReason {
   invalidCredentials,
@@ -29,12 +29,21 @@ class AuthUser {
   final String username;
   final AuthUserRole role;
   final String tenantId;
+  final List<String> allowedFeatures;
+  final bool mustChangePassword;
 
   const AuthUser({
     required this.username,
     required this.role,
     this.tenantId = kDefaultTenantId,
+    this.allowedFeatures = const [],
+    this.mustChangePassword = false,
   });
+
+  bool canAccess(String featureId) {
+    if (role == AuthUserRole.admin) return true;
+    return allowedFeatures.contains(featureId);
+  }
 }
 
 class AuthAttemptResult {
@@ -88,7 +97,7 @@ class AuthService extends ChangeNotifier {
   bool get isAuthenticated => _isAuthenticated;
   AuthUser? get currentUser => _currentUser;
   AuthUserRole? get currentRole => _currentUser?.role;
-  bool get isFleetOnlyUser => currentRole == AuthUserRole.fleet;
+  bool get isFleetOnlyUser => currentRole != null && currentRole != AuthUserRole.admin;
 
   /// Atalho DEV: criação de sessão Supabase em DEV exige credenciais
   /// reais, então o atalho fica desabilitado. Mantido como `false` para
@@ -108,13 +117,51 @@ class AuthService extends ChangeNotifier {
     final meta = user.appMetadata;
     final tenantId = (meta['tenant_id'] as String?) ?? kDefaultTenantId;
     final roleStr = (meta['role'] as String?) ?? 'admin';
-    final role = roleStr == 'fleet' ? AuthUserRole.fleet : AuthUserRole.admin;
+    final role = roleStr == 'fleet'
+        ? AuthUserRole.member
+        : (roleStr == 'member' ? AuthUserRole.member : AuthUserRole.admin);
     final username = (meta['username'] as String?) ?? user.email ?? 'desconhecido';
 
+    // Ler allowed_features do JWT
+    final List<String> allowedFeatures = [];
+    final rawFeatures = meta['allowed_features'];
+    if (rawFeatures is List) {
+      allowedFeatures.addAll(rawFeatures.cast<String>());
+    }
+
     _isAuthenticated = true;
-    _currentUser = AuthUser(username: username, role: role, tenantId: tenantId);
+    _currentUser = AuthUser(
+      username: username,
+      role: role,
+      tenantId: tenantId,
+      allowedFeatures: allowedFeatures,
+      mustChangePassword: user.userMetadata?['must_change_password'] == true,
+    );
     AuditService.setCurrentUser(username, tenantId: tenantId);
   }
+
+  Future<void> refreshMustChangePassword() async {
+    if (_currentUser == null) return;
+    try {
+      final rows = await Supabase.instance.client
+          .from('app_users')
+          .select('must_change_password')
+          .eq('id', Supabase.instance.client.auth.currentUser!.id)
+          .maybeSingle();
+      if (rows != null && mounted) {
+        _currentUser = AuthUser(
+          username: _currentUser!.username,
+          role: _currentUser!.role,
+          tenantId: _currentUser!.tenantId,
+          allowedFeatures: _currentUser!.allowedFeatures,
+          mustChangePassword: rows['must_change_password'] == true,
+        );
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  bool get mounted => true;
 
   // ── Restaurar sessão persistida (chamada na inicialização) ─────────
   Future<void> checkAuth() async {
@@ -165,6 +212,7 @@ class AuthService extends ChangeNotifier {
 
       if (res.session != null) {
         _hydrateFromSession(res.session);
+        await refreshMustChangePassword();
         await prefs.remove(_kFailedAttemptsKey);
         await AuditService.log(
           action: AuditAction.login,
