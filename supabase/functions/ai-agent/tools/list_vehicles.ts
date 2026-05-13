@@ -66,8 +66,9 @@ export const listVehicles: AtrTool = {
         query = query.eq("situacao_operacional", input.status);
       }
       if (input.search) {
+        const safeSearch = input.search.replace(/[%_]/g, "\\$&");
         query = query.or(
-          `placa.ilike.%${input.search}%,modelo.ilike.%${input.search}%,marca.ilike.%${input.search}%`
+          `placa.ilike.%${safeSearch}%,modelo.ilike.%${safeSearch}%,marca.ilike.%${safeSearch}%`
         );
       }
 
@@ -102,8 +103,9 @@ export const listVehicles: AtrTool = {
       query = query.eq("situacao_operacional", input.status);
     }
     if (input.search) {
+      const safeSearch = input.search.replace(/[%_]/g, "\\$&");
       query = query.or(
-        `placa.ilike.%${input.search}%,modelo.ilike.%${input.search}%,marca.ilike.%${input.search}%`
+        `placa.ilike.%${safeSearch}%,modelo.ilike.%${safeSearch}%,marca.ilike.%${safeSearch}%`
       );
     }
 

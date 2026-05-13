@@ -15,6 +15,7 @@ class Abastecimento {
   final String? posto;
   final String registradoPor;
   final String tenantId;
+  final String? fotoUrl;
 
   const Abastecimento({
     required this.id,
@@ -27,6 +28,7 @@ class Abastecimento {
     this.posto,
     required this.registradoPor,
     required this.tenantId,
+    this.fotoUrl,
   });
 
   double get precoPorLitro => litros > 0 ? valorTotal / litros : 0.0;
@@ -42,6 +44,7 @@ class Abastecimento {
         'posto': posto,
         'registrado_por': registradoPor,
         'tenant_id': tenantId,
+        if (fotoUrl != null) 'foto_url': fotoUrl,
       };
 
   factory Abastecimento.fromRow(Map<String, dynamic> row) => Abastecimento(
@@ -58,6 +61,7 @@ class Abastecimento {
         posto: row['posto'] as String?,
         registradoPor: row['registrado_por'] as String? ?? '',
         tenantId: row['tenant_id'] as String,
+        fotoUrl: row['foto_url'] as String?,
       );
 }
 

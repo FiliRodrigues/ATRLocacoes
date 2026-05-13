@@ -86,6 +86,7 @@ class RegraManutencao {
   }
 
   RegraManutencao copyWith({
+    String? id,
     String? titulo,
     String? tipo,
     String? veiculoPlaca,
@@ -103,7 +104,7 @@ class RegraManutencao {
     bool clearDataUltima = false,
   }) {
     return RegraManutencao(
-      id: id,
+      id: id ?? this.id,
       titulo: titulo ?? this.titulo,
       tipo: tipo ?? this.tipo,
       veiculoPlaca:

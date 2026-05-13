@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/combustivel_models.dart';
 import '../data/combustivel_repository.dart';
 import '../data/fleet_data.dart';
 import '../services/audit_service.dart';
+import '../utils/app_logger.dart';
 
 import '../constants.dart';
 
@@ -19,7 +21,23 @@ class CombustivelProvider extends ChangeNotifier {
   String? get erro => _erro;
 
   CombustivelProvider(this._repo) {
-    _load();
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.tokenRefreshed) {
+        _load();
+      }
+      if (data.event == AuthChangeEvent.signedOut) {
+        _abastecimentos = [];
+        _isLoading = false;
+        _safeNotify();
+      }
+    });
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session != null) {
+      _load();
+    } else {
+      _isLoading = false;
+    }
   }
 
   @override
@@ -38,8 +56,9 @@ class CombustivelProvider extends ChangeNotifier {
     try {
       _abastecimentos = await _repo.fetchAll();
       _erro = null;
-    } catch (e) {
+    } catch (e, st) {
       _erro = e.toString();
+      AppLogger.error('CombustivelProvider._load falhou', e, st);
     } finally {
       _isLoading = false;
       _safeNotify();
@@ -56,6 +75,11 @@ class CombustivelProvider extends ChangeNotifier {
     try {
       await _repo.save(a);
       await _load();
+      _erro = null;
+    } catch (e, st) {
+      _erro = e.toString();
+      AppLogger.error('CombustivelProvider.addAbastecimento falhou', e, st);
+      rethrow;
     } finally {
       _isSaving = false;
     }
@@ -69,8 +93,11 @@ class CombustivelProvider extends ChangeNotifier {
     _safeNotify();
     try {
       await _repo.delete(id);
-    } catch (e) {
+      _erro = null;
+    } catch (e, st) {
       _abastecimentos.insert(idx, backup);
+      _erro = e.toString();
+      AppLogger.error('CombustivelProvider.deleteAbastecimento falhou', e, st);
       _safeNotify();
       rethrow;
     }
@@ -141,6 +168,7 @@ class CombustivelProvider extends ChangeNotifier {
     required TipoCombustivel tipo,
     String? posto,
     String registradoPor = 'sistema',
+    String? fotoUrl,
   }) {
     return Abastecimento(
       id: 'fuel_${DateTime.now().millisecondsSinceEpoch}',
@@ -153,6 +181,7 @@ class CombustivelProvider extends ChangeNotifier {
       posto: posto,
       registradoPor: registradoPor,
       tenantId: AuditService.currentTenantId ?? kDefaultTenantId,
+      fotoUrl: fotoUrl,
     );
   }
 }

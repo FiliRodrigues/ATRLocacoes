@@ -53,7 +53,7 @@ export async function authenticate(
     const tenant_id = user.app_metadata?.tenant_id as string | undefined;
     const user_id = user.id;
 
-    if (!tenant_id) {
+    if (typeof tenant_id !== "string") {
       return {
         ok: false,
         error: "JWT não contém tenant_id no app_metadata",
@@ -147,7 +147,7 @@ export async function authenticate(
           tenant_id: appUser.tenant_id,
         },
         iat: now,
-        exp: getNumericDate(3600), // 1 hora
+        exp: now + 3600, // 1 hora
       },
       cryptoKey
     );

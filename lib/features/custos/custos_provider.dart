@@ -9,14 +9,27 @@ import '../../core/services/audit_service.dart';
 
 class CustosProvider extends ChangeNotifier {
   CustosProvider(this._repo) {
-    _init();
     FleetRepository.instance.addListener(_onFrotaUpdated);
-    // Recarrega dados se o primeiro load foi bloqueado pela RLS (anon)
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      if (data.event == AuthChangeEvent.signedIn) {
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.tokenRefreshed) {
         _reloadFromSupabase();
       }
+      if (data.event == AuthChangeEvent.signedOut) {
+        _manutencoes = [];
+        _despesas = [];
+        _loading = false;
+        _safeNotify();
+      }
     });
+    // Se já há sessão ativa no momento da criação, carrega imediatamente.
+    // Se não há, aguarda o signedIn acima.
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session != null) {
+      _init();
+    } else {
+      _loading = false;
+    }
   }
 
   final ICustosRepository _repo;
@@ -42,21 +55,26 @@ class CustosProvider extends ChangeNotifier {
       _manutencoes.where((m) => m.coluna == KanbanColumn.concluidos).toList();
   List<DespesaItem> get despesas => List.unmodifiable(_despesas);
 
-  double get totalCustoManutencoesMes {
-    final now = DateTime.now();
+  double totalCustoManutencoesMes({DateTime? mes}) {
+    final ref = mes ?? DateTime.now();
     return _manutencoes
-        .where((m) => m.data.year == now.year && m.data.month == now.month)
+        .where((m) => m.data.year == ref.year && m.data.month == ref.month)
         .fold(0.0, (s, m) => s + m.custo);
   }
 
-  double get totalCustoDespesasMes {
-    final now = DateTime.now();
+  double totalCustoDespesasMes({DateTime? mes}) {
+    final ref = mes ?? DateTime.now();
     return _despesas
-        .where((d) => d.data.year == now.year && d.data.month == now.month)
+        .where((d) => d.data.year == ref.year && d.data.month == ref.month)
         .fold(0.0, (s, d) => s + d.valor);
   }
 
-  double get totalGeralMes => totalCustoManutencoesMes + totalCustoDespesasMes;
+  double totalGeralMes({DateTime? mes}) =>
+      totalCustoManutencoesMes(mes: mes) + totalCustoDespesasMes(mes: mes);
+
+  double totalGeralTudo() =>
+      _manutencoes.fold(0.0, (s, m) => s + m.custo) +
+      _despesas.fold(0.0, (s, d) => s + d.valor);
 
     double get cpkGlobal {
     final now = DateTime.now();
@@ -111,12 +129,13 @@ class CustosProvider extends ChangeNotifier {
     if (_isSaving) return;
     _isSaving = true;
     try {
-      await _repo.saveManutencao(item);
-      _manutencoes.add(item);
+      final newId = await _repo.saveManutencao(item);
+      final saved = item.copyWith(id: newId);
+      _manutencoes.add(saved);
       await AuditService.log(
         action: AuditAction.criar,
         entity: AuditEntity.manutencao,
-        entityId: item.id,
+        entityId: newId,
         payload: {'titulo': item.titulo, 'veiculo': item.veiculoPlaca, 'custo': item.custo},
       );
       _safeNotify();
@@ -171,12 +190,13 @@ class CustosProvider extends ChangeNotifier {
     if (_isSaving) return;
     _isSaving = true;
     try {
-      await _repo.saveDespesa(item);
-      _despesas.add(item);
+      final newId = await _repo.saveDespesa(item);
+      final saved = item.copyWith(id: newId);
+      _despesas.add(saved);
       await AuditService.log(
         action: AuditAction.criar,
         entity: AuditEntity.despesa,
-        entityId: item.id,
+        entityId: newId,
         payload: {'tipo': item.tipo, 'veiculo': item.veiculoPlaca, 'valor': item.valor},
       );
       _safeNotify();
@@ -222,6 +242,8 @@ class CustosProvider extends ChangeNotifier {
     FleetRepository.instance.removeListener(_onFrotaUpdated);
     super.dispose();
   }
+
+  Future<void> refresh() => _reloadFromSupabase();
 
   Future<void> _reloadFromSupabase() async {
     if (_disposed) return;

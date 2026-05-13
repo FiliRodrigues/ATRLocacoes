@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
-import '../../features/locacao/locacao_provider.dart';
 import '../data/fleet_data.dart';
-import '../data/locacao_models.dart';
 import '../navigation/app_router.dart';
 import '../theme/app_colors.dart';
 import '../theme/atr_theme_state.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
+
 
 /// Shell de navegação principal da aplicação.
 ///
@@ -77,19 +77,19 @@ class _AppSidebarState extends State<AppSidebar> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Color(0xF21A2332),
-                        Color(0xF20D1420),
+                        Color(0xF01A2332),
+                        Color(0xEE0D1420),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: Colors.white.withValues(alpha: 0.035),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.50),
-                        blurRadius: 24,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withValues(alpha: 0.38),
+                        blurRadius: 16,
+                        offset: const Offset(0, 3),
                       ),
                     ],
                   ),
@@ -113,7 +113,7 @@ class _AppSidebarState extends State<AppSidebar> {
                                   decoration: BoxDecoration(
                                     border: Border.all(
                                       color: AppColors.atrOrange,
-                                      width: 2,
+                                      width: 1.4,
                                     ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -158,20 +158,24 @@ class _AppSidebarState extends State<AppSidebar> {
                               ],
                             ),
                           ),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
+                        Semantics(
+                          label: _isCollapsed ? 'Expandir menu' : 'Recolher menu',
+                          button: true,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            icon: Icon(
+                              _isCollapsed
+                                  ? LucideIcons.chevronRight
+                                  : LucideIcons.chevronLeft,
+                              color: AppColors.textSecondaryDark,
+                              size: 18,
+                            ),
+                            onPressed: _toggleSidebar,
                           ),
-                          icon: Icon(
-                            _isCollapsed
-                                ? LucideIcons.chevronRight
-                                : LucideIcons.chevronLeft,
-                            color: AppColors.textSecondaryDark,
-                            size: 18,
-                          ),
-                          onPressed: _toggleSidebar,
                         ),
                       ],
                     ),
@@ -186,27 +190,7 @@ class _AppSidebarState extends State<AppSidebar> {
                             builder: (context) {
                               final uri =
                                   GoRouterState.of(context).uri.toString();
-                              final repo = context.watch<FleetRepository>();
-                              final frota = repo.frota;
-                              final veiculosFinanciados =
-                                  repo.veiculosFinanciados;
-                                final contratos =
-                                  context.watch<LocacaoProvider>().contratos;
                               final auth = context.read<AuthService>();
-                              // Calcula alertas urgentes para o badge de vencimentos
-                              final hoje = DateTime.now();
-                              final hoje0 = DateTime(hoje.year, hoje.month, hoje.day);
-                              int nUrgentes = 0;
-                              for (final v in frota) {
-                                for (final dt in [v.vencimentoIPVA, v.vencimentoSeguro, v.vencimentoLicenciamento]) {
-                                  final d = dt.difference(hoje0).inDays;
-                                  if (d <= 7) nUrgentes++;
-                                }
-                              }
-                              for (final d in repo.motoristas) {
-                                final dias = d.vencimentoCNH.difference(hoje0).inDays;
-                                if (dias <= 7) nUrgentes++;
-                              }
                               final nonAdmin = !auth.currentUser!.canAccess('dashboard');
 
                               return Column(
@@ -221,38 +205,17 @@ class _AppSidebarState extends State<AppSidebar> {
                                       isActive: uri == AppRoutes.home,
                                       onTap: () => context.go(AppRoutes.home),
                                     ),
-                                  if (auth.currentUser!.canAccess('frota'))
-                                    _SidebarItem(
-                                      icon: LucideIcons.calendarCheck2,
-                                      title: 'Controle Revisão',
-                                      isCollapsed: _isCollapsed,
-                                      isActive: uri == AppRoutes.frotaRevisao,
-                                      onTap: () =>
-                                          context.go(AppRoutes.frotaRevisao),
-                                    ),
-                                  if (auth.currentUser!.canAccess('vehicles')) ...[
-                                    if (_showExpandedContent)
-                                      _buildVehicleExpansionTile(
-                                        context,
-                                        uri,
-                                        frota,
-                                        contratos,
-                                      )
-                                    else
+                                  if (!_isCollapsed && (auth.currentUser!.canAccess('frota') || auth.currentUser!.canAccess('vehicles') || auth.currentUser!.canAccess('drivers')))
+                                    _SidebarGroupLabel('Gestão'),
+                                  if (auth.currentUser!.canAccess('vehicles'))
                                     _SidebarItem(
                                       icon: LucideIcons.car,
                                       title: 'Veículos',
                                       isCollapsed: _isCollapsed,
-                                      isActive: uri.startsWith('/vehicles'),
-                                      onTap: () {
-                                        if (frota.isNotEmpty) {
-                                          context.go(
-                                              '/vehicles/${frota.first.placa}');
-                                        }
-                                      },
+                                      isActive: uri.startsWith('/frota-revisao') || uri.startsWith('/vehicles'),
+                                      onTap: () => context.go('/frota-revisao'),
                                     ),
-                                  ],
-                                  if (auth.currentUser!.canAccess('drivers')) ...[
+                                  if (auth.currentUser!.canAccess('drivers'))
                                     _SidebarItem(
                                       icon: LucideIcons.users,
                                       title: 'Motoristas',
@@ -262,14 +225,8 @@ class _AppSidebarState extends State<AppSidebar> {
                                       onTap: () =>
                                           context.go('/${AppRoutes.drivers}'),
                                     ),
-                                    _SidebarItem(
-                                      icon: LucideIcons.star,
-                                      title: 'Score',
-                                      isCollapsed: _isCollapsed,
-                                      isActive: uri == AppRoutes.scoreMoto,
-                                      onTap: () => context.go(AppRoutes.scoreMoto),
-                                    ),
-                                  ],
+                                  if (!_isCollapsed && (auth.currentUser!.canAccess('custos') || auth.currentUser!.canAccess('contratos') || auth.currentUser!.canAccess('vencimentos') || auth.currentUser!.canAccess('relatorios')))
+                                    _SidebarGroupLabel('Financeiro'),
                                   if (auth.currentUser!.canAccess('custos'))
                                     _SidebarItem(
                                       icon: LucideIcons.wrench,
@@ -295,9 +252,10 @@ class _AppSidebarState extends State<AppSidebar> {
                                       icon: LucideIcons.calendarClock,
                                       title: 'Vencimentos',
                                       isCollapsed: _isCollapsed,
-                                      isActive: uri == AppRoutes.vencimentos,
-                                      onTap: () => context.go(AppRoutes.vencimentos),
-                                      badgeCount: nUrgentes,
+                                      isActive:
+                                          uri.startsWith(AppRoutes.vencimentos),
+                                      onTap: () =>
+                                          context.go(AppRoutes.vencimentos),
                                     ),
                                   if (auth.currentUser!.canAccess('relatorios'))
                                     _SidebarItem(
@@ -307,50 +265,41 @@ class _AppSidebarState extends State<AppSidebar> {
                                       isActive: uri == AppRoutes.relatorios,
                                       onTap: () => context.go(AppRoutes.relatorios),
                                     ),
-                                  if (auth.currentUser!.canAccess('financial_admin')) ...[
-                                    if (_showExpandedContent)
-                                      _buildFinancialExpansionTile(
-                                        context,
-                                        uri,
-                                        veiculosFinanciados,
-                                        contratos,
-                                      )
-                                    else
-                                      _SidebarItem(
-                                        icon: LucideIcons.landmark,
-                                        title: 'Adm Financeiro',
-                                        isCollapsed: _isCollapsed,
-                                        isActive: uri.startsWith(
-                                            '/${AppRoutes.financialAdmin}'),
-                                        onTap: () => context
-                                            .go('/${AppRoutes.financialAdmin}'),
-                                      ),
-                                  ] else ...[
-                                    if (auth.currentUser!.canAccess('obras'))
-                                      _SidebarItem(
-                                        icon: LucideIcons.building2,
-                                        title: 'Obras',
-                                        isCollapsed: _isCollapsed,
-                                        isActive: uri == AppRoutes.obras,
-                                        onTap: () => context.go(AppRoutes.obras),
-                                      ),
-                                    if (auth.currentUser!.canAccess('sala_atr'))
-                                      _SidebarItem(
-                                        icon: LucideIcons.monitorPlay,
-                                        title: 'Sala ATR',
-                                        isCollapsed: _isCollapsed,
-                                        isActive: uri == AppRoutes.salaAtr,
-                                        onTap: () => context.go(AppRoutes.salaAtr),
-                                      ),
-                                    if (auth.currentUser!.canAccess('lazer'))
-                                      _SidebarItem(
-                                        icon: LucideIcons.palmtree,
-                                        title: 'Lazer',
-                                        isCollapsed: _isCollapsed,
-                                        isActive: uri == AppRoutes.lazer,
-                                        onTap: () => context.go(AppRoutes.lazer),
-                                      ),
-                                  ],
+                                  if (auth.currentUser!.canAccess('financial_admin'))
+                                    _SidebarItem(
+                                      icon: LucideIcons.landmark,
+                                      title: 'Adm Financeiro',
+                                      isCollapsed: _isCollapsed,
+                                      isActive: uri.startsWith(
+                                          '/${AppRoutes.financialAdmin}'),
+                                      onTap: () => context
+                                          .go('/${AppRoutes.financialAdmin}'),
+                                    ),
+                                  if (!_isCollapsed) _SidebarGroupLabel('Sistema'),
+                                  if (auth.currentUser!.canAccess('ai_assistant'))
+                                    _SidebarItem(
+                                      icon: LucideIcons.bot,
+                                      title: 'Assistente IA',
+                                      isCollapsed: _isCollapsed,
+                                      isActive: false,
+                                      onTap: () => context.push('/ai-chat'),
+                                    ),
+                                  if (auth.currentUser!.canAccess('configuracoes') || auth.currentUser!.canAccess('settings'))
+                                    _SidebarItem(
+                                      icon: LucideIcons.settings,
+                                      title: 'Configurações',
+                                      isCollapsed: _isCollapsed,
+                                      isActive: false,
+                                      onTap: () => context.push('/configuracoes'),
+                                    ),
+                                  _SidebarItem(
+                                    icon: LucideIcons.bell,
+                                    title: 'Notificações',
+                                    isCollapsed: _isCollapsed,
+                                    isActive: false,
+                                    badgeCount: context.watch<NotificationService>().unreadCount,
+                                    onTap: () => context.push('/notifications'),
+                                  ),
                                 ],
                               );
                             },
@@ -358,15 +307,6 @@ class _AppSidebarState extends State<AppSidebar> {
                         ],
                       ),
                     ),
-                  ),
-
-                  const Divider(color: AppColors.atrNavyDarker),
-                  _SidebarItem(
-                    icon: LucideIcons.settings,
-                    title: 'Configurações',
-                    isCollapsed: _isCollapsed,
-                    isActive: false,
-                    onTap: () {},
                   ),
 
                   // Theme Toggle
@@ -491,7 +431,7 @@ class _AppSidebarState extends State<AppSidebar> {
                 if (index == 0) context.go(AppRoutes.home);
                 if (index == 1) {
                   final frota = context.read<FleetRepository>().frota;
-                  if (frota.isNotEmpty) {
+                  if (frota.isNotEmpty && frota.first.placa.isNotEmpty) {
                     context.go('/vehicles/${frota.first.placa}');
                   }
                 }
@@ -532,199 +472,27 @@ class _AppSidebarState extends State<AppSidebar> {
     return 0;
   }
 
-  Widget _buildVehicleExpansionTile(
-    BuildContext context,
-    String uri,
-    List<VehicleData> frota,
-    List<Contrato> contratos,
-  ) {
-    final isVehiclesActive = uri.startsWith('/vehicles');
-    final grouped = _groupVehiclesByContrato(frota, contratos);
+}
 
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        initiallyExpanded: isVehiclesActive,
-        iconColor: AppColors.textPrimaryDark,
-        collapsedIconColor: AppColors.textSecondaryDark,
-        title: Row(
-          children: [
-            Icon(
-              LucideIcons.car,
-              color: isVehiclesActive ? AppColors.atrOrange : AppColors.textSecondaryDark,
-              size: 20,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                'Acessar Veículos',
-                style: TextStyle(
-                  color: isVehiclesActive ? AppColors.textPrimaryDark : AppColors.textSecondaryDark,
-                  fontWeight:
-                      isVehiclesActive ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 13,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+class _SidebarGroupLabel extends StatelessWidget {
+  final String label;
+  const _SidebarGroupLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 14, 28, 6),
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          fontFamily: 'Plus Jakarta Sans',
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.0,
+          color: Color(0xFF66728A),
         ),
-        childrenPadding: const EdgeInsets.only(left: 32, bottom: 8),
-        children: [
-          for (final group in grouped.entries) ...[
-            Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 6),
-              child: Text(
-                'CARROS ${group.key.toUpperCase()}',
-                style: const TextStyle(
-                  fontFamily: 'Plus Jakarta Sans',
-                  color: Color(0xFF5B6478),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ),
-            for (final v in group.value) ...[
-              _SubSidebarItem(
-                title: '${v.placa} (${v.nome})',
-                isActive: uri == '/vehicles/${v.placa}',
-                onTap: () => context.go('/vehicles/${v.placa}'),
-              ),
-              const SizedBox(height: 4),
-            ],
-          ],
-        ],
       ),
     );
-  }
-
-  Widget _buildFinancialExpansionTile(
-    BuildContext context,
-    String uri,
-    List<VehicleData> veiculosFinanciados,
-    List<Contrato> contratos,
-  ) {
-    final isFinActive = uri.startsWith('/${AppRoutes.financialAdmin}');
-    final grouped = _groupVehiclesByContrato(veiculosFinanciados, contratos);
-
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        initiallyExpanded: isFinActive,
-        iconColor: AppColors.textPrimaryDark,
-        collapsedIconColor: AppColors.textSecondaryDark,
-        title: Row(
-          children: [
-            Icon(
-              LucideIcons.landmark,
-              color: isFinActive ? AppColors.atrOrange : AppColors.textSecondaryDark,
-              size: 20,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                'Adm Financeiro',
-                style: TextStyle(
-                  color: isFinActive ? AppColors.textPrimaryDark : AppColors.textSecondaryDark,
-                  fontWeight: isFinActive ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 13,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        childrenPadding: const EdgeInsets.only(left: 32, bottom: 8),
-        children: [
-          _SubSidebarItem(
-            title: 'Visão Geral',
-            isActive: uri == '/${AppRoutes.financialAdmin}',
-            onTap: () => context.go('/${AppRoutes.financialAdmin}'),
-          ),
-          for (final group in grouped.entries) ...[
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 6),
-              child: Text(
-                'CARROS ${group.key.toUpperCase()}',
-                style: const TextStyle(
-                  fontFamily: 'Plus Jakarta Sans',
-                  color: Color(0xFF5B6478),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ),
-            for (final v in group.value) ...[
-              _SubSidebarItem(
-                title: '${v.nome} (${v.placa})',
-                isActive: uri == '/${AppRoutes.financialAdmin}/${v.placa}',
-                onTap: () =>
-                    context.go('/${AppRoutes.financialAdmin}/${v.placa}'),
-              ),
-              const SizedBox(height: 4),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-
-  Map<String, List<VehicleData>> _groupVehiclesByContrato(
-    List<VehicleData> vehicles,
-    List<Contrato> _contratos,
-  ) {
-    final grouped = <String, List<VehicleData>>{};
-    for (final v in vehicles) {
-      final groupKey = _resolveLocadoraGroupByVehicle(v);
-      grouped.putIfAbsent(groupKey, () => <VehicleData>[]).add(v);
-    }
-
-    final ordered = <String, List<VehicleData>>{};
-    const orderedKeys = <String>[
-      'New Tesc',
-      'ATR',
-      'Ensin',
-      'New',
-      'Tesc',
-      'Outras Locadoras',
-      'Não Locados',
-    ];
-
-    for (final key in orderedKeys) {
-      final items = grouped[key];
-      if (items == null || items.isEmpty) continue;
-      items.sort((a, b) => a.placa.compareTo(b.placa));
-      ordered[key] = items;
-    }
-
-    return ordered;
-  }
-
-  String _resolveLocadoraGroupByVehicle(VehicleData veiculo) {
-    final origem = veiculo.motorista.trim().toUpperCase();
-    final bool mencionaNew = origem.contains('NEW');
-    final bool mencionaTesc = origem.contains('TESC');
-    final bool mencionaAtr = origem.contains('ATR');
-    final bool mencionaEnsin = origem.contains('ENSIN');
-
-    final bool isLocado =
-        origem.contains('LOCADO') ||
-        mencionaNew ||
-        mencionaTesc ||
-        mencionaAtr ||
-      mencionaEnsin ||
-        veiculo.status == VehicleStatus.reserva;
-
-    if (!isLocado) return 'Não Locados';
-    if (mencionaNew && mencionaTesc) return 'New Tesc';
-    if (mencionaAtr) return 'ATR';
-    if (mencionaEnsin) return 'Ensin';
-    if (mencionaNew) return 'New';
-    if (mencionaTesc) return 'Tesc';
-    return 'Outras Locadoras';
   }
 }
 
@@ -772,9 +540,12 @@ class _SidebarItemState extends State<_SidebarItem> {
           cursor: SystemMouseCursors.click,
           onEnter: (_) => setState(() => _hovering = true),
           onExit: (_) => setState(() => _hovering = false),
-          child: GestureDetector(
-            onTap: widget.onTap,
-            child: AnimatedContainer(
+          child: Semantics(
+            button: true,
+            label: widget.title,
+            child: GestureDetector(
+              onTap: widget.onTap,
+              child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic,
               padding: EdgeInsets.symmetric(
@@ -783,21 +554,21 @@ class _SidebarItemState extends State<_SidebarItem> {
               ),
               decoration: BoxDecoration(
                 color: widget.isActive
-                    ? AppColors.atrOrange.withValues(alpha: 0.12)
+                    ? AppColors.atrOrange.withValues(alpha: 0.09)
                     : (_hovering
-                        ? Colors.white.withValues(alpha: 0.04)
+                        ? Colors.white.withValues(alpha: 0.03)
                         : Colors.transparent),
                 borderRadius: BorderRadius.circular(12),
                 border: widget.isActive
                     ? Border.all(
-                        color: AppColors.atrOrange.withValues(alpha: 0.2),
+                        color: AppColors.atrOrange.withValues(alpha: 0.16),
                       )
                     : null,
                 boxShadow: widget.isActive
                     ? [
                         BoxShadow(
-                          color: AppColors.glowOrange,
-                          blurRadius: 12,
+                          color: AppColors.glowOrange.withValues(alpha: 0.45),
+                          blurRadius: 8,
                           spreadRadius: 0,
                         ),
                       ]
@@ -846,7 +617,7 @@ class _SidebarItemState extends State<_SidebarItem> {
                           fontWeight: widget.isActive
                               ? FontWeight.w600
                               : FontWeight.w500,
-                          fontSize: 13,
+                          fontSize: 12.5,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -855,6 +626,7 @@ class _SidebarItemState extends State<_SidebarItem> {
                 ],
               ),
             ),
+          ),
           ),
         ),
       ),
@@ -945,3 +717,4 @@ class _SubSidebarItemState extends State<_SubSidebarItem> {
     );
   }
 }
+

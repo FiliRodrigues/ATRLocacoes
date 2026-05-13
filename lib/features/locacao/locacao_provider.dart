@@ -11,13 +11,18 @@ import '../../core/utils/app_logger.dart';
 /// Gerencia contratos, checklist e ocorrências com persistência via Supabase.
 class LocacaoProvider extends ChangeNotifier {
   LocacaoProvider(this._repo) {
-    _init();
-    // Recarrega dados se o primeiro load foi bloqueado pela RLS (anon)
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      if (data.event == AuthChangeEvent.signedIn) {
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.tokenRefreshed) {
         _reloadFromSupabase();
       }
     });
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session != null) {
+      _init();
+    } else {
+      _loading = false;
+    }
   }
 
   final LocacaoRepository _repo;
@@ -135,6 +140,12 @@ class LocacaoProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> encerrarContrato(String id) async {
+    final contrato = _contratos.firstWhere((c) => c.id == id);
+    final encerrado = contrato.copyWith(status: ContratoStatus.encerrado);
+    await atualizarContrato(encerrado);
+  }
+
   // ════════════════════════════════════════════════════
   // CHECKLIST
   // ════════════════════════════════════════════════════
@@ -169,6 +180,28 @@ class LocacaoProvider extends ChangeNotifier {
     );
     _safeNotify();
     return criado;
+  }
+
+  Future<ChecklistEvento> atualizarChecklist(ChecklistEvento evento) async {
+    final atualizado = await _repo.updateChecklist(evento);
+    final lista = _checklistCache[evento.contratoId] ?? [];
+    final idx = lista.indexWhere((e) => e.id == evento.id);
+    if (idx != -1) {
+      lista[idx] = atualizado;
+      _checklistCache[evento.contratoId] = lista;
+    }
+    await AuditService.log(
+      action: AuditAction.atualizar,
+      entity: AuditEntity.veiculo,
+      entityId: evento.id,
+      afterState: {
+        'tipo': evento.tipo.name,
+        'km': evento.kmOdometro,
+        'combustivel_pct': evento.combustivelPct,
+      },
+    );
+    _safeNotify();
+    return atualizado;
   }
 
   // ════════════════════════════════════════════════════

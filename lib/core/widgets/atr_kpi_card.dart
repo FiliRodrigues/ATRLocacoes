@@ -48,7 +48,7 @@ class AtrKpiCard extends StatelessWidget {
 
     return BentoCard(
       onTap: onTap,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -56,13 +56,13 @@ class AtrKpiCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
-                  color: c.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  color: c.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(9),
                 ),
-                child: Icon(icon, size: 18, color: c),
+                child: Icon(icon, size: 16, color: c),
               ),
               const Spacer(),
               if (delta != null && trend != null)
@@ -74,7 +74,8 @@ class AtrKpiCard extends StatelessWidget {
             label,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: AppColors.textSecondaryDark,
+                  color: AppColors.textMutedDark,
+                  fontWeight: FontWeight.w600,
                 ),
           ),
           const SizedBox(height: 4),
@@ -83,10 +84,10 @@ class AtrKpiCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontFamily: 'Syne',
-              fontSize: 30,
+              fontSize: 26,
               fontWeight: FontWeight.w800,
               color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-              letterSpacing: -0.6,
+              letterSpacing: -0.4,
             ),
           ),
         ],
@@ -126,9 +127,9 @@ class _DeltaBadge extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.12),
+        color: c.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(

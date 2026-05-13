@@ -18,6 +18,7 @@ const Map<String, String> _featureLabels = {
   'obras': 'Obras',
   'sala_atr': 'Sala ATR',
   'lazer': 'Lazer',
+  'ai_assistant': 'Assistente IA',
 };
 
 class UserFormModal extends StatefulWidget {
@@ -80,7 +81,7 @@ class _UserFormModalState extends State<UserFormModal> {
     try {
       final service = UserAdminService();
       if (_isEditing) {
-        await service.updatePermissions(_userCtrl.text.trim(), _selectedFeatures.toList());
+        await service.updatePermissions(widget.existing!.id!, _selectedFeatures.toList());
       } else {
         await service.createUser(
           email: _emailCtrl.text.trim(),

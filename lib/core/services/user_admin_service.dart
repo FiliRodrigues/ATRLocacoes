@@ -90,19 +90,20 @@ class UserAdminService {
         .from('app_users')
         .select()
         .eq('ativo', true)
-        .order('username');
+        .order('username')
+        .limit(500);
     return (rows as List).map((r) => AppUser.fromJson(r as Map<String, dynamic>)).toList();
   }
 
-  Future<void> setActive(String username, bool ativo) async {
+  Future<void> setActive(String userId, bool ativo) async {
     await Supabase.instance.client
         .from('app_users')
-        .update({'ativo': ativo}).eq('username', username);
+        .update({'ativo': ativo}).eq('id', userId);
   }
 
-  Future<void> updatePermissions(String username, List<String> features) async {
+  Future<void> updatePermissions(String userId, List<String> features) async {
     await Supabase.instance.client
         .from('app_users')
-        .update({'allowed_features': features}).eq('username', username);
+        .update({'allowed_features': features}).eq('id', userId);
   }
 }

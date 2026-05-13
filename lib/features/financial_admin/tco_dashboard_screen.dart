@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_logger.dart';
 import '../../core/widgets/atr_page_background.dart';
 import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
@@ -37,8 +39,40 @@ class TcoDashboardScreen extends StatefulWidget {
 
 class _TcoDashboardScreenState extends State<TcoDashboardScreen> {
   _TcoSort _sort = _TcoSort.menosLucro;
+  Map<String, double> _recebidoPorPlaca = const {};
 
   static final _brl = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRecebimentos();
+  }
+
+  Future<void> _fetchRecebimentos() async {
+    final tenantId = Supabase.instance.client.auth.currentUser
+        ?.appMetadata['tenant_id'] as String?;
+    if (tenantId == null) return;
+    try {
+      // Junta recebimentos com veiculos para obter placa
+      final rows = await Supabase.instance.client
+          .from('recebimentos')
+          .select('veiculo_id, valor_recebido, veiculos(placa)')
+          .eq('tenant_id', tenantId);
+      final map = <String, double>{};
+      for (final r in rows) {
+        final veiculo = r['veiculos'] as Map<String, dynamic>?;
+        final placa = (veiculo?['placa'] as String? ?? '').trim();
+        final valor = (r['valor_recebido'] as num?)?.toDouble() ?? 0;
+        if (placa.isNotEmpty) {
+          map.update(placa, (v) => v + valor, ifAbsent: () => valor);
+        }
+      }
+      if (mounted) setState(() => _recebidoPorPlaca = map);
+    } catch (e) {
+      AppLogger.warning('TCO: falha ao carregar recebimentos: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,8 +81,8 @@ class _TcoDashboardScreenState extends State<TcoDashboardScreen> {
     // Não oculta veículos com KM 0 para evitar percepção de dados faltando.
     final frota = repo.frota.where((v) => v.placa.trim().isNotEmpty).toList();
 
-    // Calcula TCO por veículo
-    final itens = frota.map((v) => _TcoEntry.from(v)).toList();
+    // Calcula TCO por veículo com dados reais de recebimentos
+    final itens = frota.map((v) => _TcoEntry.from(v, recebidoPorPlaca: _recebidoPorPlaca)).toList();
 
     // Ordena
     switch (_sort) {
@@ -350,18 +384,23 @@ class _TcoEntry {
     required this.receita,
   });
 
-  factory _TcoEntry.from(VehicleData v) {
+  factory _TcoEntry.from(VehicleData v, {Map<String, double> recebidoPorPlaca = const {}}) {
     final f = v.financiamento;
     final custoAquisicao = f != null
         ? f.valorEntrada + f.totalPago
         : v.valorAquisicao;
+
+    // Usa recebimentos reais + receita de locacao como fallback
+    final recebidoReal = recebidoPorPlaca[v.placa] ?? 0;
+    final receitaEstimada = v.receitaTotalAcumulada;
+    final receita = recebidoReal > 0 ? recebidoReal : receitaEstimada;
 
     return _TcoEntry._(
       veiculo: v,
       custoAquisicao: custoAquisicao,
       custoManutencao: v.custoTotalManutencao,
       custoNaoCiclico: v.custoTotalGastosNaoCiclicos,
-      receita: v.receitaTotalAcumulada,
+      receita: receita,
     );
   }
 }

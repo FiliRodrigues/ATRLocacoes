@@ -87,7 +87,7 @@ VehicleData vehicleFromSupabase(
   if (row['data_compra'] != null) {
     try {
       dataAquisicao = DateTime.tryParse(row['data_compra']?.toString() ?? '') ?? DateTime.now();
-    } catch (_) {}
+    } catch (e) { AppLogger.warning('SupabaseService data parse: $e'); }
   }
 
   final mesesEmServico =
@@ -158,6 +158,7 @@ VehicleData vehicleFromSupabase(
     final _ = valorJaPago;
 
     financing = FinancingData(
+      id: (f['id'] as String?)?.trim(),
       valorTotal: valorTotalDb,
       percentualEntrada: percentualEntrada,
       totalParcelas: totalParcelas,
@@ -233,7 +234,8 @@ class FleetSupabaseService {
             'data_compra, valor_veiculo',
           )
           .eq('tenant_id', tenantId)
-          .order('placa', ascending: true),
+          .order('placa', ascending: true)
+          .limit(500),
       client
           .from('financiamentos')
           .select(
@@ -241,7 +243,8 @@ class FleetSupabaseService {
             'valor_financiado, quantidade_parcelas, recebimento_mensal, '
             'taxa_juros_mensal, previsao_quitacao, valor_ja_pago',
           )
-          .eq('tenant_id', tenantId),
+          .eq('tenant_id', tenantId)
+          .limit(500),
     ]);
 
     final veiculoRows = coreResults[0] as List<dynamic>;
@@ -256,42 +259,43 @@ class FleetSupabaseService {
       if (id != null && placa.isNotEmpty) idParaPlaca[id] = placa;
     }
 
-    // Busca manutenções e despesas com tratamento de erro independente
-    List<dynamic> manutencaoRows = const [];
-    List<dynamic> despesaRows = const [];
-    try {
-      manutencaoRows = await client
+    // Busca manutenções e despesas em paralelo (independentes entre si)
+    final parallelRows = await Future.wait<List<dynamic>>([
+      client
           .from('manutencoes')
           .select(
-            'veiculo_id, data_servico, tipo_servico, descricao, km_registro, valor_servico',
+            'veiculo_id, data, tipo, descricao, km_no_servico, custo',
           )
           .eq('tenant_id', tenantId)
-          .order('data_servico', ascending: false);
-    } catch (e) {
-      AppLogger.warning('Falha ao carregar manutenções: $e');
-    }
-    try {
-      despesaRows = await client
+          .order('data', ascending: false)
+          .limit(500)
+          .catchError((e) {
+            AppLogger.warning('Falha ao carregar manutenções: $e');
+            return <dynamic>[];
+          }),
+      client
           .from('despesas')
           .select(
             'veiculo_placa, data, tipo, descricao, valor',
           )
           .eq('tenant_id', tenantId)
-          .order('data', ascending: false);
-    } catch (e) {
-      AppLogger.warning('Falha ao carregar despesas: $e');
-    }
+          .order('data', ascending: false)
+          .limit(500)
+          .catchError((e) {
+            AppLogger.warning('Falha ao carregar despesas: $e');
+            return <dynamic>[];
+          }),
+    ]);
+    final manutencaoRows = parallelRows[0];
+    final despesaRows = parallelRows[1];
 
     // Indexa financiamentos por veiculo_id para lookup O(1)
     final financiamentoByVeiculoId = <String, Map<String, dynamic>>{};
     final financiamentoIdToVeiculoId = <String, String>{};
-    debugPrint('[SUPABASE] financiamentosRows: ${financiamentoRows.length}');
     for (final f in financiamentoRows) {
       final fMap = f as Map<String, dynamic>;
       final veiculoId = fMap['veiculo_id'] as String?;
       final finId = fMap['id'] as String?;
-      final recMensal = fMap['recebimento_mensal'];
-      debugPrint('[SUPABASE]   finId=$finId veiculoId=$veiculoId recebimento_mensal=$recMensal');
       if (veiculoId != null) {
         financiamentoByVeiculoId[veiculoId] = fMap;
       }
@@ -299,7 +303,6 @@ class FleetSupabaseService {
         financiamentoIdToVeiculoId[finId] = veiculoId;
       }
     }
-    debugPrint('[SUPABASE] financiamentoIdToVeiculoId.size=${financiamentoIdToVeiculoId.length}');
     // Consulta parcelas_financiamento para valores reais recebidos.
     // Tenant filtering é feito client-side via financiamento_id → veiculo_id → tenant.
     final totalPagoByVeiculoId = <String, double>{};
@@ -310,7 +313,8 @@ class FleetSupabaseService {
       final parcelasRows = await client
           .from('parcelas_financiamento')
           .select('financiamento_id, valor_parcela, status_pagamento, data_pagamento')
-          .eq('tenant_id', tenantId);
+          .eq('tenant_id', tenantId)
+          .limit(5000);
       for (final p in parcelasRows) {
         final pMap = p;
         final finId = pMap['financiamento_id'] as String?;

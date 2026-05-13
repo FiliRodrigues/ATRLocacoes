@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -9,9 +9,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/atr_page_background.dart';
 import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
-import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/bento_card.dart';
-import '../../core/widgets/atr_kpi_card.dart';
+
+final _kmFmt = NumberFormat('#,###', 'pt_BR');
 
 class FrotaRevisaoScreen extends StatefulWidget {
   const FrotaRevisaoScreen({super.key});
@@ -21,446 +21,598 @@ class FrotaRevisaoScreen extends StatefulWidget {
 }
 
 class _FrotaRevisaoScreenState extends State<FrotaRevisaoScreen> {
-  DateTime? _filtroMes;
+  VehicleStatus? _filtroStatus;
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
-  bool _foiAtualizadoNaSemana(DateTime? datetime) {
-    if (datetime == null) return false;
-    final now = DateTime.now();
-    final startOfWeek = now.subtract(Duration(days: now.weekday - 1)).copyWith(
-          hour: 0,
-          minute: 0,
-          second: 0,
-          millisecond: 0,
-          microsecond: 0,
-        );
-    return datetime.isAfter(startOfWeek) ||
-        datetime.isAtSameMomentAs(startOfWeek);
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.addListener(() {
+      setState(() => _searchQuery = _searchCtrl.text);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final repo = context.watch<FleetRepository>();
     final frota = repo.frota;
-    final historico = repo.kmHistorico;
 
-    final atualizadosSemana =
-        frota.where((v) => _foiAtualizadoNaSemana(v.ultimaAtualizacaoKm)).length;
-    final urgentes = frota.where((v) => v.kmParaProxRevisao <= 1000).length;
-    final atencao = frota
-        .where((v) => v.kmParaProxRevisao > 1000 && v.kmParaProxRevisao <= 2500)
-        .length;
-    final emDia = (frota.length - urgentes - atencao).clamp(0, frota.length);
+    final porStatus = _filtroStatus == null
+        ? frota
+        : frota.where((v) => v.status == _filtroStatus).toList();
+
+    final query = _searchQuery.toLowerCase().trim();
+    final filtrada = query.isEmpty
+        ? porStatus
+        : porStatus.where((v) =>
+            v.placa.toLowerCase().contains(query) ||
+            v.nome.toLowerCase().contains(query)).toList();
+
+    final urgentes = filtrada.where((v) => v.kmParaProxRevisao <= 1000).length;
 
     return AppSidebar(
       child: Scaffold(
         body: AtrPageBackground(
           grid: true,
-          child: Column(
-          children: [
-            const AtrTopBar(
-              title: 'Controle de Revisão',
-              subtitle: 'Visão geral da frota e acompanhamento por veículo',
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                children: [
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      SizedBox(
-                        width: 220,
-                        child: AtrKpiCard(
-                          label: 'Total de Carros',
-                          value: '${frota.length}',
-                          icon: LucideIcons.truck,
-                          tone: KpiTone.info,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: AtrKpiCard(
-                          label: 'Atualizados na Semana',
-                          value: '$atualizadosSemana',
-                          icon: LucideIcons.checkCircle2,
-                          tone: KpiTone.success,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: AtrKpiCard(
-                          label: 'Revisão Urgente',
-                          value: '$urgentes',
-                          icon: LucideIcons.alertCircle,
-                          tone: KpiTone.error,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: AtrKpiCard(
-                          label: 'Em Atenção',
-                          value: '$atencao',
-                          icon: LucideIcons.alertTriangle,
-                          tone: KpiTone.warning,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: AtrKpiCard(
-                          label: 'Em Dia',
-                          value: '$emDia',
-                          icon: LucideIcons.shieldCheck,
-                          tone: KpiTone.orange,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _buildFilterBar(isDark),
-                  const SizedBox(height: 12),
-                  ...frota.asMap().entries.map((entry) {
-                    final i = entry.key;
-                    final v = entry.value;
-                    final hist = historico
-                        .where((r) =>
-                            r.placa == v.placa &&
-                            (_filtroMes == null ||
-                                (r.data.year == _filtroMes!.year &&
-                                    r.data.month == _filtroMes!.month)))
-                        .toList()
-                      ..sort((a, b) => b.data.compareTo(a.data));
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _vehicleCard(v, hist, isDark)
-                          .animate(delay: (i * 60).ms)
-                          .fadeIn(duration: 260.ms)
-                          .moveY(begin: 8, end: 0),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ],
-        ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterBar(bool isDark) {
-    return BentoCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          Icon(
-            LucideIcons.filter,
-            size: 15,
-            color: isDark ? AppColors.textSecondaryDark : Colors.black54,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Mês:',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? AppColors.textSecondaryDark : Colors.black54,
-            ),
-          ),
-          const SizedBox(width: 8),
-          _buildFilterChip(
-            label: _filtroMes != null
-                ? DateFormat('MMM/yyyy', 'pt_BR').format(_filtroMes!)
-                : 'Todos os meses',
-            isDark: isDark,
-            onTap: _mostrarSeletorMes,
-          ),
-          if (_filtroMes != null) ...[
-            const SizedBox(width: 8),
-            AtrGhostButton(
-              label: 'Limpar',
-              icon: LucideIcons.x,
-              onPressed: () => setState(() => _filtroMes = null),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _vehicleCard(VehicleData v, List<KmRegistro> hist, bool isDark) {
-    final kmAtual = v.kmAtual;
-    final kmProxRevisao = ((kmAtual / 10000).floor() + 1) * 10000;
-    final kmPara = kmProxRevisao - kmAtual;
-
-    final Color statusColor;
-    final String statusText;
-    if (kmPara <= 1000) {
-      statusColor = AppColors.statusError;
-      statusText = 'URGENTE';
-    } else if (kmPara <= 2500) {
-      statusColor = AppColors.statusWarning;
-      statusText = 'ATENÇÃO';
-    } else {
-      statusColor = AppColors.statusSuccess;
-      statusText = 'EM DIA';
-    }
-
-    return BentoCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: v.cor1.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(LucideIcons.truck, color: v.cor1, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${v.placa} • ${v.nome}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      'Motorista: ${v.motorista}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppColors.textSecondaryDark : Colors.black54,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  statusText,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: statusColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 14,
-            runSpacing: 6,
-            children: [
-              Text(
-                'KM atual: ${NumberFormat('#,###', 'pt_BR').format(kmAtual.toInt())} km',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-              Text(
-                'Próxima revisão: ${NumberFormat('#,###', 'pt_BR').format(kmProxRevisao)} km',
-                style: const TextStyle(fontSize: 12),
-              ),
-              Text(
-                'Faltam: ${NumberFormat('#,###', 'pt_BR').format(kmPara.toInt())} km',
-                style: TextStyle(fontSize: 12, color: statusColor),
-              ),
-              Text(
-                'Registros no período: ${hist.length}',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: AtrSecondaryButton(
-              label: 'Ver detalhes',
-              icon: LucideIcons.eye,
-              onPressed: () => _showVehicleDetails(v, hist, statusText, statusColor),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showVehicleDetails(
-    VehicleData v,
-    List<KmRegistro> hist,
-    String statusText,
-    Color statusColor,
-  ) async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Detalhes ${v.placa}'),
-        content: SizedBox(
-          width: 560,
-          child: SingleChildScrollView(
+          child: SafeArea(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${v.nome} • ${v.motorista}',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                AtrTopBar(
+                  title: 'Frota',
+                  subtitle: 'Visão geral por contrato',
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Text('Status revisão: '),
-                    Text(
-                      statusText,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('KM atual: ${NumberFormat('#,###', 'pt_BR').format(v.kmAtual.toInt())} km'),
-                Text('KM para próxima revisão: ${NumberFormat('#,###', 'pt_BR').format(v.kmParaProxRevisao.toInt())} km'),
-                const SizedBox(height: 12),
-                const Text(
-                  'Histórico de KM',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                if (hist.isEmpty)
-                  const Text('Sem registros para o período selecionado.')
-                else
-                  ...hist.take(14).map(
-                    (r) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        children: [
-                          Text(DateFormat('dd/MM/yyyy').format(r.data)),
-                          const Spacer(),
-                          Text(
-                            '${NumberFormat('#,###', 'pt_BR').format(r.km.toInt())} km',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                _buildStatusFilter(frota),
+                _buildSearchBar(),
+                Expanded(
+                  child: filtrada.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Nenhum veículo encontrado para este filtro.',
+                            style: TextStyle(color: AppColors.textMutedDark, fontSize: 14),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final width = constraints.maxWidth;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 16),
+                                  _buildKpis(filtrada, urgentes, width),
+                                  const SizedBox(height: 28),
+                                  ..._buildCompanySections(filtrada, width),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                ),
               ],
             ),
           ),
         ),
-        actions: [
-          AtrGhostButton(
-            label: 'Fechar',
-            onPressed: () => Navigator.pop(ctx),
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildFilterChip({
-    required String label,
-    required bool isDark,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildStatusFilter(List<VehicleData> frota) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _StatusFilterChip(
+              label: 'Todos',
+              count: frota.length,
+              active: _filtroStatus == null,
+              onTap: () => setState(() => _filtroStatus = null),
+            ),
+            const SizedBox(width: 8),
+            _StatusFilterChip(
+              label: 'Em rota',
+              count: frota.where((v) => v.status == VehicleStatus.emRota).length,
+              color: AppColors.statusSuccess,
+              active: _filtroStatus == VehicleStatus.emRota,
+              onTap: () => setState(() => _filtroStatus = VehicleStatus.emRota),
+            ),
+            const SizedBox(width: 8),
+            _StatusFilterChip(
+              label: 'Parado',
+              count: frota.where((v) => v.status == VehicleStatus.parado).length,
+              color: AppColors.statusInfo,
+              active: _filtroStatus == VehicleStatus.parado,
+              onTap: () => setState(() => _filtroStatus = VehicleStatus.parado),
+            ),
+            const SizedBox(width: 8),
+            _StatusFilterChip(
+              label: 'Reserva',
+              count: frota.where((v) => v.status == VehicleStatus.reserva).length,
+              color: AppColors.statusWarning,
+              active: _filtroStatus == VehicleStatus.reserva,
+              onTap: () => setState(() => _filtroStatus = VehicleStatus.reserva),
+            ),
+            const SizedBox(width: 8),
+            _StatusFilterChip(
+              label: 'Oficina',
+              count: frota.where((v) => v.status == VehicleStatus.emOficina).length,
+              color: AppColors.statusError,
+              active: _filtroStatus == VehicleStatus.emOficina,
+              onTap: () => setState(() => _filtroStatus = VehicleStatus.emOficina),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+      child: SizedBox(
+        height: 44,
+        child: TextField(
+          controller: _searchCtrl,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppColors.textPrimaryDark,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Buscar por placa ou modelo...',
+            hintStyle: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textMutedDark,
+            ),
+            prefixIcon: const Padding(
+              padding: EdgeInsets.all(12),
+              child: Icon(LucideIcons.search, size: 16, color: AppColors.textSecondaryDark),
+            ),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(LucideIcons.x, size: 14, color: AppColors.textMutedDark),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                    },
+                  )
+                : null,
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.04),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: AppColors.atrOrange.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKpis(List<VehicleData> frota, int urgentes, double width) {
+    final emRota = frota.where((v) => v.status == VehicleStatus.emRota).length;
+    final emOficina = frota.where((v) => v.status == VehicleStatus.emOficina).length;
+
+    double itemWidth = (width - 36) / 4;
+    if (width < 900) itemWidth = (width - 12) / 2;
+    if (width < 500) itemWidth = width;
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        SizedBox(
+          width: itemWidth,
+          child: _KpiCard(
+            title: 'Total Veículos',
+            value: '${frota.length}',
+            icon: LucideIcons.truck,
+            color: AppColors.statusInfo,
+          ),
+        ),
+        SizedBox(
+          width: itemWidth,
+          child: _KpiCard(
+            title: 'Em Rota',
+            value: '$emRota',
+            icon: LucideIcons.navigation,
+            color: AppColors.statusSuccess,
+          ),
+        ),
+        SizedBox(
+          width: itemWidth,
+          child: _KpiCard(
+            title: 'Em Oficina',
+            value: '$emOficina',
+            icon: LucideIcons.wrench,
+            color: AppColors.statusError,
+          ),
+        ),
+        SizedBox(
+          width: itemWidth,
+          child: _KpiCard(
+            title: 'Revisão Urgente',
+            value: '$urgentes',
+            sub: '< 1.000 km',
+            icon: LucideIcons.alertCircle,
+            color: AppColors.statusWarning,
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildCompanySections(List<VehicleData> vehicles, double width) {
+    final grouped = _groupVehiclesByEmpresa(vehicles);
+    final sections = <Widget>[];
+
+    for (final group in grouped.entries) {
+      sections.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            group.key,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimaryDark,
+            ),
+          ),
+        ),
+      );
+      sections.add(
+        Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: group.value.asMap().entries.map((entry) {
+            double itemWidth = (width - 42) / 4;
+            if (width < 1200) itemWidth = (width - 28) / 3;
+            if (width < 900) itemWidth = (width - 14) / 2;
+            if (width < 600) itemWidth = width;
+            return SizedBox(
+              width: itemWidth,
+              child: _VehicleCard(v: entry.value),
+            );
+          }).toList(),
+        ),
+      );
+      sections.add(const SizedBox(height: 24));
+    }
+
+    return sections;
+  }
+
+  // --- Agrupamento (mesma lógica do FinancialAdmin) ---
+
+  Map<String, List<VehicleData>> _groupVehiclesByEmpresa(List<VehicleData> vehicles) {
+    final grouped = <String, List<VehicleData>>{};
+    for (final v in vehicles) {
+      final groupKey = _resolveEmpresaGroup(v);
+      grouped.putIfAbsent(groupKey, () => <VehicleData>[]).add(v);
+    }
+
+    final ordered = <String, List<VehicleData>>{};
+    const orderedKeys = [
+      'New Tesc', 'ATR', 'Ensin', 'New', 'Tesc',
+      'Outras Locadoras', 'Não Locados',
+    ];
+
+    for (final key in orderedKeys) {
+      final items = grouped[key];
+      if (items == null || items.isEmpty) continue;
+      items.sort((a, b) => a.placa.compareTo(b.placa));
+      ordered[key] = items;
+    }
+
+    return ordered;
+  }
+
+  String _resolveEmpresaGroup(VehicleData veiculo) {
+    final origem = veiculo.motorista.trim().toUpperCase();
+    final mencionaNew = origem.contains('NEW');
+    final mencionaTesc = origem.contains('TESC');
+    final mencionaAtr = origem.contains('ATR');
+    final mencionaEnsin = origem.contains('ENSIN');
+
+    final isLocado = origem.contains('LOCADO') ||
+        mencionaNew || mencionaTesc || mencionaAtr || mencionaEnsin ||
+        veiculo.status == VehicleStatus.reserva;
+
+    if (!isLocado) return 'Não Locados';
+    if (mencionaNew && mencionaTesc) return 'New Tesc';
+    if (mencionaAtr) return 'ATR';
+    if (mencionaEnsin) return 'Ensin';
+    if (mencionaNew) return 'New';
+    if (mencionaTesc) return 'Tesc';
+    return 'Outras Locadoras';
+  }
+}
+
+// --- KPI Card ---
+
+class _KpiCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String? sub;
+  final IconData icon;
+  final Color color;
+
+  const _KpiCard({
+    required this.title,
+    required this.value,
+    this.sub,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BentoCard(
+      padding: EdgeInsets.zero,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: color, width: 3)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondaryDark,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.08)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 13),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+            if (sub != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                sub!,
+                style: const TextStyle(fontSize: 10, color: AppColors.textMutedDark),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- Vehicle Card ---
+
+class _VehicleCard extends StatelessWidget {
+  final VehicleData v;
+
+  const _VehicleCard({required this.v});
+
+  Color get _statusColor {
+    switch (v.status) {
+      case VehicleStatus.emRota:
+        return AppColors.statusSuccess;
+      case VehicleStatus.emOficina:
+        return AppColors.statusError;
+      case VehicleStatus.reserva:
+        return AppColors.statusWarning;
+      case VehicleStatus.parado:
+        return AppColors.statusInfo;
+    }
+  }
+
+  String get _statusLabel => v.status.label;
+
+  @override
+  Widget build(BuildContext context) {
+    final km = v.kmAtual;
+    final motorista = v.motorista.isNotEmpty ? v.motorista : '—';
+    final proxRevisao = v.kmParaProxRevisao;
+    final totalRev = v.totalRevisoes;
+    final statusColor = _statusColor;
+
+    return BentoCard(
+      padding: EdgeInsets.zero,
+      onTap: () => context.go('/vehicles/${v.placa}'),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: statusColor, width: 3)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: ícone + placa/nome + badge
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [v.cor1, v.cor2]),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(LucideIcons.car, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        v.placa,
+                        style: const TextStyle(
+                          fontFamily: 'RobotoMono',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                          color: AppColors.textPrimaryDark,
+                        ),
+                      ),
+                      Text(
+                        v.nome,
+                        style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryDark),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    _statusLabel,
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: statusColor, letterSpacing: 0.5),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // KM + Motorista
+            Row(
+              children: [
+                Expanded(
+                  child: _infoCol('KM Atual', km > 0 ? _kmFmt.format(km.toInt()) : '—'),
+                ),
+                Expanded(
+                  child: _infoCol('Motorista', motorista.length > 16 ? '${motorista.substring(0, 16)}…' : motorista),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Próxima revisão + Revisões
+            Row(
+              children: [
+                Expanded(
+                  child: _infoCol('Próx. Revisão', '${_kmFmt.format(proxRevisao.toInt())} km'),
+                ),
+                Expanded(
+                  child: _infoCol('Revisões', '$totalRev realizadas'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoCol(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: AppColors.textMutedDark)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimaryDark), overflow: TextOverflow.ellipsis),
+      ],
+    );
+  }
+}
+
+// --- Status Filter Chip (mantido do design anterior) ---
+
+class _StatusFilterChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color? color;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _StatusFilterChip({
+    required this.label,
+    required this.count,
+    this.color,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? AppColors.textSecondaryDark;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.atrOrange.withValues(alpha: 0.25)),
+          color: active ? (color ?? AppColors.atrOrange).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? (color ?? AppColors.atrOrange).withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.07),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(label, style: const TextStyle(fontSize: 12)),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: active ? (color ?? AppColors.atrOrange) : AppColors.textSecondaryDark)),
             const SizedBox(width: 6),
-            const Icon(LucideIcons.chevronDown, size: 12),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _mostrarSeletorMes() async {
-    final now = DateTime.now();
-    final meses = List.generate(
-      12,
-      (i) => DateTime(now.year, now.month - i, 1),
-    );
-
-    final mes = await showModalBottomSheet<DateTime?>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
             Container(
-              width: 40,
-              height: 4,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+                color: active ? c.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
               ),
+              child: Text('$count', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: active ? c : AppColors.textMutedDark)),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Filtrar por Mês',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(LucideIcons.calendar),
-              title: const Text('Todos os meses'),
-              onTap: () => Navigator.pop(ctx, null),
-            ),
-            const Divider(height: 1),
-            SizedBox(
-              height: 240,
-              child: ListView.builder(
-                itemCount: meses.length,
-                itemBuilder: (_, i) {
-                  final m = meses[i];
-                  final label = DateFormat('MMMM yyyy', 'pt_BR').format(m);
-                  return ListTile(
-                    leading: const Icon(LucideIcons.calendarDays),
-                    title: Text(label),
-                    onTap: () => Navigator.pop(ctx, m),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
           ],
         ),
       ),
     );
-
-    if (mounted) {
-      setState(() => _filtroMes = mes);
-    }
   }
 }

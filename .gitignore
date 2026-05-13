@@ -59,3 +59,11 @@ app.*.map.json
 # MCP server config (contém access tokens)
 .mcp.json
 .claude/settings.local.json
+
+# Ferramentas locais de desenvolvimento
+.serena/
+free-claude-code/
+.cursorrules
+*.txt
+!erros_encontrados.txt
+test/golden/failures/

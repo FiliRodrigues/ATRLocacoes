@@ -8,9 +8,30 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/atr_button.dart';
 import '../locacao_provider.dart';
 
+/// Itens padrao de inspecao do checklist com estado inicial N/A.
+const Map<String, String> kChecklistItemsPadrao = {
+  'Pneus': 'N/A',
+  'Farois': 'N/A',
+  'Vidros': 'N/A',
+  'Retrovisores': 'N/A',
+  'Lataria': 'N/A',
+  'Interior': 'N/A',
+  'Ar Condicionado': 'N/A',
+  'Freios': 'N/A',
+  'Estepe': 'N/A',
+  'Documentos': 'N/A',
+  'Limpeza': 'N/A',
+  'Tapetes': 'N/A',
+};
+
+const _estados = ['OK', 'Avaria', 'N/A'];
+
 class ChecklistFormSheet extends StatefulWidget {
   final String contratoId;
-  const ChecklistFormSheet({super.key, required this.contratoId});
+  final ChecklistEvento? evento;
+  const ChecklistFormSheet({super.key, required this.contratoId, this.evento});
+
+  bool get isEditing => evento != null;
 
   @override
   State<ChecklistFormSheet> createState() => _ChecklistFormSheetState();
@@ -20,11 +41,38 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
   final _formKey = GlobalKey<FormState>();
   bool _saving = false;
 
-  ChecklistTipo _tipo = ChecklistTipo.checkIn;
-  final _kmCtrl = TextEditingController();
-  final _kmPercorridosCtrl = TextEditingController();
-  final _obsCtrl = TextEditingController();
-  double _combustivelPct = 100;
+  late ChecklistTipo _tipo;
+  late final TextEditingController _kmCtrl;
+  late final TextEditingController _kmPercorridosCtrl;
+  late final TextEditingController _obsCtrl;
+  late double _combustivelPct;
+  late Map<String, String> _itens;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.evento;
+    _tipo = e?.tipo ?? ChecklistTipo.checkIn;
+    _kmCtrl = TextEditingController(text: (e?.kmOdometro ?? 0) > 0 ? '${e!.kmOdometro}' : '');
+    _kmPercorridosCtrl = TextEditingController(
+      text: e?.kmPercorridos != null ? '${e!.kmPercorridos}' : '',
+    );
+    _obsCtrl = TextEditingController(text: e?.observacoes ?? '');
+    _combustivelPct = (e?.combustivelPct ?? 100).toDouble();
+    _itens = _parseItens(e?.itens);
+  }
+
+  Map<String, String> _parseItens(Map<String, dynamic>? json) {
+    if (json == null || json.isEmpty) {
+      return Map<String, String>.from(kChecklistItemsPadrao);
+    }
+    final result = <String, String>{};
+    for (final entry in kChecklistItemsPadrao.entries) {
+      final valor = json[entry.key] as String?;
+      result[entry.key] = (valor != null && _estados.contains(valor)) ? valor : 'N/A';
+    }
+    return result;
+  }
 
   @override
   void dispose() {
@@ -41,7 +89,7 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
       final username =
           context.read<AuthService>().currentUser?.username ?? 'desconhecido';
       final evento = ChecklistEvento(
-        id: '',
+        id: widget.evento?.id ?? '',
         contratoId: widget.contratoId,
         tipo: _tipo,
         kmOdometro: int.tryParse(_kmCtrl.text) ?? 0,
@@ -50,15 +98,23 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
             : null,
         combustivelPct: _combustivelPct.toInt(),
         observacoes: _obsCtrl.text.trim(),
-        realizadoPor: username,
-        createdAt: DateTime.now(),
+        fotos: widget.evento?.fotos ?? const [],
+        docUrl: widget.evento?.docUrl,
+        assinaturaUrl: widget.evento?.assinaturaUrl,
+        realizadoPor: widget.evento?.realizadoPor ?? username,
+        createdAt: widget.evento?.createdAt ?? DateTime.now(),
+        itens: Map<String, String>.from(_itens),
       );
-      await context.read<LocacaoProvider>().registrarChecklist(evento);
+      if (widget.isEditing) {
+        await context.read<LocacaoProvider>().atualizarChecklist(evento);
+      } else {
+        await context.read<LocacaoProvider>().registrarChecklist(evento);
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao registrar: $e')),
+          SnackBar(content: Text('Erro ao ${widget.isEditing ? 'atualizar' : 'registrar'}: $e')),
         );
       }
     } finally {
@@ -96,8 +152,8 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
                   ),
                 ),
               ),
-              const Text('Registrar Evento',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              Text(widget.isEditing ? 'Editar Evento' : 'Registrar Evento',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 20),
 
               // Tipo
@@ -123,12 +179,12 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
-                  labelText: 'Hodômetro Atual (km)',
+                  labelText: 'Hodometro Atual (km)',
                   prefixIcon: Icon(Icons.speed, size: 18),
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Campo obrigatório' : null,
+                    (v == null || v.isEmpty) ? 'Campo obrigatorio' : null,
               ),
               const SizedBox(height: 12),
 
@@ -138,19 +194,19 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
-                    labelText: 'KM Percorridos no Período',
+                    labelText: 'KM Percorridos no Periodo',
                     prefixIcon: Icon(Icons.alt_route, size: 18),
                     border: OutlineInputBorder(),
                   ),
                 ),
               if (_tipo == ChecklistTipo.checkOut) const SizedBox(height: 12),
 
-              // Combustível
+              // Combustivel
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Nível de Combustível: ${_combustivelPct.toInt()}%',
+                    'Nivel de Combustivel: ${_combustivelPct.toInt()}%',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   Slider(
@@ -166,18 +222,71 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
               ),
               const SizedBox(height: 12),
 
+              // Itens de Inspecao
+              const Text('Itens de Inspecao',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              ..._itens.entries.map((entry) {
+                final item = entry.key;
+                final estado = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    color: isDark ? AppColors.surfaceElevatedDark : Colors.grey.shade50,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(item,
+                                style: const TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.w500)),
+                          ),
+                          ..._estados.map((e) => Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: ChoiceChip(
+                                  label: Text(e,
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: estado == e
+                                              ? _chipTextColor(e)
+                                              : AppColors.textSecondaryDark)),
+                                  selected: estado == e,
+                                  selectedColor: _chipColor(e),
+                                  backgroundColor: Colors.transparent,
+                                  side: BorderSide(
+                                      color: estado == e
+                                          ? _chipColor(e)
+                                          : Colors.grey.withValues(alpha: 0.2)),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  onSelected: (_) =>
+                                      setState(() => _itens[item] = e),
+                                ),
+                              )),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 12),
+
               TextFormField(
                 controller: _obsCtrl,
                 maxLines: 3,
                 decoration: const InputDecoration(
-                  labelText: 'Observações',
+                  labelText: 'Observacoes',
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 28),
 
               AtrPrimaryButton(
-                label: 'Registrar ${_tipo.label}',
+                label: widget.isEditing ? 'Atualizar ${_tipo.label}' : 'Registrar ${_tipo.label}',
                 loading: _saving,
                 onPressed: _salvar,
               ),
@@ -186,6 +295,28 @@ class _ChecklistFormSheetState extends State<ChecklistFormSheet> {
         ),
       ),
     );
+  }
+
+  Color _chipColor(String estado) {
+    switch (estado) {
+      case 'OK':
+        return AppColors.statusSuccess;
+      case 'Avaria':
+        return AppColors.statusError;
+      default:
+        return AppColors.textMutedDark;
+    }
+  }
+
+  Color _chipTextColor(String estado) {
+    switch (estado) {
+      case 'OK':
+        return Colors.white;
+      case 'Avaria':
+        return Colors.white;
+      default:
+        return AppColors.textSecondaryDark;
+    }
   }
 }
 

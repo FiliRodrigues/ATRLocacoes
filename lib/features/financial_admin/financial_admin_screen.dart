@@ -2,7 +2,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/widgets/app_sidebar.dart';
 import '../../core/widgets/bento_card.dart';
 import '../../core/theme/app_colors.dart';
@@ -11,6 +13,11 @@ import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/navigation/app_router.dart';
+import '../../core/services/relatorio_service.dart';
+
+import '../../core/utils/export_csv_stub.dart'
+    if (dart.library.html) '../../core/utils/export_csv_html.dart'
+    if (dart.library.io) '../../core/utils/export_csv_io.dart';
 
 // Records tipados usados internamente, eliminando casts via Map<String, dynamic>.
 typedef _MaintenanceEntry = ({
@@ -30,6 +37,26 @@ typedef _MaintenanceRow = ({
   double total,
   bool fin,
   Color cor,
+});
+
+typedef _RecebimentoEntry = ({
+  String id,
+  String veiculoPlaca,
+  String locatario,
+  int numeroParcela,
+  double valorPrevisto,
+  double? valorRecebido,
+  DateTime dataVencimento,
+  String status,
+});
+
+typedef _ParcelaFinEntry = ({
+  String id,
+  int numeroParcela,
+  double valorParcela,
+  DateTime? dataVencimento,
+  String status,
+  DateTime? dataPagamento,
 });
 
 class FinancialAdminScreen extends StatefulWidget {
@@ -101,7 +128,7 @@ class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
             child: widget.vehiclePlate == null
                 ? Column(
                     children: [
-                      _buildFilterRow(context),
+                      _buildFilterRow(context, viewList),
                       Expanded(
                         child: viewList.isEmpty
                             ? Center(
@@ -134,17 +161,17 @@ class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
     );
   }
 
-  Widget _buildFilterRow(BuildContext context) {
+  Widget _buildFilterRow(BuildContext context, List<VehicleData> viewList) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 20, 28, 0),
+      padding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             'Visão Administrativa',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
           ),
           SegmentedButton<String>(
@@ -160,12 +187,73 @@ class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
               });
             },
             style: ButtonStyle(
+              side: WidgetStatePropertyAll(
+                BorderSide(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : Colors.black.withValues(alpha: 0.10),
+                ),
+              ),
               backgroundColor: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.selected)) {
-                  return isDark ? Colors.white24 : Colors.black12;
+                  return isDark
+                      ? Colors.white.withValues(alpha: 0.16)
+                      : Colors.black.withValues(alpha: 0.08);
                 }
                 return Colors.transparent;
               }),
+            ),
+          ),
+          const SizedBox(width: 12),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'csv') {
+                _exportFinancialCsv(viewList);
+              } else if (value == 'pdf') {
+                _exportFinancialPdf(viewList);
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'csv',
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.fileSpreadsheet, size: 16),
+                    SizedBox(width: 8),
+                    Text('Exportar CSV'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'pdf',
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.fileText, size: 16),
+                    SizedBox(width: 8),
+                    Text('Exportar PDF'),
+                  ],
+                ),
+              ),
+            ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.borderLight),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(LucideIcons.download, size: 16, color: AppColors.textSecondaryLight),
+                  SizedBox(width: 8),
+                  Text(
+                    'Exportar',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondaryLight,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -177,6 +265,80 @@ class _FinancialAdminScreenState extends State<FinancialAdminScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _exportFinancialCsv(List<VehicleData> viewList) async {
+    final buffer = StringBuffer();
+    buffer.writeln(
+      '"VEICULO";"PLACA";"MOTORISTA";"KM";"REV.";"CUSTO MEDIO";"TOTAL MANUT.";"TIPO"',
+    );
+
+    for (final v in viewList) {
+      final rev = v.totalRevisoes;
+      final custoRev = v.manutencoes.isEmpty
+          ? 0.0
+          : v.manutencoes.map((m) => m.custo).reduce((a, b) => a + b) / v.manutencoes.length;
+      final tipo = v.isFinanciado ? 'FINANC.' : 'PROPRIO';
+      final custoRevStr = custoRev.toStringAsFixed(2).replaceAll('.', ',');
+      final totalStr = v.custoTotalManutencao.toStringAsFixed(2).replaceAll('.', ',');
+      buffer.writeln(
+        '${_csvField(v.nome)};${_csvField(v.placa)};${_csvField(v.motorista)};${_csvField(v.kmAtual.toStringAsFixed(0))};${_csvField(rev.toString())};${_csvField(custoRevStr)};${_csvField(totalStr)};${_csvField(tipo)}',
+      );
+    }
+
+    try {
+      final fileName =
+          'financeiro_export_${DateTime.now().millisecondsSinceEpoch}.csv';
+      await exportCsv(fileName, buffer.toString());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('CSV exportado: $fileName')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao exportar CSV: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportFinancialPdf(List<VehicleData> viewList) async {
+    final rows = viewList.map((v) {
+      final rev = v.totalRevisoes;
+      final custoRev = v.manutencoes.isEmpty
+          ? 0.0
+          : v.manutencoes.map((m) => m.custo).reduce((a, b) => a + b) / v.manutencoes.length;
+      final total = v.custoTotalManutencao;
+      return CustoPdfRow(
+        veiculoPlaca: v.placa,
+        veiculoNome: v.nome,
+        manutencao: total,
+        despesas: rev > 0 ? custoRev : 0,
+        combustivel: 0,
+        total: total,
+      );
+    }).toList();
+
+    try {
+      final bytes = await RelatorioService.gerarPdfCustos(rows);
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'custos_frota_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao exportar PDF: $e')),
+        );
+      }
+    }
+  }
+
+  String _csvField(String value) {
+    final escaped = value.replaceAll('"', '""');
+    return '"$escaped"';
   }
 }
 
@@ -361,7 +523,7 @@ class _FinancialListView extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(28),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
@@ -378,15 +540,15 @@ class _FinancialListView extends StatelessWidget {
                           'Resumo da Seleção',
                           style: Theme.of(context)
                               .textTheme
-                              .displayLarge
-                              ?.copyWith(fontSize: 20),
+                              .titleLarge
+                              ?.copyWith(fontSize: 18, fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               // KPIs  todos clicáveis/flutuantes
               Wrap(
@@ -459,7 +621,7 @@ class _FinancialListView extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
               Text(
                 'Veículos Financiados por Empresa',
@@ -469,6 +631,8 @@ class _FinancialListView extends StatelessWidget {
               ..._buildCompanySections(context, financiados, width, isDark),
               const SizedBox(height: 32),
               _maintenanceTable(context, isDark),
+              const SizedBox(height: 32),
+              _RecebimentosSection(isDark: isDark),
             ],
           );
         },
@@ -532,7 +696,7 @@ class _FinancialListView extends StatelessWidget {
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: color, width: 3)),
+            border: Border(left: BorderSide(color: color, width: 2)),
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.all(16),
@@ -556,12 +720,7 @@ class _FinancialListView extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          color.withValues(alpha: 0.2),
-                          color.withValues(alpha: 0.08),
-                        ],
-                      ),
+                      color: color.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(icon, color: color, size: 13),
@@ -574,10 +733,10 @@ class _FinancialListView extends StatelessWidget {
                 child: Text(
                   value,
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 17,
                     fontWeight: FontWeight.w800,
                     color: color,
-                    letterSpacing: -0.3,
+                    letterSpacing: -0.2,
                   ),
                 ),
               ),
@@ -589,7 +748,7 @@ class _FinancialListView extends StatelessWidget {
                       sub,
                       style: TextStyle(
                         fontSize: 10,
-                        color: isDark ? Colors.white38 : AppColors.textSecondaryLight,
+                        color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -760,11 +919,11 @@ class _FinancialListView extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           border: Border(
-            left: BorderSide(color: statusColor, width: 3),
+            left: BorderSide(color: statusColor, width: 2),
           ),
           borderRadius: BorderRadius.circular(12),
         ),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -787,7 +946,7 @@ class _FinancialListView extends StatelessWidget {
                       Text(
                         v.placa,
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13),
+                            fontWeight: FontWeight.w700, fontSize: 12),
                       ),
                       Text(
                         v.nome,
@@ -807,7 +966,7 @@ class _FinancialListView extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.15),
+                    color: statusColor.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -820,13 +979,13 @@ class _FinancialListView extends StatelessWidget {
                                 : 'Prejuízo',
                     style: TextStyle(
                         fontSize: 9,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         color: statusColor),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             // Progresso de Recebimentos (Locação)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -834,13 +993,13 @@ class _FinancialListView extends StatelessWidget {
                 Text('Locação',
                     style: TextStyle(
                         fontSize: 10,
-                        color: isDark ? AppColors.textPrimaryDark : Colors.black87)),
+                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight)),
                 Text(
                   '${(progressoLoc * 100).toStringAsFixed(0)}%'
                   '  (${f.mesesLocacaoPagos}/${f.mesesLocacaoTotais}) - $mesAnoAtual',
                   style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.statusSuccess),
                 ),
               ],
@@ -866,13 +1025,13 @@ class _FinancialListView extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 9,
                       color: AppColors.statusWarning,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ],
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
 
             // Progresso de Pagamentos (Financiamento)
             Row(
@@ -881,16 +1040,31 @@ class _FinancialListView extends StatelessWidget {
                 Text('Financiamento',
                     style: TextStyle(
                         fontSize: 10,
-                        color: isDark ? AppColors.textPrimaryDark : Colors.black87)),
-                Text(
-                  isQuitado 
-                      ? 'Quitado (100%)'
-                      : '${(progresso * 100).toStringAsFixed(0)}%'
-                        '  (${f.parcelasPagas}/${f.totalParcelas})',
-                  style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: isQuitado ? AppColors.statusSuccess : AppColors.statusError),
+                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight)),
+                InkWell(
+                  onTap: () => _showParcelasBottomSheet(ctx, f.id),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isQuitado
+                              ? 'Quitado (100%)'
+                              : '${(progresso * 100).toStringAsFixed(0)}%'
+                                '  (${f.parcelasPagas}/${f.totalParcelas})',
+                          style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: isQuitado ? AppColors.statusSuccess : AppColors.statusError),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(LucideIcons.externalLink, size: 10,
+                          color: isQuitado ? AppColors.statusSuccess : AppColors.statusError),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -905,7 +1079,7 @@ class _FinancialListView extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation(isQuitado ? AppColors.statusSuccess : AppColors.statusError),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             _rowInfo('Parcela', formatCurrency(f.valorParcela),
                 AppColors.statusError),
             const SizedBox(height: 4),
@@ -942,11 +1116,11 @@ class _FinancialListView extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           border: Border(
-            left: BorderSide(color: AppColors.statusInfo, width: 3),
+            left: BorderSide(color: AppColors.statusInfo, width: 2),
           ),
           borderRadius: BorderRadius.circular(12),
         ),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -969,7 +1143,7 @@ class _FinancialListView extends StatelessWidget {
                       Text(
                         v.placa,
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13),
+                            fontWeight: FontWeight.w700, fontSize: 12),
                       ),
                       Text(
                         v.nome,
@@ -987,20 +1161,20 @@ class _FinancialListView extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppColors.statusInfo.withValues(alpha: 0.15),
+                    color: AppColors.statusInfo.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: const Text(
                     'Frota',
                     style: TextStyle(
                         fontSize: 9,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.statusInfo),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1049,8 +1223,8 @@ class _FinancialListView extends StatelessWidget {
           Text(
             v,
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
               color: c,
             ),
           ),
@@ -1330,10 +1504,10 @@ class _FinancialListView extends StatelessWidget {
   }
 
   TextStyle _hs() => const TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w800,
+      fontSize: 9.5,
+      fontWeight: FontWeight.w700,
         color: AppColors.textSecondaryLight,
-        letterSpacing: 0.5,
+      letterSpacing: 0.4,
       );
 }
 
@@ -1368,6 +1542,84 @@ class _DetailView extends StatefulWidget {
 class _DetailViewState extends State<_DetailView> {
   bool _maintenanceExpanded = false;
 
+  void _editarFinanciamento(BuildContext ctx, VehicleData v) {
+    final financiamento = v.financiamento;
+    if (financiamento == null) return;
+
+    final fCtrl = TextEditingController(
+      text: financiamento.valorParcela.toStringAsFixed(2),
+    );
+    final tCtrl = TextEditingController(text: financiamento.totalParcelas.toString());
+    final vtCtrl = TextEditingController(text: financiamento.valorTotal.toStringAsFixed(2));
+    final bCtrl = TextEditingController(text: '');
+
+    showDialog<void>(
+      context: ctx,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Editar Financiamento'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: fCtrl,
+              decoration: const InputDecoration(labelText: 'Parcela Mensal (R\$)'),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            TextFormField(
+              controller: tCtrl,
+              decoration: const InputDecoration(labelText: 'Total de Parcelas'),
+              keyboardType: TextInputType.number,
+            ),
+            TextFormField(
+              controller: vtCtrl,
+              decoration: const InputDecoration(labelText: 'Valor Total (R\$)'),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            TextFormField(
+              controller: bCtrl,
+              decoration: const InputDecoration(labelText: 'Banco/Financiadora'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final veiculo = await Supabase.instance.client
+                  .from('veiculos')
+                  .select('id')
+                  .eq('placa', v.placa)
+                  .maybeSingle();
+              final veiculoId = veiculo?['id'];
+              if (veiculoId == null) {
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                return;
+              }
+              await Supabase.instance.client
+                  .from('financiamentos')
+                  .update({
+                    'valor_parcela': double.tryParse(fCtrl.text.replaceAll(',', '.')) ??
+                        financiamento.valorParcela,
+                    'total_parcelas': int.tryParse(tCtrl.text) ?? financiamento.totalParcelas,
+                    'valor_total': double.tryParse(vtCtrl.text.replaceAll(',', '.')) ??
+                        financiamento.valorTotal,
+                    'banco': bCtrl.text.isNotEmpty ? bCtrl.text : null,
+                  })
+                  .eq('veiculo_id', veiculoId);
+              if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+              await FleetRepository.instance.loadFromSupabase();
+              if (mounted) setState(() {});
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final v = widget.veiculo;
@@ -1401,7 +1653,7 @@ class _DetailViewState extends State<_DetailView> {
         children: [
           _header(context, v, f),
           const SizedBox(height: 32),
-          _kpis(context, v, f, lucro),
+          _kpis(context, v),
           const SizedBox(height: 32),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1519,6 +1771,12 @@ class _DetailViewState extends State<_DetailView> {
           onPressed: () => ctx.go('/vehicles/${v.placa}'),
         ),
         const SizedBox(width: 12),
+        IconButton(
+          tooltip: 'Editar financiamento',
+          onPressed: () => _editarFinanciamento(ctx, v),
+          icon: const Icon(LucideIcons.pencil, size: 18),
+        ),
+        const SizedBox(width: 4),
         StatusBadge(
           text:
               '${(f.progressoFinanciamento * 100).toStringAsFixed(0)}% QUITADO',
@@ -1643,55 +1901,53 @@ class _DetailViewState extends State<_DetailView> {
     );
   }
 
-  Widget _kpis(BuildContext ctx, VehicleData v, FinancingData f, double lucro) {
+  Widget _kpis(BuildContext ctx, VehicleData v) {
+    final f = v.financiamento!;
+    final lucro = f.totalRecebido - v.custoTotalManutencao;
+    final lucroColor = lucro >= 0 ? AppColors.statusSuccess : AppColors.statusError;
+
     return Row(
       children: [
         _kd(
           ctx,
-          'Parcelas Pagas',
-          '${f.parcelasPagas}',
-          '/ ${f.totalParcelas}',
-          formatCurrency(f.totalPago),
+          'Parcelas',
+          '${f.parcelasPagas}/${f.totalParcelas}',
+          '${formatCurrency(f.totalPago)} pagos',
           LucideIcons.checkCircle,
           AppColors.statusSuccess,
-          0,
+          100,
+          sub2: '${f.parcelasRestantes} restantes · ${formatCurrency(f.totalRestante)}',
+          onTap: f.id != null ? () => _showParcelasBottomSheet(ctx, f.id!) : null,
         ),
-        const SizedBox(width: 20),
-        _kd(
-          ctx,
-          'Parcelas Restantes',
-          '${f.parcelasRestantes}',
-          ' parcelas',
-          formatCurrency(f.totalRestante),
-          LucideIcons.clock,
-          AppColors.statusWarning,
-          80,
-        ),
-        const SizedBox(width: 20),
+        const SizedBox(width: 12),
         _kd(
           ctx,
           'Total Recebido',
-          '',
-          '',
           formatCurrency(f.totalRecebido),
-          LucideIcons.wallet,
+          '${formatCurrency(f.recebimentoMensal)}/mês',
+          LucideIcons.trendingUp,
           AppColors.statusInfo,
-          160,
-          main: formatCurrency(f.totalRecebido),
-          sub2: '${formatCurrency(f.recebimentoMensal)}/mês',
+          200,
         ),
-        const SizedBox(width: 20),
+        const SizedBox(width: 12),
+        _kd(
+          ctx,
+          'Custo Manutenção',
+          formatCurrency(v.custoTotalManutencao),
+          '${v.totalRevisoes} revisões realizadas',
+          LucideIcons.wrench,
+          AppColors.statusError,
+          300,
+        ),
+        const SizedBox(width: 12),
         _kd(
           ctx,
           'Lucro Líquido',
-          '',
-          '',
-          '',
-          LucideIcons.trendingUp,
-          lucro >= 0 ? AppColors.statusSuccess : AppColors.statusError,
-          240,
-          main: formatCurrency(lucro),
-          sub2: 'inclui manutenção',
+          formatCurrency(lucro),
+          lucro >= 0 ? 'Resultado positivo' : 'Resultado negativo',
+          lucro >= 0 ? LucideIcons.trendingUp : LucideIcons.trendingDown,
+          lucroColor,
+          400,
         ),
       ],
     );
@@ -1700,76 +1956,84 @@ class _DetailViewState extends State<_DetailView> {
   Widget _kd(
     BuildContext ctx,
     String title,
-    String big,
-    String small,
-    String sub,
+    String mainValue,
+    String sub1,
     IconData icon,
     Color color,
     int delay, {
-    String? main,
     String? sub2,
+    VoidCallback? onTap,
   }) {
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
     return Expanded(
       child: BentoCard(
         animationDelay: delay,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text(title, style: Theme.of(ctx).textTheme.bodyMedium),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: color, width: 2)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
                   ),
-                  child: Icon(icon, color: color, size: 18),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (main != null)
-              Text(
-                main,
-                style: Theme.of(ctx)
-                    .textTheme
-                    .displayLarge
-                    ?.copyWith(fontSize: 24, color: color),
-              )
-            else
-              RichText(
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: big,
-                      style: Theme.of(ctx)
-                          .textTheme
-                          .displayLarge
-                          ?.copyWith(fontSize: 28, color: color),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    TextSpan(
-                      text: small,
-                      style: Theme.of(ctx).textTheme.displayLarge?.copyWith(
-                            fontSize: 14,
-                            color: AppColors.textSecondaryLight,
-                          ),
-                    ),
-                  ],
+                    child: Icon(icon, color: color, size: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  mainValue,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
                 ),
               ),
-            const SizedBox(height: 4),
-            Text(
-              sub2 ?? sub,
-              style: Theme.of(ctx)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                sub1,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? Colors.white54 : Colors.black45,
+                ),
+              ),
+              if (sub2 != null)
+                Text(
+                  sub2,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDark ? Colors.white54 : Colors.black45,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1967,35 +2231,64 @@ class _DetailViewState extends State<_DetailView> {
           ),
           const SizedBox(height: 16),
           // Stats
-          Row(
-            children: [
-              _ms(
-                ctx,
-                LucideIcons.gauge,
-                'KM Rodados',
-                formatKm(v.kmAtual),
-                AppColors.statusInfo,
-                isDark,
-              ),
-              const SizedBox(width: 16),
-              _ms(
-                ctx,
-                LucideIcons.wrench,
-                'Revisões',
-                '${v.totalRevisoes} realizadas',
-                AppColors.atrOrange,
-                isDark,
-              ),
-              const SizedBox(width: 16),
-              _ms(
-                ctx,
-                LucideIcons.calendarClock,
-                'Próxima em',
-                formatKm(10000 - (v.kmAtual % 10000)),
-                AppColors.statusSuccess,
-                isDark,
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              double itemWidth = (width - 48) / 4;
+              if (width < 1100) itemWidth = (width - 16) / 2;
+              if (width < 620) itemWidth = width;
+
+              return Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: [
+                  SizedBox(
+                    width: itemWidth,
+                    child: _ms(
+                      ctx,
+                      LucideIcons.gauge,
+                      'KM Rodados',
+                      formatKm(v.kmAtual),
+                      AppColors.statusInfo,
+                      isDark,
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _ms(
+                      ctx,
+                      LucideIcons.wrench,
+                      'Revisões',
+                      '${v.totalRevisoes} realizadas',
+                      AppColors.atrOrange,
+                      isDark,
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _ms(
+                      ctx,
+                      LucideIcons.calendarClock,
+                      'Próxima em',
+                      formatKm(10000 - (v.kmAtual % 10000)),
+                      AppColors.statusSuccess,
+                      isDark,
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _ms(
+                      ctx,
+                      LucideIcons.receipt,
+                      'Valor Pago',
+                      formatCurrency(v.custoTotalManutencao),
+                      AppColors.statusError,
+                      isDark,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           // Expandable history
           AnimatedCrossFade(
@@ -2082,45 +2375,42 @@ class _DetailViewState extends State<_DetailView> {
     Color color,
     bool isDark,
   ) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark
-              ? AppColors.surfaceElevatedDark
-              : AppColors.backgroundLight,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, size: 16, color: color),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppColors.surfaceElevatedDark
+            : AppColors.backgroundLight,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                style:
-                    Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 12),
-              ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontSize: 12),
             ),
-            Flexible(
-              child: Text(
-                value,
-                style: Theme.of(ctx)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
-                overflow: TextOverflow.ellipsis,
-              ),
+          ),
+          Flexible(
+            child: Text(
+              value,
+              style: Theme.of(ctx)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -2147,20 +2437,20 @@ class _DetailViewState extends State<_DetailView> {
                 ),
                 child: Center(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        '${(f.progressoFinanciamento * 100).toStringAsFixed(1)}%',
-                        style: Theme.of(ctx).textTheme.displayLarge?.copyWith(
-                              fontSize: 32,
-                              color: f.progressoFinanciamento > 0.7
-                                  ? AppColors.statusSuccess
-                                  : AppColors.atrOrange,
+                        '${(f.progressoFinanciamento * 100).toStringAsFixed(0)}%',
+                        style: Theme.of(ctx).textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
                             ),
                       ),
+                      const SizedBox(height: 4),
                       Text(
-                        'quitado',
-                        style: Theme.of(ctx).textTheme.bodyMedium,
+                        '${f.parcelasPagas}/${f.totalParcelas}',
+                        style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                              color: AppColors.textSecondaryLight,
+                            ),
                       ),
                     ],
                   ),
@@ -2168,39 +2458,19 @@ class _DetailViewState extends State<_DetailView> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? AppColors.surfaceElevatedDark
-                  : AppColors.backgroundLight,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                _mini(
-                  ctx,
-                  'Restam',
-                  '${f.parcelasRestantes} meses',
-                  LucideIcons.hourglass,
-                ),
-                const SizedBox(height: 10),
-                _mini(
-                  ctx,
-                  'Quitação',
-                  f.previsaoQuitacao,
-                  LucideIcons.calendarCheck,
-                ),
-                const SizedBox(height: 10),
-                _mini(
-                  ctx,
-                  'Falta',
-                  formatCurrency(f.totalRestante),
-                  LucideIcons.alertCircle,
-                ),
-              ],
-            ),
+          const SizedBox(height: 20),
+          _mini(
+            ctx,
+            'Quitação',
+            f.previsaoQuitacao,
+            LucideIcons.calendarCheck,
+          ),
+          const SizedBox(height: 10),
+          _mini(
+            ctx,
+            'Falta',
+            formatCurrency(f.totalRestante),
+            LucideIcons.alertCircle,
           ),
         ],
       ),
@@ -2695,6 +2965,732 @@ class _FI {
   final String l, v;
   final Color c;
   _FI(this.l, this.v, this.c);
+}
+
+class _RecebimentosSection extends StatefulWidget {
+  final bool isDark;
+  const _RecebimentosSection({required this.isDark});
+
+  @override
+  State<_RecebimentosSection> createState() => _RecebimentosSectionState();
+}
+
+class _RecebimentosSectionState extends State<_RecebimentosSection> {
+  List<_RecebimentoEntry> _entries = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      final tenantId = (user?.appMetadata ?? {})['tenant_id'] as String?;
+      var query = Supabase.instance.client
+          .from('recebimentos')
+          .select('*, veiculos(placa, modelo)');
+      if (tenantId != null) {
+        query = query.eq('tenant_id', tenantId);
+      }
+      final data = await query.order('data_vencimento');
+      if (!mounted) return;
+      setState(() {
+        _entries = data.map< _RecebimentoEntry>((r) {
+          final veiculo = r['veiculos'] as Map<String, dynamic>?;
+          return (
+            id: r['id'] as String,
+            veiculoPlaca: veiculo?['placa'] as String? ?? '--',
+            locatario: r['locatario'] as String? ?? '--',
+            numeroParcela: (r['numero_parcela'] as int?) ?? 0,
+            valorPrevisto: ((r['valor_previsto'] ?? 0) as num).toDouble(),
+            valorRecebido: (r['valor_recebido'] as num?)?.toDouble(),
+            dataVencimento: DateTime.parse(r['data_vencimento'] as String),
+            status: r['status_pagamento'] as String? ?? 'Pendente',
+          );
+        }).toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _toggleStatus(_RecebimentoEntry entry) async {
+    final isPago = entry.status == 'Pago';
+
+    if (!isPago) {
+      final valor = await showDialog<double>(
+        context: context,
+        builder: (ctx) => _RecebimentoPaymentDialog(entry: entry),
+      );
+      if (valor == null) return;
+      await Supabase.instance.client
+          .from('recebimentos')
+          .update({
+            'status_pagamento': 'Pago',
+            'data_recebimento': DateTime.now().toIso8601String().substring(0, 10),
+            'valor_recebido': valor,
+          })
+          .eq('id', entry.id);
+    } else {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Desfazer pagamento?'),
+          content: Text(
+            '${entry.locatario} - Parcela ${entry.numeroParcela} - ${formatCurrency(entry.valorPrevisto)}\n\nIsso voltará o status para Pendente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.statusWarning),
+              child: const Text('Desfazer'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      await Supabase.instance.client
+          .from('recebimentos')
+          .update({
+            'status_pagamento': 'Pendente',
+            'data_recebimento': null,
+            'valor_recebido': null,
+          })
+          .eq('id', entry.id);
+    }
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BentoCard(
+      animationDelay: 600,
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            child: Text(
+              'Recebimentos',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_entries.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: Text('Nenhum recebimento registrado.',
+                    style: TextStyle(color: AppColors.textSecondaryLight)),
+              ),
+            )
+          else ...[
+            _buildHeader(context),
+            ..._entries.map(_buildRow),
+            _buildFooter(context),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext ctx) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      color: widget.isDark
+          ? AppColors.surfaceElevatedDark
+          : AppColors.backgroundLight,
+      child: Row(
+        children: [
+          Expanded(flex: 2, child: Text('VEÍCULO', style: _hs())),
+          Expanded(flex: 2, child: Text('LOCATÁRIO', style: _hs())),
+          Expanded(child: Text('#', style: _hs(), textAlign: TextAlign.center)),
+          Expanded(flex: 2, child: Text('VALOR', style: _hs(), textAlign: TextAlign.right)),
+          Expanded(flex: 2, child: Text('RECEBIDO', style: _hs(), textAlign: TextAlign.right)),
+          Expanded(flex: 2, child: Text('VENCIMENTO', style: _hs(), textAlign: TextAlign.right)),
+          Expanded(child: Text('STATUS', style: _hs(), textAlign: TextAlign.center)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRow(_RecebimentoEntry r) {
+    final isPago = r.status == 'Pago';
+    return InkWell(
+      onTap: () => _toggleStatus(r),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: widget.isDark ? AppColors.borderDark : AppColors.borderLight,
+              width: 0.5,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(r.veiculoPlaca,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(r.locatario,
+                  style: const TextStyle(fontSize: 12),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            Expanded(
+              child: Text('${r.numeroParcela}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(formatCurrency(r.valorPrevisto),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 12)),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                r.valorRecebido != null ? formatCurrency(r.valorRecebido!) : '--',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isPago ? AppColors.statusSuccess : AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(formatDate(r.dataVencimento),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
+            ),
+            Expanded(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: (isPago ? AppColors.statusSuccess : AppColors.statusWarning)
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    r.status,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: isPago ? AppColors.statusSuccess : AppColors.statusWarning,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFooter(BuildContext ctx) {
+    double totalPrevisto = 0;
+    double totalRecebido = 0;
+    for (final e in _entries) {
+      totalPrevisto += e.valorPrevisto;
+      if (e.valorRecebido != null) totalRecebido += e.valorRecebido!;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      color: widget.isDark ? AppColors.surfaceElevatedDark : AppColors.backgroundLight,
+      child: Row(
+        children: [
+          const Expanded(flex: 2, child: SizedBox()),
+          const Expanded(flex: 2, child: SizedBox()),
+          const Expanded(child: SizedBox()),
+          Expanded(
+            flex: 2,
+            child: Text(formatCurrency(totalPrevisto),
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(formatCurrency(totalRecebido),
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.statusSuccess)),
+          ),
+          const Expanded(flex: 2, child: SizedBox()),
+          const Expanded(
+            child: Text('TOTAL',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800,
+                    color: AppColors.textSecondaryLight)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TextStyle _hs() => const TextStyle(
+      fontSize: 9.5, fontWeight: FontWeight.w700,
+      color: AppColors.textSecondaryLight, letterSpacing: 0.4);
+}
+
+class _RecebimentoPaymentDialog extends StatefulWidget {
+  final _RecebimentoEntry entry;
+  const _RecebimentoPaymentDialog({required this.entry});
+
+  @override
+  State<_RecebimentoPaymentDialog> createState() =>
+      _RecebimentoPaymentDialogState();
+}
+
+class _RecebimentoPaymentDialogState extends State<_RecebimentoPaymentDialog> {
+  late TextEditingController _valorCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _valorCtrl = TextEditingController(
+        text: widget.entry.valorPrevisto.toStringAsFixed(2));
+  }
+
+  @override
+  void dispose() {
+    _valorCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext ctx) {
+    return AlertDialog(
+      title: const Text('Confirmar recebimento'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${widget.entry.locatario} - Parcela ${widget.entry.numeroParcela}',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _valorCtrl,
+            decoration: const InputDecoration(labelText: 'Valor Recebido (R\$)'),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final valor = double.tryParse(
+                _valorCtrl.text.replaceAll(',', '.'));
+            Navigator.pop(ctx, valor ?? widget.entry.valorPrevisto);
+          },
+          child: const Text('Confirmar'),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// PARCELAS BOTTOM SHEET
+// ═══════════════════════════════════════════════════════
+
+void _showParcelasBottomSheet(BuildContext ctx, String? financiamentoId) {
+  if (financiamentoId == null || financiamentoId.isEmpty) return;
+  final appMeta = Supabase.instance.client.auth.currentUser?.appMetadata;
+  final tenantId = appMeta?['tenant_id'] as String?;
+  if (tenantId == null) return;
+
+  showModalBottomSheet<void>(
+    context: ctx,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetCtx) => _ParcelasBottomSheet(
+      financiamentoId: financiamentoId,
+      tenantId: tenantId,
+    ),
+  );
+}
+
+class _ParcelasBottomSheet extends StatefulWidget {
+  final String financiamentoId;
+  final String tenantId;
+  const _ParcelasBottomSheet({
+    required this.financiamentoId,
+    required this.tenantId,
+  });
+
+  @override
+  State<_ParcelasBottomSheet> createState() => _ParcelasBottomSheetState();
+}
+
+class _ParcelasBottomSheetState extends State<_ParcelasBottomSheet> {
+  List<_ParcelaFinEntry> _parcelas = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('parcelas_financiamento')
+          .select('*')
+          .eq('financiamento_id', widget.financiamentoId)
+          .eq('tenant_id', widget.tenantId)
+          .order('numero_parcela');
+      if (!mounted) return;
+
+      setState(() {
+        _parcelas = (data as List<dynamic>).map<_ParcelaFinEntry>((r) {
+          final map = r as Map<String, dynamic>;
+          DateTime? dataVenc;
+          if (map['data_vencimento'] != null) {
+            dataVenc = DateTime.tryParse(map['data_vencimento'].toString());
+          }
+          DateTime? dataPag;
+          if (map['data_pagamento'] != null) {
+            dataPag = DateTime.tryParse(map['data_pagamento'].toString());
+          }
+          return (
+            id: map['id'] as String,
+            numeroParcela: (map['numero_parcela'] as int?) ?? 0,
+            valorParcela:
+                ((map['valor_parcela'] ?? 0) as num).toDouble(),
+            dataVencimento: dataVenc,
+            status: map['status_pagamento'] as String? ?? 'Pendente',
+            dataPagamento: dataPag,
+          );
+        }).toList();
+        _loading = false;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  Future<void> _toggleStatus(_ParcelaFinEntry parcela) async {
+    final isPago = parcela.status == 'Pago';
+
+    if (!isPago) {
+      final valorCtrl = TextEditingController(
+          text: parcela.valorParcela.toStringAsFixed(2));
+      final valor = await showDialog<double>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Confirmar pagamento'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Parcela ${parcela.numeroParcela}',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: valorCtrl,
+                decoration: const InputDecoration(labelText: 'Valor Pago (R\$)'),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final v = double.tryParse(valorCtrl.text.replaceAll(',', '.'));
+                Navigator.pop(ctx, v ?? parcela.valorParcela);
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        ),
+      );
+      if (valor == null) return;
+
+      await Supabase.instance.client
+          .from('parcelas_financiamento')
+          .update({
+            'status_pagamento': 'Pago',
+            'data_pagamento':
+                DateTime.now().toIso8601String().substring(0, 10),
+            'valor_parcela': valor,
+          })
+          .eq('id', parcela.id);
+    } else {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Desfazer pagamento?'),
+          content: Text(
+            'Parcela ${parcela.numeroParcela} - '
+            '${formatCurrency(parcela.valorParcela)}\n'
+            'Pago em: ${parcela.dataPagamento != null ? formatDate(parcela.dataPagamento!) : '--'}\n\n'
+            'Isso voltará o status para Pendente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.statusWarning,
+              ),
+              child: const Text('Desfazer'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+
+      await Supabase.instance.client
+          .from('parcelas_financiamento')
+          .update({
+            'status_pagamento': 'Pendente',
+            'data_pagamento': null,
+          })
+          .eq('id', parcela.id);
+    }
+
+    await _load();
+    // Atualiza a frota principal para refletir os novos totais
+    await FleetRepository.instance.loadFromSupabase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white24
+                  : Colors.black12,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Parcelas do Financiamento',
+                  style:
+                      Theme.of(context).textTheme.titleLarge,
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(LucideIcons.x, size: 18),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // Content
+          Flexible(
+            child: _loading
+                ? const Padding(
+                    padding: EdgeInsets.all(32),
+                    child:
+                        Center(child: CircularProgressIndicator()),
+                  )
+                : _error != null
+                    ? Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Center(
+                          child: Text(
+                            'Erro ao carregar parcelas.',
+                            style: TextStyle(
+                              color: AppColors.statusError,
+                            ),
+                          ),
+                        ),
+                      )
+                    : _parcelas.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(
+                              child: Text(
+                                'Nenhuma parcela encontrada.',
+                                style: TextStyle(
+                                  color:
+                                      AppColors.textSecondaryLight,
+                                ),
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _parcelas.length,
+                            itemBuilder: (ctx, i) =>
+                                _buildParcelaRow(ctx, _parcelas[i], isDark),
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildParcelaRow(
+    BuildContext ctx,
+    _ParcelaFinEntry p,
+    bool isDark,
+  ) {
+    final isPago = p.status == 'Pago';
+
+    return InkWell(
+      onTap: () => _toggleStatus(p),
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isDark
+                  ? AppColors.borderDark
+                  : AppColors.borderLight,
+              width: 0.5,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            // Número
+            SizedBox(
+              width: 40,
+              child: Text(
+                '#${p.numeroParcela}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            // Valor
+            Expanded(
+              flex: 2,
+              child: Text(
+                formatCurrency(p.valorParcela),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isPago
+                      ? AppColors.statusSuccess
+                      : AppColors.textPrimaryDark,
+                ),
+              ),
+            ),
+            // Vencimento
+            Expanded(
+              flex: 2,
+              child: Text(
+                p.dataVencimento != null
+                    ? formatDate(p.dataVencimento!)
+                    : '--',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+            // Data pagamento (se pago)
+            Expanded(
+              flex: 2,
+              child: Text(
+                p.dataPagamento != null
+                    ? 'Pago: ${formatDate(p.dataPagamento!)}'
+                    : '',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+            // Status badge
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: (isPago
+                        ? AppColors.statusSuccess
+                        : AppColors.statusWarning)
+                    .withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                p.status,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: isPago
+                      ? AppColors.statusSuccess
+                      : AppColors.statusWarning,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _RingPainter extends CustomPainter {

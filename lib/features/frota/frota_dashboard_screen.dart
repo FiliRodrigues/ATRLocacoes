@@ -3,14 +3,16 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_logger.dart';
+import '../../core/constants.dart';
 import '../../core/widgets/atr_page_background.dart';
 import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
 import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/bento_card.dart';
 import '../../core/data/fleet_data.dart';
-import '../../core/data/custos_models.dart';
 import '../../core/services/audit_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../custos/expenses/expense_form_modal.dart';
@@ -23,10 +25,6 @@ import '../custos/custos_provider.dart';
 //   1. Atualizar KM semanal (pendências com contagem de dias)
 //   2. Lançar despesas / manutenções
 //   3. Lançar multas associando veículo + motorista
-//
-// Trade-off: estado de KM atualizado é mantido em memória (Map local).
-// Em produção, isso viria de um backend/SharedPreferences persistido.
-// ═══════════════════════════════════════════════════════════════════
 
 class FrotaDashboardScreen extends StatefulWidget {
   const FrotaDashboardScreen({super.key});
@@ -44,10 +42,19 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
   String? _filtroTipoDespesa;
   DateTime? _filtroMesDespesa;
 
+  // ── Estado — aba Multas ──
+  List<Map<String, dynamic>> _multasRecords = [];
+  bool _loadingMultas = false;
+  List<Map<String, dynamic>> _veiculosOptions = [];
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMultas();
+      _loadVeiculosOptions();
+    });
   }
 
   @override
@@ -745,39 +752,15 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
   }
 
   // ─────────────────────────────────────────────────────────
-  // ABA 3 — MULTAS
+  // ABA 3 — MULTAS (tabela dedicada `multas`, não mais `despesas`)
   // ─────────────────────────────────────────────────────────
   Widget _buildMultasTab(bool isDark) {
-    final provider = context.watch<CustosProvider>();
-    final multas = provider.despesas.where((d) => d.tipo == 'Multa').toList();
-
-    return _buildListLayout(
-      isDark: isDark,
-      icon: LucideIcons.fileWarning,
-      title: 'Gestão de Multas',
-      subtitle: 'Registre as infrações associando ao veículo e motorista.',
-      items: multas,
-      onLancar: () => _lancarNovaDespesa(tipo: 'Multa'),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // LAYOUT REUTILIZÁVEL PARA ABAS 2 E 3
-  // ─────────────────────────────────────────────────────────
-  Widget _buildListLayout({
-    required bool isDark,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required List<DespesaItem> items,
-    required VoidCallback onLancar,
-  }) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header da aba
+          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -789,21 +772,18 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                       color: AppColors.atrOrange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(icon, color: AppColors.atrOrange, size: 20),
+                    child: const Icon(LucideIcons.fileWarning, color: AppColors.atrOrange, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                        'Gestão de Multas',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       Text(
-                        subtitle,
+                        'Registre as infrações de trânsito associando ao veículo.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: isDark ? AppColors.textSecondaryDark : Colors.black54,
                         ),
@@ -813,94 +793,166 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
                 ],
               ),
               AtrPrimaryButton(
-                label: 'Novo Lançamento',
+                label: 'Lançar Multa',
                 icon: LucideIcons.plus,
-                onPressed: onLancar,
+                onPressed: _showAddMultaDialog,
               ),
             ],
           ),
           const SizedBox(height: 24),
           // Lista
           Expanded(
-            child: BentoCard(
-              padding: EdgeInsets.zero,
-              child: items.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            LucideIcons.inbox,
-                            size: 48,
-                            color: isDark ? Colors.white24 : Colors.black26,
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Nenhum registro encontrado.',
-                            style: TextStyle(
-                              color: AppColors.textSecondaryLight,
+            child: _loadingMultas
+                ? const Center(child: CircularProgressIndicator())
+                : BentoCard(
+                    padding: EdgeInsets.zero,
+                    child: _multasRecords.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  LucideIcons.inbox,
+                                  size: 48,
+                                  color: isDark ? Colors.white24 : Colors.black26,
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Nenhuma multa registrada.',
+                                  style: TextStyle(color: AppColors.textSecondaryLight),
+                                ),
+                              ],
                             ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            itemCount: _multasRecords.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (ctx, i) {
+                              final m = _multasRecords[i];
+                              final veiculo = m['veiculos'] as Map<String, dynamic>?;
+                              final placa = veiculo?['placa'] as String? ?? '';
+                              final modelo = veiculo?['modelo'] as String? ?? '';
+                              final descricao = m['descricao'] as String? ?? '';
+                              final valor = (m['valor'] as num?)?.toDouble() ?? 0.0;
+                              final dataInfracao = _parseDate(m['data_infracao']);
+                              final dataVencimento = _parseDate(m['data_vencimento']);
+                              final status = m['status_pagamento'] as String? ?? 'Pendente';
+                              final isPago = status == 'Pago';
+
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                                leading: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: isPago
+                                        ? AppColors.statusSuccess.withValues(alpha: 0.1)
+                                        : AppColors.statusError.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    isPago ? LucideIcons.checkCircle2 : LucideIcons.fileWarning,
+                                    color: isPago ? AppColors.statusSuccess : AppColors.statusError,
+                                    size: 20,
+                                  ),
+                                ),
+                                title: Text(
+                                  placa + (modelo.isNotEmpty ? ' ($modelo)' : ''),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (descricao.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 4),
+                                        child: Text(descricao, style: const TextStyle(fontSize: 12)),
+                                      ),
+                                    Row(
+                                      children: [
+                                        _buildMultaInfoBadge(
+                                          icon: LucideIcons.calendar,
+                                          label: dataInfracao != null
+                                              ? 'Infração: ${DateFormat('dd/MM/yyyy').format(dataInfracao)}'
+                                              : 'Sem data',
+                                        ),
+                                        const SizedBox(width: 8),
+                                        _buildMultaInfoBadge(
+                                          icon: LucideIcons.calendarClock,
+                                          label: dataVencimento != null
+                                              ? 'Vence: ${DateFormat('dd/MM/yyyy').format(dataVencimento)}'
+                                              : 'Sem vencimento',
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          NumberFormat.currency(locale: 'pt_BR', symbol: r'R$').format(valor),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.statusError,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        GestureDetector(
+                                          onTap: () => _toggleMultaStatus(m),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: isPago
+                                                  ? AppColors.statusSuccess.withValues(alpha: 0.15)
+                                                  : AppColors.statusWarning.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: isPago
+                                                    ? AppColors.statusSuccess.withValues(alpha: 0.3)
+                                                    : AppColors.statusWarning.withValues(alpha: 0.3),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              status,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                color: isPago ? AppColors.statusSuccess : AppColors.statusWarning,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (ctx, i) {
-                        final d = items[i];
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 8,
-                          ),
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.atrOrange.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              d.tipo == 'Multa'
-                                  ? LucideIcons.fileWarning
-                                  : LucideIcons.wrench,
-                              color: AppColors.atrOrange,
-                              size: 20,
-                            ),
-                          ),
-                          title: Text(
-                            d.descricao.isEmpty ? d.tipo : d.descricao,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          subtitle: Text(
-                            '${d.veiculoPlaca} • ${d.motorista} • ${DateFormat('dd/MM/yyyy').format(d.data)}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          trailing: Text(
-                            NumberFormat.currency(
-                              locale: 'pt_BR',
-                              symbol: r'R$',
-                            ).format(d.valor),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.statusError,
-                              fontSize: 15,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
+                  ),
           ),
         ],
       ),
     );
   }
 
+  /// Mini-badge informativo para datas na linha da multa.
+  Widget _buildMultaInfoBadge({required IconData icon, required String label}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: AppColors.textMutedDark),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMutedDark)),
+      ],
+    );
+  }
   // ─────────────────────────────────────────────────────────
   // LANÇAMENTO DE DESPESA (reutiliza ExpenseFormModal)
   // ─────────────────────────────────────────────────────────
@@ -914,6 +966,348 @@ class _FrotaDashboardScreenState extends State<FrotaDashboardScreen>
         ),
       );
     }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // MULTAS — carregamento, toggle e formulário inline
+  // ─────────────────────────────────────────────────────────
+
+  Future<void> _loadMultas() async {
+    if (_loadingMultas) return;
+    setState(() => _loadingMultas = true);
+    try {
+      final tenantId = Supabase.instance.client.auth.currentUser
+              ?.appMetadata['tenant_id'] as String? ??
+          kDefaultTenantId;
+      final data = await Supabase.instance.client
+          .from('multas')
+          .select('*, veiculos(placa, modelo)')
+          .eq('tenant_id', tenantId)
+          .order('data_vencimento', ascending: false);
+      if (mounted) {
+        setState(() {
+          _multasRecords = (data as List<dynamic>).cast<Map<String, dynamic>>();
+          _loadingMultas = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingMultas = false);
+      }
+    }
+  }
+
+  Future<void> _loadVeiculosOptions() async {
+    try {
+      final tenantId = Supabase.instance.client.auth.currentUser
+              ?.appMetadata['tenant_id'] as String? ??
+          kDefaultTenantId;
+      final data = await Supabase.instance.client
+          .from('veiculos')
+          .select('id, placa, marca, modelo')
+          .eq('tenant_id', tenantId)
+          .order('placa');
+      if (mounted) {
+        setState(() {
+          _veiculosOptions =
+              (data as List<dynamic>).cast<Map<String, dynamic>>();
+        });
+      }
+    } catch (e) { AppLogger.warning('FrotaDashboard veiculosOptions: $e'); }
+  }
+
+  Future<void> _toggleMultaStatus(Map<String, dynamic> multa) async {
+    final currentStatus = multa['status_pagamento'] as String? ?? 'Pendente';
+    final novoStatus = currentStatus == 'Pago' ? 'Pendente' : 'Pago';
+    final id = multa['id'] as String;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Alterar Status'),
+        content: Text('Marcar multa como "$novoStatus"?'),
+        actions: [
+          AtrGhostButton(
+              label: 'Cancelar', onPressed: () => Navigator.pop(ctx, false)),
+          const SizedBox(width: 8),
+          AtrPrimaryButton(
+              label: 'Confirmar', onPressed: () => Navigator.pop(ctx, true)),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final updates = <String, dynamic>{
+          'status_pagamento': novoStatus,
+        };
+        if (novoStatus == 'Pago') {
+          updates['data_pagamento'] =
+              DateFormat('yyyy-MM-dd').format(DateTime.now());
+        } else {
+          updates['data_pagamento'] = null;
+        }
+        await Supabase.instance.client
+            .from('multas')
+            .update(updates)
+            .eq('id', id);
+        await _loadMultas();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro ao atualizar status: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showAddMultaDialog() async {
+    if (_veiculosOptions.isEmpty) {
+      await _loadVeiculosOptions();
+      if (_veiculosOptions.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nenhum veículo disponível.')),
+          );
+        }
+        return;
+      }
+    }
+
+    String? selectedVeiculoId;
+    final anoCtrl =
+        TextEditingController(text: DateTime.now().year.toString());
+    final mesCtrl = TextEditingController();
+    final valorCtrl = TextEditingController();
+    final descricaoCtrl = TextEditingController();
+    DateTime dataInfracao = DateTime.now();
+    DateTime dataVencimento = DateTime.now().add(const Duration(days: 30));
+
+    const meses = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+    ];
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(LucideIcons.fileWarning, color: AppColors.atrOrange),
+              SizedBox(width: 10),
+              Expanded(
+                  child: Text('Lançar Multa',
+                      style: TextStyle(fontSize: 18))),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Veículo
+                DropdownButtonFormField<String>(
+                  initialValue: selectedVeiculoId,
+                  decoration: _multaInputDecoration('Veículo', LucideIcons.truck),
+                  items: _veiculosOptions.map((v) {
+                    final placa = v['placa'] as String? ?? '';
+                    final marca = v['marca'] as String? ?? '';
+                    final modelo = v['modelo'] as String? ?? '';
+                    return DropdownMenuItem<String>(
+                      value: v['id'] as String,
+                      child: Text(
+                        '$placa - $marca $modelo'.trim(),
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (v) => setDialogState(() => selectedVeiculoId = v),
+                ),
+                const SizedBox(height: 16),
+                // Ano + Mês
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: anoCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration:
+                            _multaInputDecoration('Ano Ref.', LucideIcons.calendar),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue:
+                            meses.contains(mesCtrl.text) ? mesCtrl.text : null,
+                        decoration:
+                            _multaInputDecoration('Mês', LucideIcons.calendarDays),
+                        items: meses
+                            .map((m) => DropdownMenuItem(
+                                value: m,
+                                child: Text(m,
+                                    style: const TextStyle(fontSize: 13))))
+                            .toList(),
+                        onChanged: (v) {
+                          mesCtrl.text = v ?? '';
+                          setDialogState(() {});
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Valor
+                TextField(
+                  controller: valorCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: _multaInputDecoration('Valor (R\$)', LucideIcons.dollarSign),
+                ),
+                const SizedBox(height: 16),
+                // Descrição
+                TextField(
+                  controller: descricaoCtrl,
+                  maxLines: 2,
+                  decoration: _multaInputDecoration('Descrição', LucideIcons.fileText),
+                ),
+                const SizedBox(height: 16),
+                // Datas
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: dataInfracao,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2030),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => dataInfracao = picked);
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: _multaInputDecoration(
+                              'Data Infração', LucideIcons.calendar),
+                          child: Text(
+                            DateFormat('dd/MM/yyyy').format(dataInfracao),
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: dataVencimento,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2030),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => dataVencimento = picked);
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: _multaInputDecoration(
+                              'Data Vencimento', LucideIcons.calendarClock),
+                          child: Text(
+                            DateFormat('dd/MM/yyyy').format(dataVencimento),
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            AtrGhostButton(
+                label: 'Cancelar', onPressed: () => Navigator.pop(ctx, false)),
+            const SizedBox(width: 8),
+            AtrPrimaryButton(
+              label: 'Salvar',
+              onPressed: () {
+                if (selectedVeiculoId == null) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Selecione um veículo.')),
+                  );
+                  return;
+                }
+                if (valorCtrl.text.isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Informe o valor da multa.')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      try {
+        final tenantId = Supabase.instance.client.auth.currentUser
+                ?.appMetadata['tenant_id'] as String? ??
+            kDefaultTenantId;
+        await Supabase.instance.client.from('multas').insert({
+          'veiculo_id': selectedVeiculoId,
+          'ano_referencia':
+              int.tryParse(anoCtrl.text) ?? DateTime.now().year,
+          'mes': mesCtrl.text.isNotEmpty
+              ? mesCtrl.text
+              : meses[DateTime.now().month - 1],
+          'valor':
+              double.tryParse(valorCtrl.text.replaceAll(',', '.')) ?? 0.0,
+          'descricao': descricaoCtrl.text,
+          'data_infracao': DateFormat('yyyy-MM-dd').format(dataInfracao),
+          'data_vencimento':
+              DateFormat('yyyy-MM-dd').format(dataVencimento),
+          'status_pagamento': 'Pendente',
+          'tenant_id': tenantId,
+        });
+        await _loadMultas();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Multa registrada com sucesso!')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro ao registrar multa: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  InputDecoration _multaInputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, size: 18),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    );
+  }
+
+  DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString());
   }
 
   // ─────────────────────────────────────────────────────────

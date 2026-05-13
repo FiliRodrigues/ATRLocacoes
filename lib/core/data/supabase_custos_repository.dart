@@ -51,8 +51,7 @@ ManutencaoItem _manutencaoFromRow(Map<String, dynamic> row) {
 }
 
 Map<String, dynamic> _manutencaoToRow(ManutencaoItem item) {
-  return {
-    'id': item.id,
+  final row = <String, dynamic>{
     'veiculo_placa': item.veiculoPlaca,
     'veiculo_nome': item.veiculoNome,
     'titulo': item.titulo,
@@ -70,6 +69,9 @@ Map<String, dynamic> _manutencaoToRow(ManutencaoItem item) {
     'is_preventiva': item.isPreventiva,
     'data_conclusao': item.dataConclusao?.toIso8601String(),
   };
+  // Só inclui id se for UUID (tem hífen) — senão Supabase gera via DEFAULT
+  if (item.id.contains('-')) row['id'] = item.id;
+  return row;
 }
 
 DespesaItem _despesaFromRow(Map<String, dynamic> row) {
@@ -90,8 +92,7 @@ DespesaItem _despesaFromRow(Map<String, dynamic> row) {
 }
 
 Map<String, dynamic> _despesaToRow(DespesaItem item) {
-  return {
-    'id': item.id,
+  final row = <String, dynamic>{
     'veiculo_placa': item.veiculoPlaca,
     'motorista': item.motorista,
     'data': item.data.toIso8601String(),
@@ -104,6 +105,9 @@ Map<String, dynamic> _despesaToRow(DespesaItem item) {
     'nf': item.nf,
     'nome_anexo': item.nomeAnexo,
   };
+  // Só inclui id se for UUID (tem hífen) — senão Supabase gera via DEFAULT
+  if (item.id.contains('-')) row['id'] = item.id;
+  return row;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -155,11 +159,17 @@ class SupabaseCustosRepository implements ICustosRepository {
   }
 
   @override
-  Future<void> saveManutencao(ManutencaoItem item) async {
+  Future<String> saveManutencao(ManutencaoItem item) async {
     try {
-      await _client
-          .from('manutencoes')
-          .upsert({..._manutencaoToRow(item), 'tenant_id': _tenantId}, onConflict: 'id');
+      final row = {..._manutencaoToRow(item), 'tenant_id': _tenantId};
+      final isNew = !item.id.contains('-'); // UUID tem hífen, timestamp não
+      if (isNew) {
+        final result = await _client.from('manutencoes').insert(row).select('id').single();
+        return result['id'] as String;
+      } else {
+        await _client.from('manutencoes').update(row).eq('id', item.id);
+        return item.id;
+      }
     } catch (error, stackTrace) {
       AppLogger.error('saveManutencao falhou [id=${item.id}]', error, stackTrace);
       rethrow;
@@ -209,11 +219,17 @@ class SupabaseCustosRepository implements ICustosRepository {
   }
 
   @override
-  Future<void> saveDespesa(DespesaItem item) async {
+  Future<String> saveDespesa(DespesaItem item) async {
     try {
-      await _client
-          .from('despesas')
-          .upsert({..._despesaToRow(item), 'tenant_id': _tenantId}, onConflict: 'id');
+      final row = {..._despesaToRow(item), 'tenant_id': _tenantId};
+      final isNew = !item.id.contains('-'); // UUID tem hífen, timestamp não
+      if (isNew) {
+        final result = await _client.from('despesas').insert(row).select('id').single();
+        return result['id'] as String;
+      } else {
+        await _client.from('despesas').update(row).eq('id', item.id);
+        return item.id;
+      }
     } catch (error, stackTrace) {
       AppLogger.error('saveDespesa falhou [id=${item.id}]', error, stackTrace);
       rethrow;

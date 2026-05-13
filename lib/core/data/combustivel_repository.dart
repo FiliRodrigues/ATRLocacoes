@@ -19,7 +19,7 @@ class CombustivelRepository {
       query = query.eq('veiculo_placa', veiculoPlaca);
     }
 
-    final rows = await query.order('data', ascending: false);
+    final rows = await query.order('data', ascending: false).limit(500);
     return rows.map(Abastecimento.fromRow).toList();
   }
 

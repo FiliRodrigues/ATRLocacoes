@@ -32,15 +32,15 @@ class _BentoCardState extends State<BentoCard> {
   bool _isHovering = false;
 
   // Pre-computed color constants to avoid per-build allocations
-  static final _surfaceHoverDark = AppColors.surfaceHoverDark.withValues(alpha: 0.4);
-  static final _surfaceHoverLight = AppColors.surfaceHoverLight.withValues(alpha: 0.6);
-  static final _surfaceDark = AppColors.surfaceDark.withValues(alpha: 0.3);
-  static final _surfaceLight = AppColors.surfaceLight.withValues(alpha: 0.5);
-  static final _borderHover = AppColors.atrOrange.withValues(alpha: 0.4);
-  static final _borderDark = Colors.white.withValues(alpha: 0.05);
-  static final _borderLight = Colors.black.withValues(alpha: 0.05);
-  static final _shadowHover = AppColors.atrOrange.withValues(alpha: 0.12);
-  static final _shadowBaseDark = Colors.black.withValues(alpha: 0.2);
+  static final _surfaceHoverDark = AppColors.surfaceHoverDark.withValues(alpha: 0.34);
+  static final _surfaceHoverLight = AppColors.surfaceHoverLight.withValues(alpha: 0.54);
+  static final _surfaceDark = AppColors.surfaceDark.withValues(alpha: 0.26);
+  static final _surfaceLight = AppColors.surfaceLight.withValues(alpha: 0.44);
+  static final _borderHover = AppColors.atrOrange.withValues(alpha: 0.28);
+  static final _borderDark = Colors.white.withValues(alpha: 0.045);
+  static final _borderLight = Colors.black.withValues(alpha: 0.045);
+  static final _shadowHover = AppColors.atrOrange.withValues(alpha: 0.08);
+  static final _shadowBaseDark = Colors.black.withValues(alpha: 0.16);
 
   @override
   Widget build(BuildContext context) {
@@ -58,24 +58,24 @@ class _BentoCardState extends State<BentoCard> {
       padding: widget.padding,
       decoration: BoxDecoration(
         color: surfaceColor,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _isHovering
               ? _borderHover
               : (isDark ? _borderDark : _borderLight),
-          width: _isHovering ? 1.5 : 1,
+          width: _isHovering ? 1.2 : 1,
         ),
         boxShadow: [
           if (_isHovering)
             BoxShadow(
               color: _shadowHover,
-              blurRadius: 28,
-              spreadRadius: 2,
+              blurRadius: 16,
+              spreadRadius: 0,
             ),
           BoxShadow(
             color: isDark ? _shadowBaseDark : _borderLight,
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -92,7 +92,7 @@ class _BentoCardState extends State<BentoCard> {
                 gradient: LinearGradient(
                   colors: [
                     Colors.transparent,
-                    Colors.white.withValues(alpha: 0.10),
+                    Colors.white.withValues(alpha: 0.06),
                     Colors.transparent,
                   ],
                 ),
@@ -109,14 +109,16 @@ class _BentoCardState extends State<BentoCard> {
         cursor: widget.onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
         onEnter: (_) => setState(() => _isHovering = true),
         onExit: (_) => setState(() => _isHovering = false),
-        child: GestureDetector(
+        child: Semantics(
+          button: widget.onTap != null,
+          child: GestureDetector(
           onTap: widget.onTap,
           child: AnimatedScale(
             scale: _isHovering ? 1.015 : 1.0,
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
               child: widget.blur
                   ? BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
@@ -125,6 +127,7 @@ class _BentoCardState extends State<BentoCard> {
                   : animatedContent,
             ),
           ),
+        ),
         ),
       ),
     );

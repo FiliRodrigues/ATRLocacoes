@@ -4,7 +4,9 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_logger.dart';
 import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/atr_page_background.dart';
 import '../../core/data/sala_atr_data.dart';
@@ -22,20 +24,550 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
   DateTime _dataFiltro = DateTime.now();
   bool _resumoMostrado = false;
 
-  void _changeDate(int dias) {
-    setState(() => _dataFiltro = _dataFiltro.add(Duration(days: dias)));
-  }
+  // ── Supabase state ──
+  List<AgendamentoSalaAtr> _agendamentos = [];
+  List<Map<String, dynamic>> _despesas = [];
+  List<PacoteSessao> _pacotes = [];
+  bool _isLoading = true;
+  String? _tenantId;
+  final Set<String> _togglingDespesaIds = {};
+
+  String? get _tid => _tenantId;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _mostrarResumoDiario());
+    _tenantId = Supabase.instance.client.auth.currentUser?.appMetadata['tenant_id'] as String?;
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      await Future.wait([_loadAgendamentos(), _loadDespesas(), _loadPacotes()]);
+    } catch (e) { AppLogger.warning('SalaATR: $e'); }
+    if (mounted) {
+      setState(() => _isLoading = false);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _mostrarResumoDiario());
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SUPABASE LOADERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _loadAgendamentos() async {
+    try {
+      var query = Supabase.instance.client.from('sala_atr_agendamentos').select('*');
+      final tid = _tenantId; if (tid != null) query = query.eq('tenant_id', tid);
+      final rows = await query as List<dynamic>;
+      _agendamentos = rows.map((r) => _mapAgendamento(r as Map<String, dynamic>)).toList();
+      _agendamentos.sort((a, b) => a.inicio.compareTo(b.inicio));
+    } catch (e) { AppLogger.warning('SalaATR: $e'); }
+  }
+
+  Future<void> _loadDespesas() async {
+    try {
+      var query = Supabase.instance.client.from('sala_atr_despesas').select('*');
+      final tid = _tenantId; if (tid != null) query = query.eq('tenant_id', tid);
+      final rows = await query as List<dynamic>;
+      _despesas = rows.cast<Map<String, dynamic>>();
+    } catch (e) { AppLogger.warning('SalaATR: $e'); }
+  }
+
+  AgendamentoSalaAtr _mapAgendamento(Map<String, dynamic> row) {
+    final data = DateTime.parse(row['data'] as String);
+    final horaInicio = row['hora_inicio'] as String;
+    final horaFim = row['hora_fim'] as String;
+
+    final hiParts = horaInicio.split(':');
+    final hfParts = horaFim.split(':');
+
+    final inicio = DateTime(data.year, data.month, data.day,
+        int.parse(hiParts[0]), int.parse(hiParts[1]));
+    final fim = DateTime(data.year, data.month, data.day,
+        int.parse(hfParts[0]), int.parse(hfParts[1]));
+
+    final statusStr = row['status'] as String? ?? 'Confirmado';
+    StatusAgendamento status;
+    switch (statusStr) {
+      case 'Pendente':   status = StatusAgendamento.pendente; break;
+      case 'Confirmado': status = StatusAgendamento.confirmado; break;
+      case 'Pago':       status = StatusAgendamento.pago; break;
+      case 'Realizado':  status = StatusAgendamento.realizado; break;
+      case 'Cancelado':  status = StatusAgendamento.cancelado_noshow; break;
+      default:           status = StatusAgendamento.confirmado;
+    }
+
+    final nome = row['cliente_nome'] as String;
+
+    return AgendamentoSalaAtr(
+      id: row['id'] as String,
+      clienteId: 'cli_${nome.replaceAll(' ', '_').toLowerCase()}',
+      clienteNome: nome,
+      clienteTelefone: '',
+      inicio: inicio,
+      fim: fim,
+      valorTotal: (row['valor'] as num?)?.toDouble() ?? 0,
+      status: status,
+      tipoPagamento: TipoPagamento.particular,
+      observacoes: row['observacoes'] as String?,
+      lembrete24h: true,
+      lembrete1h: true,
+    );
+  }
+
+  String _statusToDb(StatusAgendamento s) {
+    switch (s) {
+      case StatusAgendamento.pendente:         return 'Pendente';
+      case StatusAgendamento.confirmado:       return 'Confirmado';
+      case StatusAgendamento.pago:             return 'Pago';
+      case StatusAgendamento.realizado:        return 'Realizado';
+      case StatusAgendamento.cancelado_noshow: return 'Cancelado';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CRUD: AGENDAMENTOS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _insertAgendamento({
+    required DateTime inicio,
+    required int duracaoHoras,
+    required String clienteNome,
+    String clienteTelefone = '',
+    required double valorPorHora,
+    String tipoEvento = 'Reunião',
+    String pacote = 'Padrão',
+    int quantidadePessoas = 1,
+    String observacoes = '',
+    int vezesRecorrencia = 1,
+    int diasIntervalo = 7,
+  }) async {
+    final totalOcorrencias = vezesRecorrencia.clamp(1, 52);
+    final intervaloDias = diasIntervalo.clamp(1, 365);
+
+    for (int i = 0; i < totalOcorrencias; i++) {
+      final dataOcorrencia = inicio.add(Duration(days: intervaloDias * i));
+      final duracaoMin = (duracaoHoras * 60) - 10;
+      final fim = dataOcorrencia.add(Duration(minutes: duracaoMin));
+
+      // Verifica conflito de horário para esta ocorrência
+      final conflito = _agendamentos.any((a) =>
+          a.status != StatusAgendamento.cancelado_noshow &&
+          a.inicio.year == dataOcorrencia.year &&
+          a.inicio.month == dataOcorrencia.month &&
+          a.inicio.day == dataOcorrencia.day &&
+          a.inicio.isBefore(fim) &&
+          a.fim.isAfter(dataOcorrencia));
+
+      if (conflito) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Conflito de horário em ${DateFormat('dd/MM').format(dataOcorrencia)} '
+                '${dataOcorrencia.hour.toString().padLeft(2, '0')}:${dataOcorrencia.minute.toString().padLeft(2, '0')}',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        continue;
+      }
+
+      final horaInicioStr =
+          '${dataOcorrencia.hour.toString().padLeft(2, '0')}:${dataOcorrencia.minute.toString().padLeft(2, '0')}:00';
+      final horaFimStr =
+          '${fim.hour.toString().padLeft(2, '0')}:${fim.minute.toString().padLeft(2, '0')}:00';
+      final dataStr = DateFormat('yyyy-MM-dd').format(dataOcorrencia);
+
+      try {
+        await Supabase.instance.client.from('sala_atr_agendamentos').insert({
+          'data': dataStr,
+          'hora_inicio': horaInicioStr,
+          'hora_fim': horaFimStr,
+          'cliente_nome': clienteNome,
+          'valor': valorPorHora * duracaoHoras,
+          'status': 'Pendente',
+          'tipo_evento': tipoEvento,
+          'pacote': pacote,
+          'quantidade_pessoas': quantidadePessoas,
+          'observacoes': observacoes,
+          'tenant_id': _tid,
+        });
+      } catch (e) { AppLogger.warning('SalaATR: $e'); }
+    }
+    await _loadAgendamentos();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _updateAgendamentoStatus(String id, StatusAgendamento novoStatus) async {
+    final ag = _agendamentos.where((a) => a.id == id).firstOrNull;
+    final statusDb = _statusToDb(novoStatus);
+
+    try {
+      await Supabase.instance.client
+          .from('sala_atr_agendamentos')
+          .update({'status': statusDb, 'updated_at': DateTime.now().toIso8601String()})
+          .eq('id', id);
+    } catch (e) { AppLogger.warning('SalaATR: $e'); }
+
+    if (ag != null && (novoStatus == StatusAgendamento.pago || novoStatus == StatusAgendamento.realizado)) {
+      _consumirSessaoPacote(ag.clienteId);
+    }
+    await _loadAgendamentos();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _deleteAgendamento(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceCardDark,
+        title: const Text('Excluir Agendamento', style: TextStyle(color: Colors.white)),
+        content: const Text('Tem a certeza que deseja excluir este agendamento?', style: TextStyle(color: AppColors.textSecondaryDark)),
+        actions: [
+          AtrButton.ghost(label: 'Cancelar', onPressed: () => Navigator.pop(ctx, false)),
+          const SizedBox(width: 8),
+          AtrButton.ghost(label: 'Excluir', onPressed: () => Navigator.pop(ctx, true)),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await Supabase.instance.client.from('sala_atr_agendamentos').delete().eq('id', id);
+    } catch (e) { AppLogger.warning('SalaATR: $e'); }
+    await _loadAgendamentos();
+    if (mounted) setState(() {});
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CRUD: DESPESAS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _insertDespesa({
+    required String descricao,
+    required double valor,
+    required DateTime data,
+    String categoria = 'Geral',
+  }) async {
+    try {
+      await Supabase.instance.client.from('sala_atr_despesas').insert({
+        'descricao': descricao,
+        'valor': valor,
+        'data': DateFormat('yyyy-MM-dd').format(data),
+        'categoria': categoria,
+        'pago': false,
+        'tenant_id': _tid,
+      });
+    } catch (e) { AppLogger.warning('SalaATR: $e'); }
+    await _loadDespesas();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleDespesaPago(String id, bool currentPago) async {
+    setState(() => _togglingDespesaIds.add(id));
+    try {
+      await Supabase.instance.client
+          .from('sala_atr_despesas')
+          .update({'pago': !currentPago, 'updated_at': DateTime.now().toIso8601String()})
+          .eq('id', id);
+      await _loadDespesas();
+    } catch (e) { AppLogger.warning('SalaATR: $e'); }
+    if (mounted) {
+      setState(() {
+        _togglingDespesaIds.remove(id);
+      });
+    }
+  }
+
+  Future<void> _deleteDespesa(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceCardDark,
+        title: const Text('Excluir Despesa', style: TextStyle(color: Colors.white)),
+        content: const Text('Tem a certeza que deseja excluir esta despesa?', style: TextStyle(color: AppColors.textSecondaryDark)),
+        actions: [
+          AtrButton.ghost(label: 'Cancelar', onPressed: () => Navigator.pop(ctx, false)),
+          const SizedBox(width: 8),
+          AtrButton.ghost(label: 'Excluir', onPressed: () => Navigator.pop(ctx, true)),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await Supabase.instance.client.from('sala_atr_despesas').delete().eq('id', id);
+    } catch (e) { AppLogger.warning('SalaATR: $e'); }
+    await _loadDespesas();
+    if (mounted) setState(() {});
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PACOTES (Supabase-backed — migration 036)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _loadPacotes() async {
+    try {
+      var query = Supabase.instance.client.from('sala_atr_pacotes').select('*');
+      final tid = _tenantId; if (tid != null) query = query.eq('tenant_id', tid);
+      final rows = await query as List<dynamic>;
+      _pacotes = rows.map((r) {
+        final m = r as Map<String, dynamic>;
+        final id = m['id'] as String;
+        final nome = m['cliente_nome'] as String? ?? '';
+        return PacoteSessao(
+          id: id,
+          clienteId: 'cli_${nome.replaceAll(' ', '_').toLowerCase()}',
+          clienteNome: nome,
+          totalSessoes: (m['total_sessoes'] as num?)?.toInt() ?? 10,
+          sessoesUsadas: (m['sessoes_usadas'] as num?)?.toInt() ?? 0,
+          valorPago: (m['valor_pago'] as num?)?.toDouble() ?? 0,
+          valorPorSessao: (m['valor_por_sessao'] as num?)?.toDouble() ?? 150,
+          dataCriacao: DateTime.tryParse(m['created_at']?.toString() ?? '') ?? DateTime.now(),
+          ativo: m['ativo'] as bool? ?? true,
+        );
+      }).toList();
+    } catch (e) { AppLogger.warning('SalaATR pacotes: $e'); }
+  }
+
+  Future<void> _criarPacote({
+    required String clienteId,
+    required String clienteNome,
+    required int totalSessoes,
+    required double valorPago,
+    required double valorAvulso,
+  }) async {
+    try {
+      await Supabase.instance.client.from('sala_atr_pacotes').insert({
+        'cliente_nome': clienteNome,
+        'total_sessoes': totalSessoes,
+        'sessoes_usadas': 0,
+        'valor_pago': valorPago,
+        'valor_por_sessao': valorAvulso,
+        'ativo': true,
+        'tenant_id': _tid,
+      });
+      await _loadPacotes();
+      if (mounted) setState(() {});
+    } catch (e) { AppLogger.warning('SalaATR criarPacote: $e'); }
+  }
+
+  PacoteSessao? _pacoteAtivoDoCliente(String clienteId) {
+    final ativos = _pacotes
+        .where((p) => p.clienteId == clienteId && p.ativo && !p.isEsgotado)
+        .toList();
+    if (ativos.isEmpty) return null;
+    ativos.sort((a, b) => a.dataCriacao.compareTo(b.dataCriacao));
+    return ativos.first;
+  }
+
+  Future<void> _consumirSessaoPacote(String clienteId) async {
+    final pacote = _pacoteAtivoDoCliente(clienteId);
+    if (pacote == null) return;
+    final novasUsadas = pacote.sessoesUsadas + 1;
+    final esgotado = novasUsadas >= pacote.totalSessoes;
+    try {
+      await Supabase.instance.client
+          .from('sala_atr_pacotes')
+          .update({
+            'sessoes_usadas': novasUsadas,
+            'ativo': !esgotado,
+          })
+          .eq('id', pacote.id);
+      await _loadPacotes();
+    } catch (e) { AppLogger.warning('SalaATR consumirPacote: $e'); }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // COMPUTED METHODS (replicas of SalaAtrState logic)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  List<AgendamentoSalaAtr> _agendamentosDoDia(DateTime dia) {
+    return _agendamentos
+        .where((a) => a.inicio.year == dia.year &&
+            a.inicio.month == dia.month &&
+            a.inicio.day == dia.day)
+        .toList()
+      ..sort((a, b) => a.inicio.compareTo(b.inicio));
+  }
+
+  AgendamentoSalaAtr? _proximoCliente() {
+    final hoje = DateTime.now();
+    final futuros = _agendamentos
+        .where((a) => a.inicio.isAfter(hoje) && a.status != StatusAgendamento.cancelado_noshow)
+        .toList();
+    futuros.sort((a, b) => a.inicio.compareTo(b.inicio));
+    return futuros.isNotEmpty ? futuros.first : null;
+  }
+
+  double _receitaBrutaMes(int mes, int ano) {
+    return _agendamentos
+        .where((a) => a.inicio.month == mes &&
+            a.inicio.year == ano &&
+            (a.status == StatusAgendamento.pago || a.status == StatusAgendamento.realizado))
+        .fold(0.0, (s, a) => s + a.valorTotal);
+  }
+
+  double _inadimplenciaMes(int mes, int ano) {
+    return _agendamentos
+        .where((a) => a.inicio.month == mes &&
+            a.inicio.year == ano &&
+            a.status == StatusAgendamento.pendente &&
+            a.isPassado)
+        .fold(0.0, (s, a) => s + a.valorTotal);
+  }
+
+  double _despesasMes(int mes, int ano) {
+    return _despesas.where((d) {
+      final data = DateTime.parse(d['data'] as String);
+      return data.month == mes && data.year == ano;
+    }).fold(0.0, (s, d) => s + ((d['valor'] as num).toDouble()));
+  }
+
+  double _lucroLiquidoMes(int mes, int ano) {
+    return _receitaBrutaMes(mes, ano) - _despesasMes(mes, ano);
+  }
+
+  double _lucroLiquidoMesAnterior(int mes, int ano) {
+    if (mes == 1) return _lucroLiquidoMes(12, ano - 1);
+    return _lucroLiquidoMes(mes - 1, ano);
+  }
+
+  double _variacaoLucro(int mes, int ano) {
+    final anterior = _lucroLiquidoMesAnterior(mes, ano);
+    if (anterior == 0) return 0;
+    return ((_lucroLiquidoMes(mes, ano) - anterior) / anterior.abs()) * 100;
+  }
+
+  double _ocupacaoPerc(int mes, int ano) {
+    final diasUteis = 22;
+    final horasNoMes = diasUteis * 12;
+    final horasOcupadas = _agendamentos
+        .where((a) => a.inicio.month == mes &&
+            a.inicio.year == ano &&
+            a.status != StatusAgendamento.cancelado_noshow)
+        .length;
+    return (horasOcupadas / horasNoMes * 100).clamp(0, 100);
+  }
+
+  double _ocupacaoPercMesAnterior(int mes, int ano) {
+    if (mes == 1) return _ocupacaoPerc(12, ano - 1);
+    return _ocupacaoPerc(mes - 1, ano);
+  }
+
+  double _totalRecebidoPacotes() {
+    return _pacotes.fold(0.0, (s, p) => s + p.valorPago);
+  }
+
+  int _totalSessoesPacotesAtivas() {
+    return _pacotes.where((p) => p.ativo).fold(0, (s, p) => s + p.sessoesRestantes);
+  }
+
+  List<RelatorioCliente> _gerarCRM() {
+    final map = <String, RelatorioCliente>{};
+    for (var a in _agendamentos) {
+      if (!map.containsKey(a.clienteId)) {
+        map[a.clienteId] = RelatorioCliente(
+          clienteId: a.clienteId,
+          nome: a.clienteNome,
+          telefone: a.clienteTelefone,
+        );
+      }
+      final c = map[a.clienteId]!;
+      c.qtdeAgendamentos++;
+      if (a.status == StatusAgendamento.cancelado_noshow) c.qtdeNoShows++;
+      if (a.status == StatusAgendamento.pago || a.status == StatusAgendamento.realizado) {
+        c.totalGasto += a.valorTotal;
+      }
+      if (a.isPassado) {
+        if (c.ultimoAtendimento == null || a.inicio.isAfter(c.ultimoAtendimento!)) {
+          c.ultimoAtendimento = a.inicio;
+        }
+      }
+    }
+    for (final p in _pacotes.where((p) => p.ativo && !p.isEsgotado)) {
+      if (map.containsKey(p.clienteId)) {
+        map[p.clienteId]!.pacotesAtivos.add(p);
+      }
+    }
+    final lista = map.values.toList();
+    lista.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
+    return lista;
+  }
+
+  List<RecebimentoFuturoMes> _gerarRecebimentosFuturos() {
+    final agora = DateTime.now();
+    final mapa = <String, List<AgendamentoSalaAtr>>{};
+
+    for (final a in _agendamentos) {
+      if (a.tipoPagamento == TipoPagamento.particular) continue;
+      if (a.status != StatusAgendamento.pago && a.status != StatusAgendamento.realizado) continue;
+      final receb = a.dataRecebimento;
+      if (receb.isBefore(agora)) continue;
+
+      final mesRef = DateTime(receb.year, receb.month);
+      final chave = '${mesRef.year}-${mesRef.month.toString().padLeft(2, '0')}';
+      mapa.putIfAbsent(chave, () => []).add(a);
+    }
+
+    final saida = <RecebimentoFuturoMes>[];
+    for (final entrada in mapa.entries) {
+      final partes = entrada.key.split('-');
+      final ano = int.parse(partes[0]);
+      final mes = int.parse(partes[1]);
+      final itens = entrada.value..sort((x, y) => x.dataRecebimento.compareTo(y.dataRecebimento));
+      saida.add(RecebimentoFuturoMes(mes: DateTime(ano, mes), itens: itens));
+    }
+    saida.sort((a, b) => a.mes.compareTo(b.mes));
+    return saida;
+  }
+
+  ResumoDiario _resumoDiario(DateTime dia) {
+    final sessoes = _agendamentos
+        .where((a) => a.inicio.year == dia.year &&
+            a.inicio.month == dia.month &&
+            a.inicio.day == dia.day &&
+            a.status != StatusAgendamento.cancelado_noshow)
+        .toList()
+      ..sort((a, b) => a.inicio.compareTo(b.inicio));
+
+    final confirmadas = sessoes
+        .where((a) => a.status == StatusAgendamento.confirmado || a.status == StatusAgendamento.pago)
+        .length;
+    final pendentes = sessoes.where((a) => a.status == StatusAgendamento.pendente).length;
+    final receitaParticular = sessoes
+        .where((a) => a.tipoPagamento == TipoPagamento.particular &&
+            a.status != StatusAgendamento.cancelado_noshow)
+        .fold(0.0, (s, a) => s + a.valorTotal);
+
+    return ResumoDiario(
+      data: dia,
+      agendamentos: sessoes,
+      totalSessoes: sessoes.length,
+      confirmadas: confirmadas,
+      pendentes: pendentes,
+      receitaParticularHoje: receitaParticular,
+      aniversariantes: const [],
+      proximaSessao: sessoes.isNotEmpty ? sessoes.first : null,
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // UI BUILD
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _changeDate(int dias) {
+    setState(() => _dataFiltro = _dataFiltro.add(Duration(days: dias)));
   }
 
   void _mostrarResumoDiario() {
     if (_resumoMostrado) return;
     _resumoMostrado = true;
-    final resumo = SalaAtrState.instance.resumoDiario(DateTime.now());
+    if (_agendamentos.isEmpty) return;
+    final resumo = _resumoDiario(DateTime.now());
     if (resumo.totalSessoes == 0) return;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -87,32 +619,83 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
                 ],
               ),
               Expanded(
-                child: Column(
-                  children: [
-                    _buildHeader(isDark),
-                    Expanded(
-                      child: ListenableBuilder(
-                        listenable: SalaAtrState.instance,
-                        builder: (context, _) {
-                          switch (_tabIndex) {
-                            case 0: return _SalaDashboard(data: _dataFiltro, isDark: isDark);
-                            case 1: return _SalaAgenda(data: _dataFiltro, isDark: isDark);
-                            case 2: return _SalaCrm(isDark: isDark);
-                            case 3: return _SalaFinanceiro(data: _dataFiltro, isDark: isDark);
-                            case 4: return _SalaRecebimentosFuturos(isDark: isDark);
-                            default: return const SizedBox();
-                          }
-                        },
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.atrOrange))
+                    : Column(
+                        children: [
+                          _buildHeader(isDark),
+                          Expanded(
+                            child: _buildTabContent(isDark),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
         ),
       )),
     );
+  }
+
+  Widget _buildTabContent(bool isDark) {
+    switch (_tabIndex) {
+      case 0: return _SalaDashboard(
+        data: _dataFiltro,
+        isDark: isDark,
+        agendamentos: _agendamentos,
+        despesas: _despesas,
+        pacotes: _pacotes,
+        lucroLiquido: _lucroLiquidoMes(_dataFiltro.month, _dataFiltro.year),
+        variacao: _variacaoLucro(_dataFiltro.month, _dataFiltro.year),
+        ocupacao: _ocupacaoPerc(_dataFiltro.month, _dataFiltro.year),
+        ocupacaoAnt: _ocupacaoPercMesAnterior(_dataFiltro.month, _dataFiltro.year),
+        inadimplencia: _inadimplenciaMes(_dataFiltro.month, _dataFiltro.year),
+        proximo: _proximoCliente(),
+        receitaPacotes: _totalRecebidoPacotes(),
+        sessoesPacotes: _totalSessoesPacotesAtivas(),
+        onCreatePacote: (clienteId, clienteNome) => _abrirCriarPacoteParaCliente(context, clienteId, clienteNome, isDark),
+        onNewPacote: () => _abrirCriarPacote(context, isDark),
+      );
+      case 1: return _SalaAgenda(
+        data: _dataFiltro,
+        isDark: isDark,
+        agendamentosDoDia: _agendamentosDoDia(_dataFiltro),
+        pacoteAtivoDoCliente: _pacoteAtivoDoCliente,
+        onUpdateStatus: (id, status) => _updateAgendamentoStatus(id, status),
+        onDelete: (id) => _deleteAgendamento(id),
+        onAddAgendamento: (inicio, duracao, nome, tel, valor, vezes, intervalo) =>
+            _insertAgendamento(
+              inicio: inicio,
+              duracaoHoras: duracao,
+              clienteNome: nome,
+              clienteTelefone: tel,
+              valorPorHora: valor,
+              vezesRecorrencia: vezes,
+              diasIntervalo: intervalo,
+            ),
+      );
+      case 2: return _SalaCrm(
+        isDark: isDark,
+        clientes: _gerarCRM(),
+        onCreatePacote: (clienteId, nome) => _abrirCriarPacoteParaCliente(context, clienteId, nome, isDark),
+      );
+      case 3: return _SalaFinanceiro(
+        data: _dataFiltro,
+        isDark: isDark,
+        agendamentos: _agendamentos,
+        despesas: _despesas,
+        togglingIds: _togglingDespesaIds,
+        onTogglePago: (id, pago) => _toggleDespesaPago(id, pago),
+        onDeleteDespesa: (id) => _deleteDespesa(id),
+        onAddDespesa: (descricao, valor, data, categoria) =>
+            _insertDespesa(descricao: descricao, valor: valor, data: data, categoria: categoria),
+      );
+      case 4: return _SalaRecebimentosFuturos(
+        isDark: isDark,
+        recebimentos: _gerarRecebimentosFuturos(),
+      );
+      default: return const SizedBox();
+    }
   }
 
   Widget _buildHeader(bool isDark) {
@@ -206,6 +789,117 @@ class _SalaAtrScreenState extends State<SalaAtrScreen> {
       ),
     );
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOP-LEVEL DIALOG HELPERS (use state callbacks)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _abrirCriarPacote(BuildContext context, bool isDark) {
+    _abrirCriarPacoteParaCliente(context, '', '', isDark);
+  }
+
+  void _abrirCriarPacoteParaCliente(BuildContext context, String clienteId, String clienteNome, bool isDark) {
+    final nomeCtrl = TextEditingController(text: clienteNome);
+    final sessoesCtrl = TextEditingController(text: '10');
+    final valorCtrl = TextEditingController(text: '1200.00');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceCardDark : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: AppColors.statusInfo.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(LucideIcons.package, color: AppColors.statusInfo, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('Criar Pacote de Sessões', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 19, fontWeight: FontWeight.w700)),
+                ],
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: nomeCtrl,
+                style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
+                decoration: InputDecoration(
+                  labelText: 'Paciente',
+                  prefixIcon: const Icon(LucideIcons.user, size: 18),
+                  filled: true,
+                  fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: sessoesCtrl,
+                      keyboardType: TextInputType.number,
+                      style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
+                      decoration: InputDecoration(
+                        labelText: 'Nº de Sessões',
+                        filled: true,
+                        fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: valorCtrl,
+                      keyboardType: TextInputType.number,
+                      style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
+                      decoration: InputDecoration(
+                        labelText: 'Valor do Pacote (R\$)',
+                        filled: true,
+                        fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text('Valor avulso: R\$ 150,00/sessão • Desconto aplicado automaticamente',
+                  style: TextStyle(color: isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 11)),
+              const SizedBox(height: 24),
+              AtrPrimaryButton(
+                label: 'Criar Pacote',
+                width: double.infinity,
+                onPressed: () {
+                  if (nomeCtrl.text.trim().isEmpty) return;
+                  final total = int.tryParse(sessoesCtrl.text) ?? 10;
+                  final valor = double.tryParse(valorCtrl.text) ?? 1200;
+                  _criarPacote(
+                    clienteId: 'cli_${nomeCtrl.text.replaceAll(' ', '_').toLowerCase()}',
+                    clienteNome: nomeCtrl.text.trim(),
+                    totalSessoes: total,
+                    valorPago: valor,
+                    valorAvulso: 150.0,
+                  );
+                  Navigator.pop(ctx);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -246,7 +940,7 @@ class _HeaderButton extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 9. RESUMO DIÁRIO MATINAL
+// RESUMO DIÁRIO MATINAL
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _ResumoDiarioDialog extends StatelessWidget {
@@ -309,10 +1003,8 @@ class _ResumoDiarioDialog extends StatelessWidget {
                 children: [
                   _MiniStat(icon: LucideIcons.calendarCheck, value: '${resumo.totalSessoes}', label: 'sessões hoje', color: AppColors.atrOrange, isDark: isDark),
                   Container(width: 1, height: 40, color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex),
-
                   _MiniStat(icon: LucideIcons.checkCircle2, value: '${resumo.confirmadas}', label: 'confirmadas', color: AppColors.statusSuccess, isDark: isDark),
                   Container(width: 1, height: 40, color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex),
-
                   _MiniStat(icon: LucideIcons.dollarSign, value: fmt.format(resumo.receitaParticularHoje), label: 'receita particular', color: AppColors.statusInfo, isDark: isDark),
                 ],
               ),
@@ -400,26 +1092,46 @@ class _MiniStat extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 1. DASHBOARD (melhorado com comparativos e pacotes)
+// 1. DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════
 class _SalaDashboard extends StatelessWidget {
   final DateTime data;
   final bool isDark;
-  const _SalaDashboard({required this.data, required this.isDark});
+  final List<AgendamentoSalaAtr> agendamentos;
+  final List<Map<String, dynamic>> despesas;
+  final List<PacoteSessao> pacotes;
+  final double lucroLiquido;
+  final double variacao;
+  final double ocupacao;
+  final double ocupacaoAnt;
+  final double inadimplencia;
+  final AgendamentoSalaAtr? proximo;
+  final double receitaPacotes;
+  final int sessoesPacotes;
+  final void Function(String clienteId, String nome)? onCreatePacote;
+  final VoidCallback? onNewPacote;
+
+  const _SalaDashboard({
+    required this.data,
+    required this.isDark,
+    required this.agendamentos,
+    required this.despesas,
+    required this.pacotes,
+    required this.lucroLiquido,
+    required this.variacao,
+    required this.ocupacao,
+    required this.ocupacaoAnt,
+    required this.inadimplencia,
+    required this.proximo,
+    required this.receitaPacotes,
+    required this.sessoesPacotes,
+    this.onCreatePacote,
+    this.onNewPacote,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final state = SalaAtrState.instance;
     final fmt = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-
-    final lucro = state.lucroLiquidoMes(data.month, data.year);
-    final variacao = state.variacaoLucro(data.month, data.year);
-    final ocupacao = state.ocupacaoPerc(data.month, data.year);
-    final ocupacaoAnt = state.ocupacaoPercMesAnterior(data.month, data.year);
-    final inadimplencia = state.inadimplenciaMes(data.month, data.year);
-    final proximo = state.proximoCliente();
-    final receitaPacotes = state.totalRecebidoPacotes();
-    final sessoesPacotes = state.totalSessoesPacotesAtivas();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -432,9 +1144,9 @@ class _SalaDashboard extends StatelessWidget {
               Expanded(
                 child: _KpiPremiumCard(
                   label: 'Lucro Líquido',
-                  value: fmt.format(lucro),
+                  value: fmt.format(lucroLiquido),
                   icon: LucideIcons.dollarSign,
-                  iconColor: lucro >= 0 ? AppColors.statusSuccess : AppColors.statusError,
+                  iconColor: lucroLiquido >= 0 ? AppColors.statusSuccess : AppColors.statusError,
                   trend: variacao,
                   isDark: isDark,
                 ).animate().fadeIn().slideX(begin: -20),
@@ -481,19 +1193,19 @@ class _SalaDashboard extends StatelessWidget {
               Text('Próximo Atendimento', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
               const Spacer(),
               if (proximo != null)
-                AtrSecondaryButton(icon: LucideIcons.messageCircle, label: 'WhatsApp', onPressed: () => _abrirWhatsApp(context, proximo.whatsappUrl)),
+                AtrSecondaryButton(icon: LucideIcons.messageCircle, label: 'WhatsApp', onPressed: () => _abrirWhatsApp(context, proximo!.whatsappUrl)),
             ],
           ),
           const SizedBox(height: 14),
           if (proximo != null)
-            _ProximoClienteCard(proximo: proximo, isDark: isDark).animate().slideY(begin: 24, end: 0).fadeIn()
+            _ProximoClienteCard(proximo: proximo!, isDark: isDark).animate().slideY(begin: 24, end: 0).fadeIn()
           else
             BookableAreaEmptyState(message: 'Nenhum paciente agendado', icon: LucideIcons.coffee, isDark: isDark),
 
           const SizedBox(height: 32),
 
           // Pacotes ativos
-          if (state.pacotes.where((p) => p.ativo && !p.isEsgotado).isNotEmpty) ...[
+          if (pacotes.where((p) => p.ativo && !p.isEsgotado).isNotEmpty) ...[
             Row(
               children: [
                 Text('Pacotes de Sessões', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
@@ -501,12 +1213,12 @@ class _SalaDashboard extends StatelessWidget {
                 AtrSecondaryButton(
                   icon: LucideIcons.plus,
                   label: 'Novo Pacote',
-                  onPressed: () => _abrirCriarPacote(context, isDark),
+                  onPressed: () => onNewPacote?.call(),
                 ),
               ],
             ),
             const SizedBox(height: 14),
-            ...state.pacotes
+            ...pacotes
                 .where((p) => p.ativo && !p.isEsgotado)
                 .map((p) => _PacoteCard(pacote: p, isDark: isDark)),
           ],
@@ -731,19 +1443,38 @@ class _PacoteCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 2. AGENDA (com ações rápidas inline #1 e lembretes #2)
+// 2. AGENDA
 // ═══════════════════════════════════════════════════════════════════════════
 class _SalaAgenda extends StatelessWidget {
   final DateTime data;
   final bool isDark;
-  const _SalaAgenda({required this.data, required this.isDark});
+  final List<AgendamentoSalaAtr> agendamentosDoDia;
+  final PacoteSessao? Function(String clienteId) pacoteAtivoDoCliente;
+  final Future<void> Function(String id, StatusAgendamento status) onUpdateStatus;
+  final Future<void> Function(String id) onDelete;
+  final Future<void> Function(DateTime inicio, int duracaoHoras, String nome, String tel, double valorPorHora, int vezesRecorrencia, int diasIntervalo) onAddAgendamento;
+
+  const _SalaAgenda({
+    required this.data,
+    required this.isDark,
+    required this.agendamentosDoDia,
+    required this.pacoteAtivoDoCliente,
+    required this.onUpdateStatus,
+    required this.onDelete,
+    required this.onAddAgendamento,
+  });
 
   void _abrirBookingSheet(BuildContext context, DateTime inicio) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _AdvancedBookingSheet(inicio: inicio, isDark: isDark),
+      builder: (ctx) => _AdvancedBookingSheet(
+        inicio: inicio,
+        isDark: isDark,
+        pacoteAtivoDoCliente: pacoteAtivoDoCliente,
+        onConfirm: onAddAgendamento,
+      ),
     );
   }
 
@@ -795,7 +1526,13 @@ class _SalaAgenda extends StatelessWidget {
                 label: 'Salvar Nota',
                 width: double.infinity,
                 onPressed: () {
-                  SalaAtrState.instance.adicionarNotaSessao(ag.id, ctrl.text);
+                  // Local-only: store nota in the observacoes field via update
+                  if (ctrl.text.trim().isNotEmpty) {
+                    Supabase.instance.client
+                        .from('sala_atr_agendamentos')
+                        .update({'observacoes': ctrl.text.trim()})
+                        .eq('id', ag.id);
+                  }
                   Navigator.pop(ctx);
                 },
               ),
@@ -808,8 +1545,6 @@ class _SalaAgenda extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final agendamentosDoDia = SalaAtrState.instance.agendamentosDoDia(data);
-
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       itemCount: 13,
@@ -848,15 +1583,12 @@ class _SalaAgenda extends StatelessWidget {
                     ? _BlocoOcupadoPremium(
                         ag: agendamento,
                         isDark: isDark,
-                        onMarkPaid: () {
-                          SalaAtrState.instance.atualizarStatus(agendamento.id, StatusAgendamento.pago);
-                        },
-                        onMarkNoShow: () {
-                          SalaAtrState.instance.atualizarStatus(agendamento.id, StatusAgendamento.cancelado_noshow);
-                        },
+                        pacoteAtivo: pacoteAtivoDoCliente(agendamento.clienteId),
+                        onMarkPaid: () => onUpdateStatus(agendamento.id, StatusAgendamento.pago),
+                        onMarkNoShow: () => onUpdateStatus(agendamento.id, StatusAgendamento.cancelado_noshow),
                         onNota: () => _abrirNotaSheet(context, agendamento),
                         onWhatsApp: () => _abrirWhatsApp(context, agendamento.whatsappUrlConfirmacao),
-                        onToggleLembrete: () => SalaAtrState.instance.toggleLembrete24h(agendamento.id),
+                        onDelete: () => onDelete(agendamento.id),
                       ).animate().fadeIn()
                     : _BlocoLivrePremium(isDark: isDark, isPassado: isPassado, onTap: isPassado ? null : () => _abrirBookingSheet(context, horarioBloco)),
               ),
@@ -869,25 +1601,27 @@ class _SalaAgenda extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BLOCO OCUPADO PREMIUM — Ações rápidas inline (#1)
+// BLOCO OCUPADO PREMIUM
 // ═══════════════════════════════════════════════════════════════════════════
 class _BlocoOcupadoPremium extends StatelessWidget {
   final AgendamentoSalaAtr ag;
   final bool isDark;
+  final PacoteSessao? pacoteAtivo;
   final VoidCallback onMarkPaid;
   final VoidCallback onMarkNoShow;
   final VoidCallback onNota;
   final VoidCallback onWhatsApp;
-  final VoidCallback onToggleLembrete;
+  final VoidCallback onDelete;
 
   const _BlocoOcupadoPremium({
     required this.ag,
     required this.isDark,
+    required this.pacoteAtivo,
     required this.onMarkPaid,
     required this.onMarkNoShow,
     required this.onNota,
     required this.onWhatsApp,
-    required this.onToggleLembrete,
+    required this.onDelete,
   });
 
   @override
@@ -896,10 +1630,8 @@ class _BlocoOcupadoPremium extends StatelessWidget {
     final minutosT = ag.fim.difference(ag.inicio).inMinutes;
     final alturaBase = (minutosT / 60) * 78.0;
     final isFuturo = ag.status == StatusAgendamento.pendente || ag.status == StatusAgendamento.confirmado || ag.status == StatusAgendamento.pago;
-    final temPacote = SalaAtrState.instance.pacoteAtivoDoCliente(ag.clienteId) != null;
 
     return Container(
-      // ignore: avoid_print
       height: alturaBase > 78 ? alturaBase : null,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -915,7 +1647,6 @@ class _BlocoOcupadoPremium extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Nome + Status + Ações rápidas
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -928,7 +1659,7 @@ class _BlocoOcupadoPremium extends StatelessWidget {
                         Flexible(
                           child: Text(ag.clienteNome, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
                         ),
-                        if (temPacote) ...[
+                        if (pacoteAtivo != null) ...[
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -968,7 +1699,6 @@ class _BlocoOcupadoPremium extends StatelessWidget {
                   ],
                 ),
               ),
-              // Indicadores de lembrete
               if (ag.lembrete24h || ag.lembrete1h)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -985,7 +1715,6 @@ class _BlocoOcupadoPremium extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          // Barra de ações rápidas inline (#1)
           if (isFuturo) ...[
             Row(
               children: [
@@ -997,19 +1726,7 @@ class _BlocoOcupadoPremium extends StatelessWidget {
                 const SizedBox(width: 8),
                 _AcaoRapida(icon: LucideIcons.messageCircle, label: 'Zap', color: Colors.green, onTap: onWhatsApp),
                 const Spacer(),
-                InkWell(
-                  onTap: onToggleLembrete,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: (ag.lembrete24h || ag.lembrete1h) ? AppColors.statusSuccess.withValues(alpha: 0.1) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: (ag.lembrete24h || ag.lembrete1h) ? AppColors.statusSuccess.withValues(alpha: 0.2) : (isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex)),
-                    ),
-                    child: Icon(LucideIcons.bellOff, size: 13, color: (ag.lembrete24h || ag.lembrete1h) ? AppColors.statusSuccess : (isDark ? Colors.white24 : AppColors.textTertiaryDark)),
-                  ),
-                ),
+                _AcaoRapida(icon: LucideIcons.trash2, label: 'Excluir', color: AppColors.statusError, onTap: onDelete),
               ],
             ),
           ],
@@ -1113,12 +1830,20 @@ class _BlocoLivrePremium extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BOOKING SHEET (com lembretes #2 e pacotes #5)
+// BOOKING SHEET
 // ═══════════════════════════════════════════════════════════════════════════
 class _AdvancedBookingSheet extends StatefulWidget {
   final DateTime inicio;
   final bool isDark;
-  const _AdvancedBookingSheet({required this.inicio, required this.isDark});
+  final PacoteSessao? Function(String clienteId) pacoteAtivoDoCliente;
+  final Future<void> Function(DateTime inicio, int duracaoHoras, String nome, String tel, double valorPorHora, int vezesRecorrencia, int diasIntervalo) onConfirm;
+
+  const _AdvancedBookingSheet({
+    required this.inicio,
+    required this.isDark,
+    required this.pacoteAtivoDoCliente,
+    required this.onConfirm,
+  });
 
   @override
   State<_AdvancedBookingSheet> createState() => _AdvancedBookingSheetState();
@@ -1132,7 +1857,6 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
   int _duracao = 1;
   int _vezesRecorrencia = 1;
   int _diasIntervalo = 7;
-  TipoPagamento _tipoPagamento = TipoPagamento.particular;
   bool _lembrete24h = true;
   bool _lembrete1h = true;
   String get _clienteId => 'cli_${_nomeCtrl.text.replaceAll(' ', '_').toLowerCase()}';
@@ -1141,7 +1865,7 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
   Widget build(BuildContext context) {
     final bg = widget.isDark ? AppColors.surfaceCardDark : Colors.white;
     final txtColor = widget.isDark ? Colors.white : AppColors.surfaceCardDark;
-    final pacote = _nomeCtrl.text.isNotEmpty ? SalaAtrState.instance.pacoteAtivoDoCliente(_clienteId) : null;
+    final pacote = _nomeCtrl.text.isNotEmpty ? widget.pacoteAtivoDoCliente(_clienteId) : null;
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -1157,7 +1881,6 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 children: [
                   Container(
@@ -1179,17 +1902,13 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
               ),
               const SizedBox(height: 24),
 
-              // Nome paciente
               _CampoPremium(controller: _nomeCtrl, label: 'Nome do Paciente', hint: 'Ex: Maria Silva', icon: LucideIcons.user, txtColor: txtColor, isDark: widget.isDark),
               const SizedBox(height: 14),
-              // Telefone
               _CampoPremium(controller: _telCtrl, label: 'WhatsApp', hint: '(11) 99999-0000', icon: LucideIcons.phone, txtColor: txtColor, isDark: widget.isDark, keyboardType: TextInputType.phone),
               const SizedBox(height: 14),
-              // Valor
               _CampoPremium(controller: _valorCtrl, label: 'Valor por Hora (R\$)', hint: '150.00', icon: LucideIcons.dollarSign, txtColor: txtColor, isDark: widget.isDark, keyboardType: TextInputType.number),
               const SizedBox(height: 20),
 
-              // Duração
               _SecaoTitulo(label: 'Duração', txtColor: txtColor),
               const SizedBox(height: 8),
               Wrap(
@@ -1206,25 +1925,6 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
               ),
               const SizedBox(height: 18),
 
-              // Pagamento
-              _SecaoTitulo(label: 'Forma de Pagamento', txtColor: txtColor),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: TipoPagamento.values.map((t) => ChoiceChip(
-                  label: Text(t.nome, style: TextStyle(color: _tipoPagamento == t ? Colors.white : txtColor, fontSize: 11, fontWeight: FontWeight.w600)),
-                  selectedColor: AppColors.statusSuccess,
-                  backgroundColor: widget.isDark ? AppColors.surfaceHoverDark : const Color(0xFFF3F4F6),
-                  selected: _tipoPagamento == t,
-                  onSelected: (s) => setState(() => _tipoPagamento = t),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  side: BorderSide.none,
-                )).toList(),
-              ),
-              const SizedBox(height: 18),
-
-              // Pacote do cliente
               if (pacote != null) ...[
                 Container(
                   padding: const EdgeInsets.all(14),
@@ -1252,7 +1952,6 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                 const SizedBox(height: 18),
               ],
 
-              // Recorrência
               _SecaoTitulo(label: 'Recorrência', txtColor: txtColor),
               const SizedBox(height: 8),
               Wrap(
@@ -1306,7 +2005,6 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
               ],
               const SizedBox(height: 20),
 
-              // Lembretes (#2)
               _SecaoTitulo(label: 'Lembretes WhatsApp', txtColor: txtColor),
               const SizedBox(height: 8),
               Container(
@@ -1347,17 +2045,14 @@ class _AdvancedBookingSheetState extends State<_AdvancedBookingSheet> {
                 width: double.infinity,
                 onPressed: () {
                   if (_nomeCtrl.text.trim().isEmpty) return;
-                  SalaAtrState.instance.adicionarAgendamento(
-                    inicio: widget.inicio,
-                    duracaoHoras: _duracao,
-                    clienteNome: _nomeCtrl.text.trim(),
-                    clienteTelefone: _telCtrl.text.trim(),
-                    valorPorHora: double.tryParse(_valorCtrl.text) ?? 150.0,
-                    tipoPagamento: _tipoPagamento,
-                    vezesRecorrencia: _vezesRecorrencia,
-                    diasIntervalo: _diasIntervalo,
-                    lembrete24h: _lembrete24h,
-                    lembrete1h: _lembrete1h,
+                  widget.onConfirm(
+                    widget.inicio,
+                    _duracao,
+                    _nomeCtrl.text.trim(),
+                    _telCtrl.text.trim(),
+                    double.tryParse(_valorCtrl.text) ?? 150.0,
+                    _vezesRecorrencia,
+                    _diasIntervalo,
                   );
                   Navigator.pop(context);
                 },
@@ -1427,15 +2122,17 @@ class _CampoPremium extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 3. CRM (com pacotes #5)
+// 3. CRM
 // ═══════════════════════════════════════════════════════════════════════════
 class _SalaCrm extends StatelessWidget {
   final bool isDark;
-  const _SalaCrm({required this.isDark});
+  final List<RelatorioCliente> clientes;
+  final void Function(String clienteId, String nome)? onCreatePacote;
+
+  const _SalaCrm({required this.isDark, required this.clientes, this.onCreatePacote});
 
   @override
   Widget build(BuildContext context) {
-    final clientes = SalaAtrState.instance.gerarCRM();
     final fmt = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
     if (clientes.isEmpty) {
@@ -1495,7 +2192,6 @@ class _SalaCrm extends StatelessWidget {
                   ),
                 ],
               ),
-              // Pacotes ativos do cliente
               if (c.pacotesAtivos.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 ...c.pacotesAtivos.map((p) => Container(
@@ -1519,7 +2215,7 @@ class _SalaCrm extends StatelessWidget {
               if (c.pacotesAtivos.isEmpty && c.totalGasto > 500) ...[
                 const SizedBox(height: 10),
                 InkWell(
-                  onTap: () => _abrirCriarPacoteParaCliente(context, c.clienteId, c.nome, isDark),
+                  onTap: () => onCreatePacote?.call(c.clienteId, c.nome),
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1544,133 +2240,172 @@ class _SalaCrm extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CRIAÇÃO DE PACOTE (Bottom Sheet)
-// ═══════════════════════════════════════════════════════════════════════════
-
-void _abrirCriarPacote(BuildContext context, bool isDark) {
-  _abrirCriarPacoteParaCliente(context, '', '', isDark);
-}
-
-void _abrirCriarPacoteParaCliente(BuildContext context, String clienteId, String clienteNome, bool isDark) {
-  final nomeCtrl = TextEditingController(text: clienteNome);
-  final sessoesCtrl = TextEditingController(text: '10');
-  final valorCtrl = TextEditingController(text: '1200.00');
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceCardDark : Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppColors.statusInfo.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(LucideIcons.package, color: AppColors.statusInfo, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Text('Criar Pacote de Sessões', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 19, fontWeight: FontWeight.w700)),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-            TextField(
-              controller: nomeCtrl,
-              style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
-              decoration: InputDecoration(
-                labelText: 'Paciente',
-                prefixIcon: const Icon(LucideIcons.user, size: 18),
-                filled: true,
-                fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: sessoesCtrl,
-                    keyboardType: TextInputType.number,
-                    style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
-                    decoration: InputDecoration(
-                      labelText: 'Nº de Sessões',
-                      filled: true,
-                      fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: valorCtrl,
-                    keyboardType: TextInputType.number,
-                    style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
-                    decoration: InputDecoration(
-                      labelText: 'Valor do Pacote (R\$)',
-                      filled: true,
-                      fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Valor avulso: R\$ 150,00/sessão • Desconto aplicado automaticamente',
-                style: TextStyle(color: isDark ? Colors.white38 : AppColors.textTertiaryDark, fontSize: 11)),
-            const SizedBox(height: 24),
-            AtrPrimaryButton(
-              label: 'Criar Pacote',
-              width: double.infinity,
-              onPressed: () {
-                if (nomeCtrl.text.trim().isEmpty) return;
-                final total = int.tryParse(sessoesCtrl.text) ?? 10;
-                final valor = double.tryParse(valorCtrl.text) ?? 1200;
-                SalaAtrState.instance.criarPacote(
-                  clienteId: 'cli_${nomeCtrl.text.replaceAll(' ', '_').toLowerCase()}',
-                  clienteNome: nomeCtrl.text.trim(),
-                  totalSessoes: total,
-                  valorPago: valor,
-                  valorAvulso: 150.0,
-                );
-                Navigator.pop(ctx);
-              },
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 4. FINANCEIRO (melhorado)
+// 4. FINANCEIRO
 // ═══════════════════════════════════════════════════════════════════════════
 class _SalaFinanceiro extends StatelessWidget {
   final DateTime data;
   final bool isDark;
-  const _SalaFinanceiro({required this.data, required this.isDark});
+  final List<AgendamentoSalaAtr> agendamentos;
+  final List<Map<String, dynamic>> despesas;
+  final Set<String> togglingIds;
+  final Future<void> Function(String id, bool currentPago) onTogglePago;
+  final Future<void> Function(String id) onDeleteDespesa;
+  final Future<void> Function(String descricao, double valor, DateTime data, String categoria) onAddDespesa;
+
+  const _SalaFinanceiro({
+    required this.data,
+    required this.isDark,
+    required this.agendamentos,
+    required this.despesas,
+    required this.togglingIds,
+    required this.onTogglePago,
+    required this.onDeleteDespesa,
+    required this.onAddDespesa,
+  });
+
+  void _abrirAddDespesa(BuildContext context) {
+    final descCtrl = TextEditingController();
+    final valorCtrl = TextEditingController();
+    final catCtrl = TextEditingController(text: 'Geral');
+    DateTime dataSel = DateTime.now();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surfaceCardDark : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: AppColors.statusError.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(LucideIcons.plusCircle, color: AppColors.statusError, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Text('Nova Despesa', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 19, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: descCtrl,
+                  style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
+                  decoration: InputDecoration(
+                    labelText: 'Descrição',
+                    hintText: 'Ex: Energia Elétrica',
+                    filled: true,
+                    fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: valorCtrl,
+                        keyboardType: TextInputType.number,
+                        style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
+                        decoration: InputDecoration(
+                          labelText: 'Valor (R\$)',
+                          filled: true,
+                          fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: catCtrl,
+                        style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark),
+                        decoration: InputDecoration(
+                          labelText: 'Categoria',
+                          filled: true,
+                          fillColor: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: dataSel,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2030),
+                    );
+                    if (picked != null) {
+                      setSheetState(() => dataSel = picked);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.surfaceDarkAlt : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? AppColors.surfaceElevatedDark : AppColors.borderLightHex),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.calendar, size: 18, color: AppColors.atrOrange),
+                        const SizedBox(width: 10),
+                        Text(DateFormat('dd/MM/yyyy').format(dataSel), style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                AtrPrimaryButton(
+                  label: 'Adicionar Despesa',
+                  width: double.infinity,
+                  onPressed: () {
+                    if (descCtrl.text.trim().isEmpty) return;
+                    final valor = double.tryParse(valorCtrl.text) ?? 0;
+                    onAddDespesa(descCtrl.text.trim(), valor, dataSel, catCtrl.text.trim().isEmpty ? 'Geral' : catCtrl.text.trim());
+                    Navigator.pop(ctx);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final state = SalaAtrState.instance;
     final fmt = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
-    final receita = state.lucroLiquidoMes(data.month, data.year) + state.despesasMes(data.month, data.year);
-    final despesas = state.despesasMes(data.month, data.year);
-    final listDespesas = state.despesas.where((d) => d.data.month == data.month && d.data.year == data.year).toList();
+    final ano = data.year;
+
+    final receitaBruta = agendamentos
+        .where((a) => a.inicio.month == data.month &&
+            a.inicio.year == ano &&
+            (a.status == StatusAgendamento.pago || a.status == StatusAgendamento.realizado))
+        .fold(0.0, (s, a) => s + a.valorTotal);
+    final despesasMes = despesas.where((d) {
+      final dData = DateTime.parse(d['data'] as String);
+      return dData.month == data.month && dData.year == data.year;
+    }).toList();
+
+    final totalDespesas = despesasMes.fold(0.0, (s, d) => s + ((d['valor'] as num).toDouble()));
+    final resultado = receitaBruta - totalDespesas;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -1679,38 +2414,100 @@ class _SalaFinanceiro extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: _KpiPremiumCard(label: 'Receita Operacional', value: fmt.format(receita), icon: LucideIcons.arrowUpCircle, iconColor: AppColors.statusSuccess, isDark: isDark)),
+              Expanded(child: _KpiPremiumCard(label: 'Receita Operacional', value: fmt.format(receitaBruta), icon: LucideIcons.arrowUpCircle, iconColor: AppColors.statusSuccess, isDark: isDark)),
               const SizedBox(width: 14),
-              Expanded(child: _KpiPremiumCard(label: 'Despesas Fixas', value: fmt.format(despesas), icon: LucideIcons.arrowDownCircle, iconColor: AppColors.statusError, isDark: isDark)),
+              Expanded(child: _KpiPremiumCard(label: 'Despesas Fixas', value: fmt.format(totalDespesas), icon: LucideIcons.arrowDownCircle, iconColor: AppColors.statusError, isDark: isDark)),
               const SizedBox(width: 14),
               Expanded(child: _KpiPremiumCard(
                 label: 'Resultado',
-                value: fmt.format(receita - despesas),
+                value: fmt.format(resultado),
                 icon: LucideIcons.scale,
-                iconColor: (receita - despesas) >= 0 ? AppColors.statusSuccess : AppColors.statusError,
+                iconColor: resultado >= 0 ? AppColors.statusSuccess : AppColors.statusError,
                 isDark: isDark,
               )),
             ],
           ),
           const SizedBox(height: 24),
-          Text('Extrato de Despesas', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 16, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 12),
-          ...listDespesas.map((d) => Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: AppColors.statusError.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(LucideIcons.receipt, color: AppColors.statusError, size: 18),
+          Row(
+            children: [
+              Text('Extrato de Despesas', style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontSize: 16, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              AtrSecondaryButton(
+                icon: LucideIcons.plus,
+                label: 'Nova Despesa',
+                onPressed: () => _abrirAddDespesa(context),
               ),
-              title: Text(d.descricao, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontWeight: FontWeight.w600)),
-              subtitle: Text(DateFormat('dd/MM/yyyy').format(d.data), style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark)),
-              trailing: Text(fmt.format(d.valor), style: const TextStyle(color: AppColors.statusError, fontWeight: FontWeight.bold, fontSize: 15)),
-            ),
-          )),
-          if (listDespesas.isEmpty)
-            BookableAreaEmptyState(message: 'Nenhuma despesa neste mês', icon: LucideIcons.receipt, isDark: isDark),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (despesasMes.isEmpty)
+            BookableAreaEmptyState(message: 'Nenhuma despesa neste mês', icon: LucideIcons.receipt, isDark: isDark)
+          else
+            ...despesasMes.map((d) {
+              final id = d['id'] as String;
+              final desc = d['descricao'] as String? ?? '';
+              final valor = (d['valor'] as num).toDouble();
+              final dataDesp = DateTime.parse(d['data'] as String);
+              final pago = d['pago'] as bool? ?? false;
+              final isToggling = togglingIds.contains(id);
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (pago ? AppColors.statusSuccess : AppColors.statusError).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      LucideIcons.receipt,
+                      color: pago ? AppColors.statusSuccess : AppColors.statusError,
+                      size: 18,
+                    ),
+                  ),
+                  title: Text(desc, style: TextStyle(color: isDark ? Colors.white : AppColors.surfaceCardDark, fontWeight: FontWeight.w600)),
+                  subtitle: Text(DateFormat('dd/MM/yyyy').format(dataDesp), style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textMutedDark)),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      isToggling
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.atrOrange))
+                          : InkWell(
+                              onTap: () => onTogglePago(id, pago),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: pago ? AppColors.statusSuccess.withValues(alpha: 0.12) : AppColors.statusWarning.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: pago ? AppColors.statusSuccess.withValues(alpha: 0.2) : AppColors.statusWarning.withValues(alpha: 0.2)),
+                                ),
+                                child: Text(
+                                  pago ? 'PAGO' : 'PENDENTE',
+                                  style: TextStyle(
+                                    color: pago ? AppColors.statusSuccess : AppColors.statusWarning,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                      const SizedBox(width: 10),
+                      Text(fmt.format(valor), style: const TextStyle(color: AppColors.statusError, fontWeight: FontWeight.bold, fontSize: 15)),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () => onDeleteDespesa(id),
+                        borderRadius: BorderRadius.circular(6),
+                        child: const Icon(LucideIcons.trash2, size: 14, color: AppColors.textMutedDark),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -1722,11 +2519,11 @@ class _SalaFinanceiro extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 class _SalaRecebimentosFuturos extends StatelessWidget {
   final bool isDark;
-  const _SalaRecebimentosFuturos({required this.isDark});
+  final List<RecebimentoFuturoMes> recebimentos;
+  const _SalaRecebimentosFuturos({required this.isDark, required this.recebimentos});
 
   @override
   Widget build(BuildContext context) {
-    final recebimentos = SalaAtrState.instance.gerarRecebimentosFuturos();
     final fmt = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
     if (recebimentos.isEmpty) {
@@ -1850,4 +2647,3 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 }
-

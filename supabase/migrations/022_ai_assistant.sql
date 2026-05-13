@@ -167,25 +167,23 @@ CREATE OR REPLACE FUNCTION public.create_maintenances_batch(p_items JSONB)
 RETURNS JSONB AS $$
 DECLARE
   item JSONB;
-  new_id UUID;
-  created_ids UUID[] := '{}';
-  tenant_uuid UUID;
+  new_id TEXT;
+  created_ids TEXT[] := '{}';
 BEGIN
-  -- Extrai tenant_id do JWT (primeiro item deve ter tenant consistente)
   FOR item IN SELECT * FROM jsonb_array_elements(p_items)
   LOOP
     INSERT INTO public.manutencoes (
-      veiculo_id, data_servico, descricao, tipo_servico,
-      oficina, valor_servico, km_registro, tenant_id
+      veiculo_placa, data, descricao, tipo,
+      fornecedor, custo, km_no_servico, titulo
     ) VALUES (
-      (item->>'vehicle_id')::UUID,
-      (item->>'date')::DATE,
+      item->>'placa',
+      (item->>'date')::TIMESTAMPTZ,
       item->>'description',
       item->>'type',
       item->>'workshop_name',
       (item->>'cost')::NUMERIC,
       (item->>'mileage')::INTEGER,
-      (auth.jwt() -> 'app_metadata' ->> 'tenant_id')::UUID
+      item->>'type'
     )
     RETURNING id INTO new_id;
 

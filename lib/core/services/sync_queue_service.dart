@@ -14,6 +14,8 @@ import '../utils/app_logger.dart';
 /// não falhem com duplicate key.
 class SyncQueueService extends ChangeNotifier {
   static const String _queueKey = 'becap_offline_queue';
+  static const String _syncLockKey = 'becap_sync_lock';
+  static const Duration _lockTimeout = Duration(seconds: 30);
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -48,12 +50,21 @@ class SyncQueueService extends ChangeNotifier {
   Future<void> _attemptSync() async {
     if (_isSyncing) return;
 
+    final prefs = await SharedPreferences.getInstance();
+
+    // Lock multi-tab: evita que duas abas sincronizem simultaneamente
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lockValue = prefs.getInt(_syncLockKey);
+    if (lockValue != null && (now - lockValue) < _lockTimeout.inMilliseconds) {
+      return; // Outra aba já está sincronizando
+    }
+    await prefs.setInt(_syncLockKey, now);
+
     _isSyncing = true;
     notifyListeners();
 
     try {
       final client = Supabase.instance.client;
-      final prefs = await SharedPreferences.getInstance();
       final rawQueue = prefs.getStringList(_queueKey) ?? [];
 
       if (rawQueue.isEmpty) {
@@ -129,7 +140,7 @@ class SyncQueueService extends ChangeNotifier {
           if (pendingKeys.contains(req['id'] as String)) {
             pending.add(item);
           }
-        } catch (_) {}
+        } catch (e) { AppLogger.warning('SyncQueue: item corrompido na limpeza: $e'); }
       }
 
       _queueLength = pending.length;
@@ -138,6 +149,7 @@ class SyncQueueService extends ChangeNotifier {
       AppLogger.error('SyncQueue: erro no worker de sincronização', e);
     } finally {
       _isSyncing = false;
+      await prefs.remove(_syncLockKey);
       notifyListeners();
     }
   }

@@ -10,12 +10,30 @@ import '../../core/widgets/atr_page_background.dart';
 import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/app_sidebar.dart';
 
+import '../../core/utils/export_csv_stub.dart'
+    if (dart.library.html) '../../core/utils/export_csv_html.dart'
+    if (dart.library.io) '../../core/utils/export_csv_io.dart';
+
 // ═══════════════════════════════════════════════════════════════════════
 // Tela de Score de Motoristas
 // ═══════════════════════════════════════════════════════════════════════
 
-class ScoreMotoristaScreen extends StatelessWidget {
+enum _PeriodoScore { todos }
+
+class ScoreMotoristaScreen extends StatefulWidget {
   const ScoreMotoristaScreen({super.key});
+
+  @override
+  State<ScoreMotoristaScreen> createState() => _ScoreMotoristaScreenState();
+}
+
+class _ScoreMotoristaScreenState extends State<ScoreMotoristaScreen> {
+  _PeriodoScore _periodo = _PeriodoScore.todos;
+
+  // Os scores são calculados com base em dados atuais (CNH, total
+  // de multas, kmPorMes) que não possuem recorte temporal histórico.
+  // O filtro de período está oculto até que dados de multas por data
+  // e hodometro por período estejam integrados ao cálculo.
 
   @override
   Widget build(BuildContext context) {
@@ -39,12 +57,11 @@ class ScoreMotoristaScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AtrTopBar(
-                    title: 'Score de Motoristas',
-                    subtitle: 'Ranking por desempenho e conformidade',
-                  ),
+                  _buildHeader(scores),
                   _buildResumo(isDark, nExcelente, nBom, nRegular, nCritico),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
+                  _buildPeriodoFiltro(),
+                  const SizedBox(height: 20),
                   if (fleet.isLoading)
                     const Expanded(child: Center(child: CircularProgressIndicator()))
                   else if (scores.isEmpty)
@@ -64,6 +81,124 @@ class ScoreMotoristaScreen extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(List<ScoreMotorista> scores) {
+    return AtrTopBar(
+      title: 'Score de Motoristas',
+      subtitle: 'Ranking por desempenho e conformidade',
+      actions: [
+        PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'csv') _exportCsv(scores);
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(
+              value: 'csv',
+              child: Row(
+                children: [
+                  Icon(LucideIcons.fileSpreadsheet, size: 16),
+                  SizedBox(width: 8),
+                  Text('Exportar CSV'),
+                ],
+              ),
+            ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppColors.atrOrange.withValues(alpha: 0.3),
+              ),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(LucideIcons.download, size: 14, color: AppColors.atrOrange),
+                SizedBox(width: 6),
+                Text('Exportar', style: TextStyle(fontSize: 12, color: AppColors.atrOrange)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _exportCsv(List<ScoreMotorista> scores) async {
+    final buffer = StringBuffer();
+    buffer.writeln('"POSICAO";"MOTORISTA";"PONTUACAO";"CLASSIFICACAO";"MULTAS";"KM/MES";"CNH";"VEICULOS"');
+
+    for (var i = 0; i < scores.length; i++) {
+      final s = scores[i];
+      final kmFmt = s.kmMedioMensal > 0 ? s.kmMedioMensal.toStringAsFixed(0) : '0';
+      buffer.writeln(
+        '${_csvField((i + 1).toString())};${_csvField(s.nomeMotorista)};${_csvField(s.pontuacaoTotal.toString())};${_csvField(s.classificacao)};${_csvField(s.multas.toString())};${_csvField(kmFmt)};${_csvField(s.statusCnh.name)};${_csvField(s.placasVeiculos.join(', '))}',
+      );
+    }
+
+    try {
+      final fileName = 'score_motoristas_${DateTime.now().millisecondsSinceEpoch}.csv';
+      await exportCsv(fileName, buffer.toString());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('CSV exportado: $fileName')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao exportar CSV: $e')),
+        );
+      }
+    }
+  }
+
+  String _csvField(String value) {
+    final escaped = value.replaceAll('"', '""');
+    return '"$escaped"';
+  }
+
+  Widget _buildPeriodoFiltro() {
+    // O cálculo de scores usa dados agregados (total de multas, km médio)
+    // sem recorte temporal. Os filtros de período ficam ocultos até que a
+    // integração com multas.data_infracao e hodometros.created_at seja feita.
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildPeriodoChip('Todos', _PeriodoScore.todos),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPeriodoChip(String label, _PeriodoScore periodo) {
+    final ativo = _periodo == periodo;
+    const cor = AppColors.atrOrange;
+    return GestureDetector(
+      onTap: () => setState(() => _periodo = periodo),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: ativo ? cor.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: ativo ? cor.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.07),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: ativo ? cor : AppColors.textSecondaryDark,
           ),
         ),
       ),

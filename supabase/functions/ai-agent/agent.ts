@@ -1,8 +1,8 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callClaude } from "./_shared/claude.ts";
+import { callClaude, callGpt } from "./_shared/claude.ts";
 import { buildSystemPrompt } from "./system_prompt.ts";
 import { TOOLS_REGISTRY, TOOL_DEFINITIONS } from "./tools/index.ts";
-import { createPendingAudit, executeConfirmedAction } from "./confirmation.ts";
+import { createPendingAudit, executeConfirmedAction, cancelAction } from "./confirmation.ts";
 import type {
   AgentParams,
   AgentResponse,
@@ -10,6 +10,7 @@ import type {
   ClaudeContentBlock,
   PendingAction,
   ToolContext,
+  ToolDefinition,
   AiConversation,
   AiMessage,
 } from "./types.ts";
@@ -17,10 +18,36 @@ import type {
 // ================================================================
 // Constantes
 // ================================================================
-const MAX_ITERATIONS = 10;
-const HISTORY_LIMIT = 20;
-const CLAUDE_MODEL = "claude-sonnet-4-20250514";
+const MAX_ITERATIONS = 15;
+const HISTORY_LIMIT = 80;
+const DEEPSEEK_MODEL = "deepseek-chat";
+const GPT_MODEL = "gpt-4o";
 const MAX_TOKENS = 4096;
+
+// ================================================================
+// Helper: detecta se mensagem contem imagens
+// ================================================================
+
+function messageHasImages(content: ClaudeContentBlock[]): boolean {
+  return content.some((b) => b.type === "image");
+}
+
+// ================================================================
+// Helper: escolhe e chama o modelo correto
+// ================================================================
+
+type CallModelParams = {
+  system: string;
+  messages: ClaudeMessage[];
+  tools: ToolDefinition[];
+  max_tokens: number;
+};
+
+function callModel(params: CallModelParams, forceGpt: boolean) {
+  const model = forceGpt ? GPT_MODEL : DEEPSEEK_MODEL;
+  const call = forceGpt ? callGpt : callClaude;
+  return call({ model, ...params });
+}
 
 // ================================================================
 // Helper: constroi ToolContext com compatibilidade (supabase)
@@ -147,6 +174,42 @@ async function loadOrCreateConversation(
 }
 
 // ================================================================
+// Helper: remove imagens do histórico para não inflar o payload
+// (a mensagem atual do usuário NÃO é afetada)
+// ================================================================
+
+function stripImagesFromHistory(content: ClaudeContentBlock[]): ClaudeContentBlock[] {
+  return content.map((block) =>
+    block.type === "image"
+      ? ({ type: "text", text: "[documento PDF/imagem processado anteriormente]" } as ClaudeContentBlock)
+      : block
+  );
+}
+
+// ================================================================
+// Helper: extrai content_hashes de mensagens com marcador [content_hashes:...]
+// ================================================================
+
+function extractContentHashes(content: ClaudeContentBlock[]): string[] {
+  const hashes: string[] = [];
+  for (const block of content) {
+    if (block.type === "text") {
+      const match = block.text.match(/\[content_hashes:([^\]]+)\]/);
+      if (match) {
+        const hashList = match[1]
+          .split(",")
+          .map((h) => h.trim())
+          .filter((h) => /^[a-f0-9]{64}$/i.test(h));
+        hashes.push(...hashList);
+        // Remove o marcador do texto visivel para o modelo
+        block.text = block.text.replace(/\[content_hashes:[^\]]+\]\s*/g, "").trim();
+      }
+    }
+  }
+  return hashes;
+}
+
+// ================================================================
 // Helper: extrai blocos de texto da resposta do Claude
 // ================================================================
 
@@ -170,6 +233,8 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
     conversation_id,
     message,
     confirm_action_id,
+    cancel_action_id,
+    content_hashes: paramContentHashes,
     userClient,
     serviceClient,
   } = params;
@@ -186,18 +251,14 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
   );
 
   // ----------------------------------------------------------
-  // Passo 2: Se for confirmacao de acao pendente
+  // Passo 2: Se for cancelamento de acao pendente
   // ----------------------------------------------------------
-  if (confirm_action_id) {
-    const result = await executeConfirmedAction(confirm_action_id, {
-      tenant_id,
-      user_id,
-      serviceClient,
-    });
+  if (cancel_action_id) {
+    const ok = await cancelAction(cancel_action_id, user_id, tenant_id, serviceClient);
 
-    const responseText = result.ok
-      ? `Acao executada com sucesso!\n\n${result.display || ""}`
-      : `Falha ao executar acao: ${result.error}`;
+    const responseText = ok
+      ? "Acao cancelada."
+      : "Nao foi possivel cancelar a acao (ja processada ou nao encontrada).";
 
     const responseContent: ClaudeContentBlock[] = [
       { type: "text", text: responseText },
@@ -208,12 +269,9 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
       content: responseContent,
     };
 
-    // Salva a mensagem de confirmacao
-    // Primeiro salva a mensagem do usuario (pedido de confirmacao)
     await saveMessage(convId, "user", message.content, null, serviceClient);
     await saveMessage(convId, "assistant", responseContent, null, serviceClient);
 
-    // Atualiza updated_at da conversa
     await serviceClient
       .from("ai_conversations")
       .update({ updated_at: new Date().toISOString() })
@@ -227,9 +285,111 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
   }
 
   // ----------------------------------------------------------
+  // Passo 3: Se for confirmacao de acao pendente
+  // ----------------------------------------------------------
+  if (confirm_action_id) {
+    // 1. Executa a acao confirmada
+    const result = await executeConfirmedAction(confirm_action_id, {
+      tenant_id,
+      user_id,
+      userClient,
+      serviceClient,
+    });
+
+    const responseText = result.ok
+      ? `✅ ${result.display || "Registrado com sucesso!"}`
+      : `❌ Falha ao executar: ${result.error}`;
+
+    const responseContent: ClaudeContentBlock[] = [{ type: "text", text: responseText }];
+
+    // 2. Salva a intencao e o resultado no historico
+    await saveMessage(convId, "user", [{ type: "text", text: "confirmar" }], ["__confirm__"], serviceClient);
+    await saveMessage(convId, "assistant", responseContent, null, serviceClient);
+
+    await serviceClient
+      .from("ai_conversations")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", convId);
+
+    return {
+      conversation_id: convId,
+      message: { role: "assistant", content: responseContent },
+      pending_actions: [],
+    };
+  }
+
+  // ----------------------------------------------------------
   // Passo 3: Carrega historico
   // ----------------------------------------------------------
   const history = await loadMessageHistory(convId, serviceClient);
+
+  // ----------------------------------------------------------
+  // Passo 3.5: Extrai content_hashes e verifica PDFs ja processados
+  // ----------------------------------------------------------
+  const contentHashes = [
+    ...(paramContentHashes || []),
+    ...extractContentHashes(message.content),
+  ];
+
+  if (contentHashes.length > 0) {
+    const checkedIds = new Set<string>();
+    const matches: Array<{ tool_name: string; created_at: string; status: string }> = [];
+    for (const hash of contentHashes) {
+      const { data } = await serviceClient
+        .from("ai_action_audit")
+        .select("id, tool_name, created_at, status")
+        .eq("tenant_id", tenant_id)
+        .eq("user_id", user_id)
+        .contains("content_hashes", [hash])
+        .limit(10);
+      if (data) {
+        for (const row of data) {
+          if (!checkedIds.has(row.id)) {
+            checkedIds.add(row.id);
+            matches.push(row);
+          }
+        }
+      }
+    }
+
+    if (matches.length > 0) {
+      const executed = matches.filter((m) => m.status === "executed");
+      const pending = matches.filter((m) => m.status === "pending_confirmation");
+
+      let warningText = "";
+      if (executed.length > 0) {
+        const dates = executed
+          .map((e) => new Date(e.created_at).toLocaleDateString("pt-BR"))
+          .join(", ");
+        warningText =
+          `⚠️ Detectei que este PDF ja foi processado com sucesso (${dates}). ` +
+          `Deseja reprocessar mesmo assim? Responda "sim, reprocessar" para continuar.`;
+      } else if (pending.length > 0) {
+        const dates = pending
+          .map((e) => new Date(e.created_at).toLocaleDateString("pt-BR"))
+          .join(", ");
+        warningText =
+          `⚠️ Este PDF tem acoes pendentes de confirmacao desde ${dates}. ` +
+          `Confirme ou cancele antes de reenviar.`;
+      }
+
+      if (warningText) {
+        const warningContent: ClaudeContentBlock[] = [{ type: "text", text: warningText }];
+        await saveMessage(convId, "assistant", warningContent, null, serviceClient);
+
+        await serviceClient
+          .from("ai_conversations")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", convId);
+
+        return {
+          conversation_id: convId,
+          message: { role: "assistant", content: warningContent },
+          pending_actions: [],
+        };
+      }
+    }
+  }
 
   // ----------------------------------------------------------
   // Passo 4: Salva mensagem do usuario
@@ -239,36 +399,37 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
   // ----------------------------------------------------------
   // Passo 5: Constroi array de mensagens para Claude
   // ----------------------------------------------------------
-  const messages: ClaudeMessage[] = [
-    ...history
-      .filter((m) => m.role !== "tool_result")
-      .map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content as ClaudeContentBlock[],
-      })),
-    { role: "user" as const, content: message.content },
-  ];
+  // tool_result messages sao mantidas como "user" para preservar
+  // o pareamento com tool_use blocks do assistant. Sem isso,
+  // tool_use blocks ficam orfaos e o modelo perde o contexto.
+  const messages: ClaudeMessage[] = [];
+  for (const m of history) {
+    const role = m.role === "tool_result" ? "user" as const : m.role as "user" | "assistant";
+    const content = stripImagesFromHistory(m.content as ClaudeContentBlock[]);
+    messages.push({ role, content });
+  }
+  messages.push({ role: "user" as const, content: message.content });
 
   // ----------------------------------------------------------
   // Passo 6: System prompt
   // ----------------------------------------------------------
-  const systemPrompt = buildSystemPrompt(tenant_id);
+  const systemPrompt = buildSystemPrompt();
 
   // ----------------------------------------------------------
   // Passo 7: Loop de tool use (max 10 iteracoes)
   // ----------------------------------------------------------
   let finalAssistantMessage: ClaudeMessage | null = null;
   const allPendingActions: PendingAction[] = [];
+  const forceGpt = messageHasImages(message.content);
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    // a. Chama Claude
-    const response = await callClaude({
-      model: CLAUDE_MODEL,
+    // a. Chama modelo (GPT-4o se tiver imagens, DeepSeek se texto puro)
+    const response = await callModel({
       system: systemPrompt,
       messages,
       tools: TOOL_DEFINITIONS,
       max_tokens: MAX_TOKENS,
-    });
+    }, forceGpt);
 
     // b. Se stop_reason != 'tool_use': salva resposta, retorna
     if (response.stop_reason !== "tool_use") {
@@ -348,6 +509,7 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
             conversation_id: convId,
             tool_name: block.name,
             input: block.input,
+            content_hashes: contentHashes.length > 0 ? contentHashes : undefined,
             serviceClient,
           });
 
@@ -417,23 +579,61 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
     //    Depois retornamos com pending_actions para o frontend.
     if (hasWriteTool) {
       // Chama Claude uma ultima vez para responder ao usuario sobre as confirmacoes
-      const finalResponse = await callClaude({
-        model: CLAUDE_MODEL,
+      const finalResponse = await callModel({
         system: systemPrompt,
         messages,
         tools: TOOL_DEFINITIONS,
         max_tokens: MAX_TOKENS,
-      });
+      }, forceGpt);
+
+      // Se o modelo ainda retornar tool_use (improvável mas possível), filtra para só texto
+      const safeContent: ClaudeContentBlock[] = finalResponse.content.some(b => b.type === "tool_use")
+        ? finalResponse.content.filter(b => b.type !== "tool_use")
+        : finalResponse.content;
+
+      // Detecta duplicatas nos tool_results e injeta aviso visivel na resposta
+      let duplicateWarning = "";
+      for (const block of toolResultBlocks) {
+        if (block.type === "tool_result" && !block.is_error) {
+          try {
+            const parsed = JSON.parse(block.content);
+            if (
+              parsed.preview &&
+              (parsed.preview.includes("DUPLICATA") ||
+               parsed.preview.includes("duplicidade") ||
+               parsed.preview.includes("similar(es)"))
+            ) {
+              if (!duplicateWarning) {
+                duplicateWarning =
+                  "\\n\\n⚠️ **ATENCAO: Possiveis duplicidades detectadas.** " +
+                  "Verifique os cards de confirmacao acima. " +
+                  "Confirme apenas se realmente deseja registrar novamente.";
+              }
+              // Marca o pending action correspondente como duplicado
+              const matchingAction = allPendingActions.find(
+                (a) => a.action_id === parsed.action_id
+              );
+              if (matchingAction) {
+                (matchingAction as Record<string, unknown>).has_duplicates = true;
+              }
+            }
+          } catch { /* ignora erros de parse */ }
+        }
+      }
+
+      if (duplicateWarning) {
+        safeContent.push({ type: "text", text: duplicateWarning });
+      }
 
       finalAssistantMessage = {
         role: "assistant",
-        content: finalResponse.content,
+        content: safeContent,
       };
 
-      await saveMessage(convId, "assistant", finalResponse.content, null, serviceClient);
+      await saveMessage(convId, "assistant", safeContent, null, serviceClient);
 
       // Atualiza titulo e timestamp
-      const textPreview = extractTextBlocks(finalResponse.content);
+      const textPreview = extractTextBlocks(safeContent);
       if (textPreview) {
         const title = textPreview.length > 80 ? textPreview.substring(0, 77) + "..." : textPreview;
         await serviceClient

@@ -9,7 +9,10 @@ import '../locacao_provider.dart';
 
 class OcorrenciaFormSheet extends StatefulWidget {
   final String contratoId;
-  const OcorrenciaFormSheet({super.key, required this.contratoId});
+  final Ocorrencia? ocorrencia;
+  const OcorrenciaFormSheet({super.key, required this.contratoId, this.ocorrencia});
+
+  bool get isEditing => ocorrencia != null;
 
   @override
   State<OcorrenciaFormSheet> createState() => _OcorrenciaFormSheetState();
@@ -19,13 +22,30 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
   final _formKey = GlobalKey<FormState>();
   bool _saving = false;
 
-  OcorrenciaTipo _tipo = OcorrenciaTipo.multa;
-  String _responsavel = 'cliente';
-  final _descricaoCtrl = TextEditingController();
-  final _valorCtrl = TextEditingController();
-  final _impactoCtrl = TextEditingController();
-  final _obsCtrl = TextEditingController();
-  DateTime _dataOcorrencia = DateTime.now();
+  late OcorrenciaTipo _tipo;
+  late String _responsavel;
+  late final TextEditingController _descricaoCtrl;
+  late final TextEditingController _valorCtrl;
+  late final TextEditingController _impactoCtrl;
+  late final TextEditingController _obsCtrl;
+  late DateTime _dataOcorrencia;
+
+  @override
+  void initState() {
+    super.initState();
+    final o = widget.ocorrencia;
+    _tipo = o?.tipo ?? OcorrenciaTipo.multa;
+    _responsavel = o?.responsavelPagamento ?? 'cliente';
+    _descricaoCtrl = TextEditingController(text: o?.descricao ?? '');
+    _valorCtrl = TextEditingController(
+      text: (o?.valorEstimado ?? 0) > 0 ? o!.valorEstimado.toStringAsFixed(2) : '',
+    );
+    _impactoCtrl = TextEditingController(
+      text: (o?.impactoFinanceiro ?? 0) > 0 ? o!.impactoFinanceiro.toStringAsFixed(2) : '',
+    );
+    _obsCtrl = TextEditingController(text: o?.observacoes ?? '');
+    _dataOcorrencia = o?.dataOcorrencia ?? DateTime.now();
+  }
 
   @override
   void dispose() {
@@ -43,7 +63,7 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
       final username =
           context.read<AuthService>().currentUser?.username ?? 'desconhecido';
       final ocorrencia = Ocorrencia(
-        id: '',
+        id: widget.ocorrencia?.id ?? '',
         contratoId: widget.contratoId,
         tipo: _tipo,
         descricao: _descricaoCtrl.text.trim(),
@@ -53,17 +73,26 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
         impactoFinanceiro:
             double.tryParse(_impactoCtrl.text.replaceAll(',', '.')) ?? 0.0,
         responsavelPagamento: _responsavel,
+        fotos: widget.ocorrencia?.fotos ?? const [],
         observacoes: _obsCtrl.text.trim(),
-        registradoPor: username,
-        createdAt: DateTime.now(),
+        registradoPor: widget.ocorrencia?.registradoPor ?? username,
+        status: widget.ocorrencia?.status ?? OcorrenciaStatus.aberta,
+        valorFinal: widget.ocorrencia?.valorFinal,
+        resolvidoPor: widget.ocorrencia?.resolvidoPor,
+        dataResolucao: widget.ocorrencia?.dataResolucao,
+        createdAt: widget.ocorrencia?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
-      await context.read<LocacaoProvider>().criarOcorrencia(ocorrencia);
+      if (widget.isEditing) {
+        await context.read<LocacaoProvider>().atualizarOcorrencia(ocorrencia);
+      } else {
+        await context.read<LocacaoProvider>().criarOcorrencia(ocorrencia);
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao registrar: $e')),
+          SnackBar(content: Text('Erro ao ${widget.isEditing ? 'atualizar' : 'registrar'}: $e')),
         );
       }
     } finally {
@@ -111,8 +140,8 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
                   ),
                 ),
               ),
-              const Text('Nova Ocorrência',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              Text(widget.isEditing ? 'Editar Ocorrência' : 'Nova Ocorrência',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 20),
 
               // Tipo de ocorrência
@@ -235,7 +264,7 @@ class _OcorrenciaFormSheetState extends State<OcorrenciaFormSheet> {
               const SizedBox(height: 28),
 
               AtrPrimaryButton(
-                label: 'Registrar Ocorrência',
+                label: widget.isEditing ? 'Atualizar Ocorrência' : 'Registrar Ocorrência',
                 loading: _saving,
                 onPressed: _salvar,
               ),

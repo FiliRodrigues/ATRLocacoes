@@ -89,15 +89,15 @@ export const getVehicleDetails: AtrTool = {
         .eq("status", "ativo")
         .maybeSingle(),
 
-      // Últimas 3 manutenções (usa veiculoId para buscar pela FK)
+      // Últimas 3 manutenções
       supabase
         .from("manutencoes")
         .select(
-          "id, veiculo_id, data_servico, descricao, tipo_servico, oficina, valor_servico, km_registro, status_pagamento, observacoes"
+          "id, veiculo_id, data, descricao, tipo, fornecedor, custo, km_no_servico"
         )
         .eq("tenant_id", tenantId)
         .eq("veiculo_id", veiculoId)
-        .order("data_servico", { ascending: false })
+        .order("data", { ascending: false })
         .limit(3),
     ]);
 

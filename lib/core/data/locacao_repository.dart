@@ -32,7 +32,7 @@ class LocacaoRepository {
       query = query.eq('status', status.name);
     }
     
-    final rows = await query.order('created_at', ascending: false);
+    final rows = await query.order('created_at', ascending: false).limit(500);
     return rows
         .map((r) => Contrato.fromRow(r))
         .toList();
@@ -88,10 +88,11 @@ class LocacaoRepository {
   Future<List<ChecklistEvento>> fetchChecklist(String contratoId) async {
     final rows = await _db
         .from('checklist_eventos')
-        .select('id, contrato_id, tipo, km_odometro, km_percorridos, combustivel_pct, observacoes, fotos, doc_url, assinatura_url, realizado_por, created_at')
+        .select('id, contrato_id, tipo, km_odometro, km_percorridos, combustivel_pct, observacoes, fotos, doc_url, assinatura_url, realizado_por, created_at, itens')
         .eq('contrato_id', contratoId)
         .eq('tenant_id', _tenantId)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .limit(500);
     return rows
         .map((r) => ChecklistEvento.fromRow(r))
         .toList();
@@ -101,7 +102,18 @@ class LocacaoRepository {
     final row = await _db
         .from('checklist_eventos')
         .insert({...evento.toRow(), 'tenant_id': _tenantId})
-        .select('id, contrato_id, tipo, km_odometro, km_percorridos, combustivel_pct, observacoes, fotos, doc_url, assinatura_url, realizado_por, created_at')
+        .select('id, contrato_id, tipo, km_odometro, km_percorridos, combustivel_pct, observacoes, fotos, doc_url, assinatura_url, realizado_por, created_at, itens')
+        .single();
+    return ChecklistEvento.fromRow(row);
+  }
+
+  Future<ChecklistEvento> updateChecklist(ChecklistEvento evento) async {
+    final row = await _db
+        .from('checklist_eventos')
+        .update(evento.toRow())
+        .eq('id', evento.id)
+        .eq('tenant_id', _tenantId)
+        .select('id, contrato_id, tipo, km_odometro, km_percorridos, combustivel_pct, observacoes, fotos, doc_url, assinatura_url, realizado_por, created_at, itens')
         .single();
     return ChecklistEvento.fromRow(row);
   }
@@ -116,7 +128,8 @@ class LocacaoRepository {
         .select('id, contrato_id, tipo, status, descricao, data_ocorrencia, valor_estimado, valor_final, impacto_financeiro, responsavel_pagamento, fotos, observacoes, registrado_por, resolvido_por, data_resolucao, created_at, updated_at')
         .eq('contrato_id', contratoId)
         .eq('tenant_id', _tenantId)
-        .order('data_ocorrencia', ascending: false);
+        .order('data_ocorrencia', ascending: false)
+        .limit(500);
     return rows
         .map((r) => Ocorrencia.fromRow(r))
         .toList();
@@ -127,7 +140,8 @@ class LocacaoRepository {
         .from('ocorrencias')
         .select('id, contrato_id, tipo, status, descricao, data_ocorrencia, valor_estimado, valor_final, impacto_financeiro, responsavel_pagamento, fotos, observacoes, registrado_por, resolvido_por, data_resolucao, created_at, updated_at')
         .eq('tenant_id', _tenantId)
-        .order('data_ocorrencia', ascending: false);
+        .order('data_ocorrencia', ascending: false)
+        .limit(500);
     return rows
         .map((r) => Ocorrencia.fromRow(r))
         .toList();
@@ -144,17 +158,13 @@ class LocacaoRepository {
 
   Future<Ocorrencia> updateOcorrencia(Ocorrencia ocorrencia) async {
     final updatePayload = {
-      'status': ocorrencia.status.name == 'emAnalise'
-          ? 'em_analise'
-          : ocorrencia.status.name,
-      'valor_final': ocorrencia.valorFinal,
-      'impacto_financeiro': ocorrencia.impactoFinanceiro,
+      ...ocorrencia.toInsertRow(),
       'resolvido_por': ocorrencia.resolvidoPor,
       'data_resolucao': ocorrencia.dataResolucao
           ?.toIso8601String()
           .split('T')
           .first,
-      'observacoes': ocorrencia.observacoes,
+      'updated_at': ocorrencia.updatedAt.toIso8601String(),
     };
     final row = await _db
         .from('ocorrencias')

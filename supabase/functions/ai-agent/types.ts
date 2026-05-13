@@ -17,6 +17,8 @@ export type ToolContext = {
   userClient: SupabaseClient;
   /** Client service_role (para auditoria, rate limits, etc.) */
   serviceClient: SupabaseClient;
+  /** Alias de userClient — compatibilidade com tools que usam ctx.supabase */
+  supabase: SupabaseClient;
 };
 
 /** Resultado padronizado de execução de ferramenta */
@@ -95,6 +97,10 @@ export type AgentParams = {
   message: { role: "user"; content: ClaudeContentBlock[] };
   /** ID de uma ação pendente a confirmar/rejeitar */
   confirm_action_id?: string;
+  /** ID de uma ação pendente a cancelar */
+  cancel_action_id?: string;
+  /** Hashes SHA-256 de conteúdo para anti-reprocessamento (PDFs, imagens) */
+  content_hashes?: string[];
   /** Client Supabase autenticado com JWT do usuário (respeita RLS) */
   userClient: SupabaseClient;
   /** Client Supabase service_role (bypass RLS, para auditoria e rate limits) */
@@ -115,6 +121,7 @@ export type PendingAction = {
   action_id: string;
   tool_name: string;
   preview: string;
+  has_duplicates?: boolean;
 };
 
 // ================================================================
@@ -151,7 +158,7 @@ export type AiActionAudit = {
   tool_name: string;
   input: Record<string, unknown>;
   output: Record<string, unknown> | null;
-  status: "pending_confirmation" | "confirmed" | "executed" | "failed" | "cancelled";
+  status: "pending_confirmation" | "executed" | "failed" | "cancelled";
   error: string | null;
   created_at: string;
   executed_at: string | null;
@@ -191,12 +198,12 @@ export type Veiculo = {
 export type Manutencao = {
   id: string;
   veiculo_id: string;
-  data_servico: string;
+  data: string;
   descricao: string | null;
-  tipo_servico: string | null;
-  oficina: string | null;
-  valor_servico: number | null;
-  km_registro: number | null;
+  tipo: string | null;
+  fornecedor: string | null;
+  custo: number | null;
+  km_no_servico: number | null;
   status_pagamento: string;
   tenant_id: string;
 };

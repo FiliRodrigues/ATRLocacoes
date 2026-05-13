@@ -1,17 +1,11 @@
-// REGRAS FINAIS (Parte 2)
-// NÃO altere: custos_screen.dart, custos_provider.dart, maintenance_tab.dart, fleet_data.dart
-// Se precisar de stubs temporários para compilar, use // TODO: remover após merge Parte 1
-// Resetar _paginaAtual sempre que filtro mudar
-// Rodar flutter analyze ao final e corrigir todos os warnings
-// Verificar packages em pubspec.yaml ANTES de importar pdf/printing
-
-// TODO: remover stub de imports após merge Parte 1
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/data/custos_models.dart';
 import '../custos_provider.dart';
@@ -50,6 +44,13 @@ class _ExpensesTabState extends State<ExpensesTab> {
   // ── Paginação ──
   int _paginaAtual = 0;
   static const int _itensPorPagina = 15;
+
+  final Set<String> _togglingIds = {};
+
+  // ── Multi-select ──
+  Set<String> _selectedIds = {};
+  bool _selectionMode = false;
+  bool _bulkProcessing = false;
 
   List<DespesaItem> _despesasFiltradas(CustosProvider provider) {
     var lista = provider.despesas.toList();
@@ -116,6 +117,248 @@ class _ExpensesTabState extends State<ExpensesTab> {
       }
       _paginaAtual = 0;
     });
+  }
+
+  // ── Multi-select ──
+
+  void _toggleSelectionMode() {
+    setState(() {
+      _selectionMode = !_selectionMode;
+      if (!_selectionMode) _selectedIds.clear();
+    });
+  }
+
+  void _toggleItemSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _toggleSelectAll(List<DespesaItem> visibleItems) {
+    setState(() {
+      final allSelected =
+          visibleItems.every((d) => _selectedIds.contains(d.id));
+      if (allSelected) {
+        for (final d in visibleItems) {
+          _selectedIds.remove(d.id);
+        }
+      } else {
+        for (final d in visibleItems) {
+          _selectedIds.add(d.id);
+        }
+      }
+    });
+  }
+
+  Future<void> _bulkSetPago(CustosProvider provider, bool pago) async {
+    final count = _selectedIds.length;
+    final ids = _selectedIds.toList();
+    setState(() => _bulkProcessing = true);
+    try {
+      for (final id in ids) {
+        await Supabase.instance.client
+            .from('despesas')
+            .update({'pago': pago}).eq('id', id);
+      }
+      // Atualiza estado local
+      for (final id in ids) {
+        final idx = provider.despesas.indexWhere((d) => d.id == id);
+        if (idx != -1) {
+          final updated = provider.despesas[idx].copyWith(pago: pago);
+          await provider.updateDespesa(updated);
+        }
+      }
+      _selectedIds.clear();
+      _selectionMode = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(pago
+                  ? '$count despesas marcadas como pagas'
+                  : '$count despesas marcadas como pendentes')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _bulkProcessing = false);
+    }
+  }
+
+  Future<void> _bulkDelete(CustosProvider provider) async {
+    final count = _selectedIds.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir Despesas'),
+        content: Text('Excluir $count despesas selecionadas?'),
+        actions: [
+          AtrGhostButton(
+            label: 'Cancelar',
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          const SizedBox(width: 8),
+          AtrGhostButton(
+            label: 'Excluir',
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    // Backup para undo
+    final backups = <DespesaItem>[];
+    for (final id in _selectedIds.toList()) {
+      final idx = provider.despesas.indexWhere((d) => d.id == id);
+      if (idx != -1) backups.add(provider.despesas[idx]);
+    }
+
+    setState(() => _bulkProcessing = true);
+    try {
+      for (final id in _selectedIds.toList()) {
+        await provider.deleteDespesa(id);
+      }
+      _selectedIds.clear();
+      _selectionMode = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$count despesas excluídas'),
+            action: SnackBarAction(
+              label: 'Desfazer',
+              onPressed: () async {
+                for (final item in backups) {
+                  await provider.addDespesa(item);
+                }
+              },
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao excluir: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _bulkProcessing = false);
+    }
+  }
+
+  Widget _buildSelectionBar(CustosProvider provider) {
+    if (_selectedIds.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevatedDark,
+        borderRadius: BorderRadius.circular(12),
+        border:
+            Border.all(color: AppColors.atrOrange.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(LucideIcons.checkSquare,
+              size: 18, color: AppColors.atrOrange),
+          const SizedBox(width: 10),
+          Text(
+            '${_selectedIds.length} selecionados',
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: AppColors.textPrimaryDark,
+            ),
+          ),
+          const Spacer(),
+          if (_bulkProcessing)
+            const Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          _selectionBarButton(
+            icon: LucideIcons.check,
+            label: 'Marcar Pago',
+            color: AppColors.statusSuccess,
+            onPressed:
+                _bulkProcessing ? null : () => _bulkSetPago(provider, true),
+          ),
+          const SizedBox(width: 8),
+          _selectionBarButton(
+            icon: LucideIcons.x,
+            label: 'Marcar Pendente',
+            color: AppColors.statusWarning,
+            onPressed:
+                _bulkProcessing ? null : () => _bulkSetPago(provider, false),
+          ),
+          const SizedBox(width: 8),
+          _selectionBarButton(
+            icon: LucideIcons.trash2,
+            label: 'Excluir',
+            color: AppColors.statusError,
+            onPressed:
+                _bulkProcessing ? null : () => _bulkDelete(provider),
+          ),
+          const SizedBox(width: 8),
+          _selectionBarButton(
+            icon: LucideIcons.xCircle,
+            label: 'Cancelar',
+            color: AppColors.textSecondaryDark,
+            onPressed:
+                _bulkProcessing ? null : _toggleSelectionMode,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _selectionBarButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    VoidCallback? onPressed,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -202,6 +445,47 @@ class _ExpensesTabState extends State<ExpensesTab> {
               ),
             ),
             const SizedBox(width: 12),
+            InkWell(
+              onTap: _toggleSelectionMode,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: _selectionMode
+                        ? AppColors.atrOrange
+                        : AppColors.borderLight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  color: _selectionMode
+                      ? AppColors.atrOrange.withValues(alpha: 0.1)
+                      : Theme.of(context).colorScheme.surface,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.listChecks,
+                      size: 16,
+                      color: _selectionMode
+                          ? AppColors.atrOrange
+                          : AppColors.textSecondaryLight,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Selecionar',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: _selectionMode
+                            ? AppColors.atrOrange
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
             AtrPrimaryButton(
               label: 'Lançamento Rápido',
               icon: LucideIcons.plus,
@@ -256,13 +540,16 @@ class _ExpensesTabState extends State<ExpensesTab> {
         ),
         const SizedBox(height: 24),
 
+        // ── Barra de multi-select ──
+        _buildSelectionBar(provider),
+
         // ── Tabela ──
         BentoCard(
           padding: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildTableHeader(context),
+              _buildTableHeader(context, visibleItems: despesasPaginadas),
               if (despesasPaginadas.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(48.0),
@@ -291,7 +578,13 @@ class _ExpensesTabState extends State<ExpensesTab> {
     );
   }
 
-  Widget _buildTableHeader(BuildContext context) {
+  Widget _buildTableHeader(BuildContext context,
+      {List<DespesaItem>? visibleItems}) {
+    final allSelected = _selectionMode &&
+        visibleItems != null &&
+        visibleItems.isNotEmpty &&
+        visibleItems.every((d) => _selectedIds.contains(d.id));
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
       decoration: BoxDecoration(
@@ -300,6 +593,21 @@ class _ExpensesTabState extends State<ExpensesTab> {
       ),
       child: Row(
         children: [
+          if (_selectionMode) ...[
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Checkbox(
+                value: allSelected,
+                onChanged: (_) => _toggleSelectAll(visibleItems!),
+                activeColor: AppColors.atrOrange,
+                checkColor: AppColors.backgroundDark,
+                side: const BorderSide(
+                    color: AppColors.textSecondaryLight, width: 1.5),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4)),
+              ),
+            ),
+          ],
           // DATA (Clicável)
           Expanded(
             flex: 2,
@@ -416,165 +724,223 @@ class _ExpensesTabState extends State<ExpensesTab> {
   }
 
   Widget _buildTableRow(BuildContext context, DespesaItem d) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              formatDate(d.data),
-              style: Theme.of(context).textTheme.bodyMedium,
+    final isSelected = _selectedIds.contains(d.id);
+
+    final row = Row(
+      children: [
+        if (_selectionMode) ...[
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Checkbox(
+              value: isSelected,
+              onChanged: (_) => _toggleItemSelection(d.id),
+              activeColor: AppColors.atrOrange,
+              checkColor: AppColors.backgroundDark,
+              side: const BorderSide(
+                  color: AppColors.textSecondaryLight, width: 1.5),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4)),
             ),
           ),
-          Expanded(
-            flex: 3,
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.atrOrange.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    d.tipo == 'Manutenção' || d.tipo == 'Revisão'
-                        ? LucideIcons.wrench
-                        : LucideIcons.receipt,
-                    size: 14,
-                    color: AppColors.atrOrange,
-                  ),
+        ],
+        Expanded(
+          flex: 2,
+          child: Text(
+            formatDate(d.data),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        Expanded(
+          flex: 3,
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.atrOrange.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(width: 12),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                child: Icon(
+                  d.tipo == 'Manutenção' || d.tipo == 'Revisão'
+                      ? LucideIcons.wrench
+                      : LucideIcons.receipt,
+                  size: 14,
+                  color: AppColors.atrOrange,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      d.tipo,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (d.descricao.isNotEmpty)
                       Text(
-                        d.tipo,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontSize: 14),
+                        d.descricao,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondaryLight,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (d.descricao.isNotEmpty)
-                        Text(
-                          d.descricao,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondaryLight,
+                    if (d.nf.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            LucideIcons.receipt,
+                            size: 10,
+                            color: AppColors.atrOrange,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      if (d.nf.isNotEmpty)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              LucideIcons.receipt,
-                              size: 10,
+                          const SizedBox(width: 3),
+                          Text(
+                            'NF ${d.nf}',
+                            style: const TextStyle(
+                              fontSize: 10,
                               color: AppColors.atrOrange,
+                              fontWeight: FontWeight.w600,
                             ),
-                            const SizedBox(width: 3),
-                            Text(
-                              'NF ${d.nf}',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: AppColors.atrOrange,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  d.veiculoPlaca,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
-                ),
-                Text(
-                  d.motorista,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondaryLight,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: StatusBadge(
-                text: d.pago ? 'PAGO' : 'PENDENTE',
-                type: d.pago ? BadgeType.success : BadgeType.warning,
-              ),
-            ),
-          ),
-          Expanded(
-            child: InkWell(
-              onTap: () {
-                if (d.nomeAnexo.isNotEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content:
-                          Text('Visualização de anexo disponível em breve'),
-                    ),
-                  );
-                }
-              },
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(4.0),
-                child: d.nomeAnexo.isNotEmpty
-                    ? Tooltip(
-                        message: d.nomeAnexo,
-                        child: const Icon(
-                          LucideIcons.fileText,
-                          size: 18,
-                          color: AppColors.statusInfo,
-                        ),
-                      )
-                    : Icon(
-                        LucideIcons.fileMinus,
-                        size: 18,
-                        color:
-                            AppColors.textSecondaryLight.withValues(alpha: 0.2),
+                          ),
+                        ],
                       ),
+                  ],
+                ),
               ),
+            ],
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                d.veiculoPlaca,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                d.motorista,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondaryLight,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _togglingIds.contains(d.id)
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : _selectionMode
+                    ? StatusBadge(
+                        text: d.pago ? 'PAGO' : 'PENDENTE',
+                        type:
+                            d.pago ? BadgeType.success : BadgeType.warning,
+                      )
+                    : InkWell(
+                        onTap: () async {
+                          setState(() => _togglingIds.add(d.id));
+                          final updated = d.copyWith(pago: !d.pago);
+                          try {
+                            await context
+                                .read<CustosProvider>()
+                                .updateDespesa(updated);
+                          } catch (_) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content:
+                                        Text('Erro ao atualizar status')),
+                              );
+                            }
+                          } finally {
+                            if (mounted) {
+                              setState(() => _togglingIds.remove(d.id));
+                            }
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: StatusBadge(
+                          text: d.pago ? 'PAGO' : 'PENDENTE',
+                          type: d.pago
+                              ? BadgeType.success
+                              : BadgeType.warning,
+                        ),
+                      ),
+          ),
+        ),
+        Expanded(
+          child: InkWell(
+            onTap: () {
+              if (d.nomeAnexo.isNotEmpty) {
+                _viewAnexo(context, d.nomeAnexo);
+              }
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: d.nomeAnexo.isNotEmpty
+                  ? Tooltip(
+                      message: d.nomeAnexo,
+                      child: const Icon(
+                        LucideIcons.fileText,
+                        size: 18,
+                        color: AppColors.statusInfo,
+                      ),
+                    )
+                  : Icon(
+                      LucideIcons.fileMinus,
+                      size: 18,
+                      color: AppColors.textSecondaryLight
+                          .withValues(alpha: 0.2),
+                    ),
             ),
           ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              formatCurrency(d.valor),
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: AppColors.statusError,
-              ),
+        ),
+        Expanded(
+          flex: 2,
+          child: Text(
+            formatCurrency(d.valor),
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.statusError,
             ),
           ),
-          const SizedBox(width: 16),
-          _buildActions(context, d),
-        ],
-      ),
+        ),
+        const SizedBox(width: 16),
+        _buildActions(context, d),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: _selectionMode
+          ? InkWell(
+              onTap: () => _toggleItemSelection(d.id),
+              borderRadius: BorderRadius.circular(8),
+              child: row,
+            )
+          : row,
     );
   }
 
@@ -616,9 +982,22 @@ class _ExpensesTabState extends State<ExpensesTab> {
             ),
           );
           if (confirm == true && context.mounted) {
-            context.read<CustosProvider>().deleteDespesa(item.id);
+            final savedData = item;
+            await context.read<CustosProvider>().deleteDespesa(item.id);
+            if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Despesa excluída.')),
+              SnackBar(
+                content: const Text('Despesa excluída'),
+                action: SnackBarAction(
+                  label: 'Desfazer',
+                  onPressed: () async {
+                    await context
+                        .read<CustosProvider>()
+                        .addDespesa(savedData);
+                  },
+                ),
+                duration: const Duration(seconds: 5),
+              ),
             );
           }
         }
@@ -693,6 +1072,79 @@ class _ExpensesTabState extends State<ExpensesTab> {
         ],
       ),
     );
+  }
+
+  Future<void> _viewAnexo(BuildContext ctx, String nomeAnexo) async {
+    final url = Supabase.instance.client.storage
+        .from('atr-attachments')
+        .getPublicUrl(nomeAnexo);
+    final lower = nomeAnexo.toLowerCase();
+    final isImage = lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp');
+    final isPdf = lower.endsWith('.pdf');
+
+    if (isImage) {
+      if (!mounted) return;
+      showDialog(
+        context: ctx,
+        builder: (dialogCtx) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: Stack(
+            children: [
+              InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => const Center(
+                    child: Text('Erro ao carregar anexo',
+                        style: TextStyle(color: Colors.white)),
+                  ),
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    );
+                  },
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  icon: const Icon(LucideIcons.x, color: Colors.white),
+                  onPressed: () => Navigator.pop(dialogCtx),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (isPdf) {
+      try {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            const SnackBar(content: Text('Erro ao abrir PDF')),
+          );
+        }
+      }
+    } else {
+      try {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            const SnackBar(content: Text('Erro ao abrir anexo')),
+          );
+        }
+      }
+    }
   }
 
   // ── Funções de Exportação ──

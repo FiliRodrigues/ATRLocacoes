@@ -120,7 +120,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     TextFormField(
                       controller: _currentPassCtrl,
                       obscureText: _obscureCurrent,
-                      validator: (v) => v == null || v.isEmpty ? 'Obrigatório' : null,
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Obrigatório' : null,
                       style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13),
                       decoration: _inputDec('Digite sua senha atual', LucideIcons.lock, IconButton(
                         icon: Icon(_obscureCurrent ? LucideIcons.eye : LucideIcons.eyeOff, size: 16, color: AppColors.textSecondaryDark),
@@ -136,7 +136,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       controller: _newPassCtrl,
                       obscureText: _obscureNew,
                       validator: (v) {
-                        if (v == null || v.isEmpty) return 'Obrigatório';
+                        if (v == null || v.trim().isEmpty) return 'Obrigatório';
                         if (v.length < 12) return 'Mínimo 12 caracteres';
                         return null;
                       },
@@ -155,6 +155,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       controller: _confirmPassCtrl,
                       obscureText: _obscureConfirm,
                       validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Obrigatório';
                         if (v != _newPassCtrl.text) return 'Senhas não conferem';
                         return null;
                       },

@@ -125,6 +125,18 @@ class AppTheme {
         thickness: 1,
         space: 1,
       ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF1E2535),
+        contentTextStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.textPrimaryDark,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        actionTextColor: AppColors.atrOrange,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: 4,
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.backgroundLight,
@@ -298,6 +310,18 @@ class AppTheme {
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF1E2535),
+        contentTextStyle: GoogleFonts.plusJakartaSans(
+          color: AppColors.textPrimaryDark,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        actionTextColor: AppColors.atrOrange,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: 4,
       ),
     );
   }

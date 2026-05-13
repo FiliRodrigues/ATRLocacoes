@@ -1,4 +1,8 @@
 import { AtrTool } from "../types.ts";
+import {
+  buildDuplicateWarningMessage,
+  checkDuplicateMaintenance,
+} from "./maintenance_duplicates.ts";
 
 // ---------------------------------------------------------------
 // Helper: resolve veículo por placa (case-insensitive, sem hífen) ou UUID
@@ -92,6 +96,26 @@ export const createMaintenance: AtrTool = {
         type: "string",
         description: "Número da nota fiscal do serviço (opcional).",
       },
+      status_pagamento: {
+        type: "string",
+        description: "Status de pagamento: 'Pago', 'Pendente', 'Aguardando'.",
+      },
+      coluna: {
+        type: "string",
+        description: "Coluna/status: 'pendentes', 'emOficina', 'concluidos'.",
+      },
+      prioridade: {
+        type: "string",
+        description: "Prioridade: 'alta', 'media', 'baixa', 'ok'.",
+      },
+      is_preventiva: {
+        type: "boolean",
+        description: "Se é preventiva (true) ou corretiva (false).",
+      },
+      odometro: {
+        type: "integer",
+        description: "Odômetro atual do veículo.",
+      },
     },
     required: ["vehicle_identifier", "date", "type", "cost"],
   },
@@ -105,11 +129,47 @@ export const createMaintenance: AtrTool = {
       return `Lançar manutenção: Veículo não encontrado para o identificador "${input.vehicle_identifier}".`;
     }
 
-    const custo = Number(input.cost).toFixed(2).replace(".", ",");
+    const rawCost = Number(input.cost);
+    const custo = rawCost.toFixed(2).replace(".", ",");
     const modelo = (veiculo as any).modelo || "Veículo";
     const placa = (veiculo as any).placa;
+    const date = String(input.date || "");
+    const type = String(input.type || "").trim();
 
-    return `Lançar manutenção: ${modelo} (${placa}) — ${input.type} — R$ ${custo} em ${input.date}`;
+    let duplicateWarning = "";
+    let duplicateCheckFailed = false;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && type && !Number.isNaN(rawCost) && rawCost > 0) {
+      try {
+        const duplicateCheck = await checkDuplicateMaintenance({
+          // @ts-ignore compatibilidade com tools que usam ctx.supabase
+          supabase: ctx.supabase,
+          tenantId: String(ctx.tenant_id),
+          vehicleId: String((veiculo as any).id),
+          date,
+          type,
+          cost: rawCost,
+        });
+
+        if (duplicateCheck.isDuplicate) {
+          duplicateWarning =
+            `\n\n${buildDuplicateWarningMessage(duplicateCheck.matches)}\n` +
+            "Deseja confirmar a inclusão desta nova manutenção mesmo assim?";
+        }
+      } catch {
+        duplicateCheckFailed = true;
+      }
+    }
+
+    if (duplicateCheckFailed) {
+      duplicateWarning =
+        "\n\n⚠️ Não foi possível validar duplicidade neste momento. " +
+        "Confirme apenas se tiver certeza que não é lançamento repetido.";
+    }
+
+    return (
+      `Lançar manutenção: ${modelo} (${placa}) — ${input.type} — R$ ${custo} em ${input.date}` +
+      duplicateWarning
+    );
   },
 
   // ---------------------------------------------------------------
@@ -160,7 +220,35 @@ export const createMaintenance: AtrTool = {
       };
     }
 
-    // 6. Dados validados e normalizados
+    // 6. Valida coluna se informado
+    const VALID_COLUMNS = ["pendentes", "emOficina", "concluidos"];
+    if (input.coluna && !VALID_COLUMNS.includes(String(input.coluna))) {
+      return {
+        ok: false,
+        error: `Coluna inválida. Use: ${VALID_COLUMNS.join(", ")}.`,
+      };
+    }
+
+    // 7. Valida prioridade se informado
+    const VALID_PRIORITIES = ["alta", "media", "baixa", "ok"];
+    if (input.prioridade && !VALID_PRIORITIES.includes(String(input.prioridade))) {
+      return {
+        ok: false,
+        error: `Prioridade inválida. Use: ${VALID_PRIORITIES.join(", ")}.`,
+      };
+    }
+
+    // 8. Valida odometro se informado
+    const odometro =
+      input.odometro != null ? Number(input.odometro) : undefined;
+    if (odometro !== undefined && (!Number.isInteger(odometro) || odometro < 0)) {
+      return {
+        ok: false,
+        error: "Odômetro deve ser um número inteiro >= 0.",
+      };
+    }
+
+    // 9. Dados validados e normalizados
     const validatedData = {
       vehicle_id: (veiculo as any).id as string,
       plate: (veiculo as any).placa as string,
@@ -179,9 +267,18 @@ export const createMaintenance: AtrTool = {
       invoice_number: input.invoice_number
         ? String(input.invoice_number).trim()
         : null,
+      status_pagamento: input.status_pagamento
+        ? String(input.status_pagamento).trim()
+        : null,
+      coluna: input.coluna ? String(input.coluna).trim() : null,
+      prioridade: input.prioridade ? String(input.prioridade).trim() : null,
+      is_preventiva: input.is_preventiva !== undefined
+        ? Boolean(input.is_preventiva)
+        : null,
+      odometro: odometro ?? null,
     };
 
-    // 7. Gera preview para exibição
+    // 10. Gera preview para exibição
     const display = (await createMaintenance.preview!(input, ctx)) ?? "";
 
     return { ok: true, data: validatedData, display };

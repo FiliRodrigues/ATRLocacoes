@@ -104,6 +104,26 @@ export const createExpense: AtrTool = {
         description:
           "Descrição adicional ou detalhes da despesa (opcional). Ex: 'Tanque cheio etanol', 'Multa por excesso de velocidade na BR-101'.",
       },
+      pago: {
+        type: "boolean",
+        description: "Se a despesa já foi paga (default: false).",
+      },
+      motorista: {
+        type: "string",
+        description: "Nome do motorista.",
+      },
+      odometro: {
+        type: "integer",
+        description: "Odômetro/km.",
+      },
+      litros: {
+        type: "number",
+        description: "Litros (para combustível).",
+      },
+      nf: {
+        type: "string",
+        description: "Número da nota fiscal.",
+      },
     },
     required: ["date", "category", "amount"],
   },
@@ -187,6 +207,11 @@ export const createExpense: AtrTool = {
       descricao: input.description
         ? String(input.description).trim()
         : null,
+      pago: input.pago !== undefined ? Boolean(input.pago) : null,
+      motorista: input.motorista ? String(input.motorista).trim() : null,
+      odometro: input.odometro != null ? Number(input.odometro) : null,
+      litros: input.litros != null ? Number(input.litros) : null,
+      nf: input.nf ? String(input.nf).trim() : null,
     };
 
     // 6. Gera preview para exibição

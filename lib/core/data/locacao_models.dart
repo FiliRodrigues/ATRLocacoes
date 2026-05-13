@@ -198,6 +198,7 @@ class ChecklistEvento {
   final String? assinaturaUrl;
   final String realizadoPor;
   final DateTime createdAt;
+  final Map<String, dynamic> itens;
 
   const ChecklistEvento({
     required this.id,
@@ -212,6 +213,7 @@ class ChecklistEvento {
     this.assinaturaUrl,
     this.realizadoPor = '',
     required this.createdAt,
+    this.itens = const {},
   });
 
   Map<String, dynamic> toRow() => {
@@ -225,6 +227,7 @@ class ChecklistEvento {
         'doc_url': docUrl,
         'assinatura_url': assinaturaUrl,
         'realizado_por': realizadoPor,
+        'itens': itens,
       };
 
   factory ChecklistEvento.fromRow(Map<String, dynamic> row) {
@@ -245,6 +248,7 @@ class ChecklistEvento {
       assinaturaUrl: row['assinatura_url'] as String?,
       realizadoPor: row['realizado_por'] as String? ?? '',
       createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ?? DateTime.now(),
+      itens: (row['itens'] as Map<String, dynamic>?) ?? {},
     );
   }
 }

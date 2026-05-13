@@ -1,420 +1,158 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../enums/vehicle_status.dart';
 import '../enums/cnh_status.dart';
 import '../enums/alert_type.dart';
 import '../enums/event_type.dart';
 import '../services/supabase_service.dart';
+import '../utils/app_logger.dart';
+import 'fleet_models.dart';
+import 'fleet_formatting.dart';
+import 'fleet_cache.dart';
 
+// Re-exporta tudo para manter compatibilidade com imports existentes
 export '../enums/vehicle_status.dart';
 export '../enums/cnh_status.dart';
 export '../enums/alert_type.dart';
 export '../enums/event_type.dart';
+export 'fleet_models.dart';
+export 'fleet_formatting.dart';
 
 // ═══════════════════════════════════════════════════════
-// MODELOS
+// GLOBAIS — delegam para FleetRepository
 // ═══════════════════════════════════════════════════════
-
-class MaintenanceEvent {
-  final DateTime data;
-  final String tipo;
-  final int kmNoServico;
-  final double custo;
-  final String descricao;
-  const MaintenanceEvent(
-      {required this.data,
-      required this.tipo,
-      required this.kmNoServico,
-      required this.custo,
-      required this.descricao,});
-}
-
-class VehicleCostEvent {
-  final DateTime data;
-  final String categoria;
-  final double valor;
-  final String descricao;
-
-  const VehicleCostEvent({
-    required this.data,
-    required this.categoria,
-    required this.valor,
-    required this.descricao,
-  });
-}
-
-class FinancingData {
-  final double valorTotal;
-  final double percentualEntrada;
-  final int totalParcelas;
-  final int parcelasPagas;
-  final double recebimentoMensal;
-  final double taxaJurosMensal;
-  final String previsaoQuitacao;
-  final int mesesLocacaoTotais;
-  final int mesesLocacaoPagos;
-  final double totalPagoReal;
-  /// Chave year*100+month (ex: 202604) → soma recebida naquele mês (via parcelas_financiamento).
-  final Map<int, double> recebidoPorMes;
-
-  double? recebidoNoMes(int year, int month) => recebidoPorMes[year * 100 + month];
-
-  const FinancingData({
-      required this.valorTotal,
-      required this.percentualEntrada,
-      required this.totalParcelas,
-      required this.parcelasPagas,
-      required this.recebimentoMensal,
-      required this.taxaJurosMensal,
-      required this.previsaoQuitacao,
-      this.mesesLocacaoTotais = 36,
-      this.mesesLocacaoPagos = 0,
-      this.totalPagoReal = 0.0,
-      this.recebidoPorMes = const {},
-  });
-
-  double get valorEntrada => valorTotal * percentualEntrada;
-  double get valorFinanciado => valorTotal - valorEntrada;
-  double get valorParcela {
-    if (totalParcelas <= 1) return 0; // Quitado não tem parcela calculada
-    final i = taxaJurosMensal;
-    final n = totalParcelas;
-    final pv = valorFinanciado;
-    if (i <= 0) return pv / n;
-    final f = pow(1 + i, n).toDouble();
-    final denominator = f - 1;
-    if (denominator.abs() < 1e-10) return pv / n;
-    return pv * (i * f) / denominator;
-  }
-
-  int get parcelasRestantes => max(totalParcelas - parcelasPagas, 0);
-  int get locacaoRestantes => max(mesesLocacaoTotais - mesesLocacaoPagos, 0);
-  double get totalParcelasCompleto => valorParcela * totalParcelas;
-  double get totalJuros => totalParcelasCompleto - valorFinanciado;
-  double get totalPago => valorParcela * parcelasPagas;
-  double get totalRestante => valorParcela * parcelasRestantes;
-  double get totalRecebido =>
-      totalPagoReal > 0 ? totalPagoReal : recebimentoMensal * mesesLocacaoPagos;
-  double get custoTotalVeiculo => valorEntrada + totalParcelasCompleto;
-  
-  double get progressoFinanciamento {
-    if (totalParcelas <= 1) return 1.0; // Quitado = 100%
-    return (parcelasPagas / totalParcelas).clamp(0.0, 1.0);
-  }
-
-  double get progressoLocacao {
-    if (mesesLocacaoTotais <= 0 || recebimentoMensal <= 0) return 0.0;
-    return (mesesLocacaoPagos / mesesLocacaoTotais).clamp(0.0, 1.0);
-  }
-
-  double get taxaJurosAnual =>
-      taxaJurosMensal <= 0 ? 0 : pow(1 + taxaJurosMensal, 12).toDouble() - 1;
-  double get saldoMensal => recebimentoMensal - valorParcela;
-}
-
-class VehicleData {
-  final String nome;
-  final String placa;
-  final String motorista;
-  final String telefoneMotorista;
-  final VehicleStatus status;
-  final int mesesEmServico;
-  final double kmPorMes;
-  final String? imagemAsset;
-  final Color cor1;
-  final Color cor2;
-  final FinancingData? financiamento;
-  final List<MaintenanceEvent> manutencoes;
-  final DateTime vencimentoIPVA;
-  final DateTime vencimentoSeguro;
-  final DateTime vencimentoLicenciamento;
-  final double valorDeMercado;
-  final double valorAquisicao;
-  final DateTime dataAquisicao;
-  final List<VehicleCostEvent> gastosNaoCiclicos;
-  final double? kmHodometro;
-  final DateTime? ultimaAtualizacaoKm;
-
-  VehicleData({
-    required this.nome,
-    required this.placa,
-    required this.motorista,
-    required this.telefoneMotorista,
-    required this.status,
-    required this.mesesEmServico,
-    required this.kmPorMes,
-    this.imagemAsset,
-    required this.cor1,
-    required this.cor2,
-    this.financiamento,
-    required this.manutencoes,
-    required this.vencimentoIPVA,
-    required this.vencimentoSeguro,
-    required this.vencimentoLicenciamento,
-    required this.valorDeMercado,
-    required this.valorAquisicao,
-    required this.dataAquisicao,
-    this.gastosNaoCiclicos = const [],
-    this.kmHodometro,
-    this.ultimaAtualizacaoKm,
-  });
-
-  VehicleData copyWith({
-    VehicleStatus? status,
-    double? kmHodometro,
-    DateTime? ultimaAtualizacaoKm,
-  }) {
-    return VehicleData(
-      nome: nome,
-      placa: placa,
-      motorista: motorista,
-      telefoneMotorista: telefoneMotorista,
-      status: status ?? this.status,
-      mesesEmServico: mesesEmServico,
-      kmPorMes: kmPorMes,
-      imagemAsset: imagemAsset,
-      cor1: cor1,
-      cor2: cor2,
-      financiamento: financiamento,
-      manutencoes: manutencoes,
-      vencimentoIPVA: vencimentoIPVA,
-      vencimentoSeguro: vencimentoSeguro,
-      vencimentoLicenciamento: vencimentoLicenciamento,
-      valorDeMercado: valorDeMercado,
-      valorAquisicao: valorAquisicao,
-      dataAquisicao: dataAquisicao,
-      gastosNaoCiclicos: gastosNaoCiclicos,
-      kmHodometro: kmHodometro ?? this.kmHodometro,
-      ultimaAtualizacaoKm: ultimaAtualizacaoKm ?? this.ultimaAtualizacaoKm,
-    );
-  }
-
-  double get kmAtual => kmHodometro ?? (kmPorMes * mesesEmServico);
-  bool get isFinanciado => financiamento != null;
-  int get totalRevisoes => manutencoes.length;
-  double get custoTotalManutencao =>
-      manutencoes.fold(0.0, (s, e) => s + e.custo);
-  double get custoTotalGastosNaoCiclicos =>
-      gastosNaoCiclicos.fold(0.0, (s, e) => s + e.valor);
-  double get gastoTotalVeiculoKpi =>
-      custoTotalManutencao + custoTotalGastosNaoCiclicos + (financiamento?.totalPago ?? 0);
-  double get kmParaProxRevisao => 10000 - (kmAtual % 10000);
-
-  DateTime? get dataPrimeiroRecebimento {
-    if (mesesEmServico <= 0) return null;
-    return DateTime(
-      dataAquisicao.year,
-      dataAquisicao.month + 1,
-      dataAquisicao.day,
-    );
-  }
-
-  DateTime? get dataPrimeiroGasto {
-    final datas = <DateTime>[
-      ...manutencoes.map((e) => e.data),
-      ...gastosNaoCiclicos.map((e) => e.data),
-    ];
-    if (datas.isEmpty) return null;
-    datas.sort();
-    return datas.first;
-  }
-
-  double get lucroPrejuizoAteAgora => receitaTotalAcumulada - gastoTotalVeiculoKpi;
-
-  // Inteligência Financeira
-  double get receitaTotalAcumulada =>
-      mesesEmServico * (financiamento?.recebimentoMensal ?? 2000.0);
-  double get custoTotalAcumulado =>
-      custoTotalManutencao + custoTotalGastosNaoCiclicos + (financiamento?.totalPago ?? 0);
-  double get lucroAbsoluto => receitaTotalAcumulada - custoTotalAcumulado;
-  double get roi {
-    if (valorAquisicao <= 0) return 0;
-    return (lucroAbsoluto / valorAquisicao) * 100;
-  }
-
-  // Lógica de Ponto de Venda (Depreciação vs Custo)
-  String get sugestaoVenda {
-    if (mesesEmServico <= 0) return 'CARRO SAUDÁVEL (Manter em Frota)';
-    final custoManutencaoAnual = custoTotalManutencao / (mesesEmServico / 12);
-    if (custoManutencaoAnual > (valorDeMercado * 0.15)) {
-      return 'SUGESTÃO: VENDA IMEDIATA (Custo Altíssimo)';
-    }
-    if (mesesEmServico > 48 || kmAtual > 120000) {
-      return 'SUGESTÃO: TROCA PREVENTIVA (KM/Tempo)';
-    }
-    return 'CARRO SAUDÁVEL (Manter em Frota)';
-  }
-}
-
-class DriverData {
-  final String nome;
-  final String telefone;
-  final DateTime vencimentoCNH;
-  final CnhStatus statusCNH;
-  final int multas;
-  final List<String> placasVeiculos;
-  const DriverData(
-      {required this.nome,
-      required this.telefone,
-      required this.vencimentoCNH,
-      required this.statusCNH,
-      required this.multas,
-      required this.placasVeiculos,});
-}
-
-class AlertItem {
-  final AlertType tipo;
-  final String titulo;
-  final String mensagem;
-  const AlertItem(
-      {required this.tipo, required this.titulo, required this.mensagem,});
-}
-
-class MonthlyData {
-  final String mes;
-  final double manutencao;
-  final double financiamento;
-  final double receita;
-  const MonthlyData(
-      {required this.mes,
-      required this.manutencao,
-      required this.financiamento,
-      required this.receita,});
-  double get custoTotal => manutencao + financiamento;
-}
-
-class UpcomingEvent {
-  final String titulo;
-  final String descricao;
-  final String prazo;
-  final EventType tipo;
-  const UpcomingEvent(
-      {required this.titulo,
-      required this.descricao,
-      required this.prazo,
-      required this.tipo,});
-}
-
-class KmRegistro {
-  final String placa;
-  final double km;
-  final DateTime data;
-  const KmRegistro({
-    required this.placa,
-    required this.km,
-    required this.data,
-  });
-}
-
-// ═══════════════════════════════════════════════════════
-// DADOS FROTA — carregados do Supabase em runtime
-// ═══════════════════════════════════════════════════════
-
-final List<VehicleData> _frota = [];
 
 List<VehicleData> get frota => FleetRepository.instance.frota;
-
-final List<DriverData> _motoristas = [];
-
 List<DriverData> get motoristas => FleetRepository.instance.motoristas;
-
-
-// ═══════════════════════════════════════════════════════
-// DADOS MENSAIS (gráfico dashboard)
-// ═══════════════════════════════════════════════════════
-
 List<MonthlyData> get dadosMensais => FleetRepository.instance.dadosMensais;
-
-// ═══════════════════════════════════════════════════════
-// ALERTAS (computados)
-// ═══════════════════════════════════════════════════════
-
 List<AlertItem> get frotaAlertas => FleetRepository.instance.frotaAlertas;
+List<UpcomingEvent> get proximosEventos => FleetRepository.instance.proximosEventos;
+List<VehicleData> get veiculosFinanciados => FleetRepository.instance.veiculosFinanciados;
+
+VehicleData? getVehicleByPlate(String placa) => FleetRepository.instance.getVehicleByPlate(placa);
+List<VehicleData> getVehiclesByDriver(String nome) => FleetRepository.instance.getVehiclesByDriver(nome);
+
+Future<bool> updateVehicleStatus({required String placa, required VehicleStatus status}) =>
+    FleetRepository.instance.updateVehicleStatus(placa: placa, status: status);
 
 // ═══════════════════════════════════════════════════════
-// PRÓXIMOS EVENTOS
+// FLEET REPOSITORY (ChangeNotifier — Provider)
 // ═══════════════════════════════════════════════════════
-
-List<UpcomingEvent> get proximosEventos =>
-    FleetRepository.instance.proximosEventos;
-
-// ═══════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════
-
-VehicleData? getVehicleByPlate(String placa) {
-  return FleetRepository.instance.getVehicleByPlate(placa);
-}
-
-bool updateVehicleStatus({
-  required String placa,
-  required VehicleStatus status,
-}) {
-  return FleetRepository.instance.updateVehicleStatus(
-    placa: placa,
-    status: status,
-  );
-}
-
-List<VehicleData> getVehiclesByDriver(String nome) =>
-    FleetRepository.instance.getVehiclesByDriver(nome);
-
-List<VehicleData> get veiculosFinanciados =>
-    FleetRepository.instance.veiculosFinanciados;
 
 class FleetRepository extends ChangeNotifier {
   FleetRepository._() {
-    // Recarrega frota sempre que o utilizador faz login,
-    // porque o primeiro load (antes do auth) é bloqueado pela RLS.
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.signedIn ||
           data.event == AuthChangeEvent.tokenRefreshed) {
         unawaited(loadFromSupabase());
+      }
+      if (data.event == AuthChangeEvent.signedOut) {
+        _realtimeChannel?.unsubscribe();
+        _realtimeChannel = null;
+        _refreshTimer?.cancel();
+        _refreshTimer = null;
+        _frota.clear();
+        notifyListeners();
       }
     });
   }
 
   static final FleetRepository instance = FleetRepository._();
 
+  final List<VehicleData> _frota = [];
+  final List<DriverData> _motoristas = [];
+  final List<MonthlyData> _dadosMensais = [];
+  final List<KmRegistro> _kmHistorico = [];
   List<AlertItem>? _cachedAlertas;
   int _version = 0;
   bool _isLoading = false;
+  Future<void>? _loadFuture;
   String? _loadError;
-  final List<MonthlyData> _dadosMensais = [];
+  RealtimeChannel? _realtimeChannel;
+  Timer? _refreshTimer;
 
   bool get isLoading => _isLoading;
   String? get loadError => _loadError;
 
-  final List<KmRegistro> _kmHistorico = [];
-
   /// Carrega a frota do Supabase, substituindo todos os dados locais.
-  Future<void> loadFromSupabase() async {
+  Future<void> loadFromSupabase() {
+    _loadFuture ??= _doLoad().whenComplete(() => _loadFuture = null);
+    return _loadFuture!;
+  }
+
+  Future<void> _doLoad() async {
     _isLoading = true;
     _loadError = null;
     notifyListeners();
     try {
-      debugPrint('[ATR] loadFromSupabase: iniciando fetchVehicles...');
       final veiculos = await FleetSupabaseService.fetchVehicles();
-      debugPrint('[ATR] loadFromSupabase: ${veiculos.length} veiculos carregados');
       _frota
         ..clear()
         ..addAll(veiculos);
       _motoristas.clear();
       _recomputeDadosMensais();
-      final comFin = veiculos.where((v) => v.financiamento != null).length;
-      final comRec = veiculos.where((v) => (v.financiamento?.recebimentoMensal ?? 0) > 0).length;
-      final comParc = veiculos.where((v) => (v.financiamento?.recebidoPorMes.isNotEmpty ?? false)).length;
-      debugPrint('[ATR] loadFromSupabase: ${veiculos.length} veiculos, $comFin com financiamento, $comRec com recebimentoMensal>0, $comParc com recebidoPorMes');
+      // Salva no cache offline após load bem-sucedido
+      unawaited(FleetCache.saveFrota(List.unmodifiable(_frota)));
+      if (_realtimeChannel == null) {
+        _subscribeRealtime();
+      }
+      if (_refreshTimer == null) {
+        _startPeriodicRefresh();
+      }
     } catch (e, s) {
       _loadError = e.toString();
-      debugPrint('[ATR] loadFromSupabase ERRO: $e\n$s');
+      assert(() { debugPrint('[ATR] loadFromSupabase ERRO: $e\n$s'); return true; }());
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void _subscribeRealtime() {
+    _realtimeChannel?.unsubscribe();
+    _realtimeChannel = Supabase.instance.client
+        .channel('atr-fleet-changes')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'manutencoes',
+          callback: (_) => unawaited(loadFromSupabase()),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'veiculos',
+          callback: (_) => unawaited(loadFromSupabase()),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'despesas',
+          callback: (_) => unawaited(loadFromSupabase()),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'financiamentos',
+          callback: (_) => unawaited(loadFromSupabase()),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'parcelas_financiamento',
+          callback: (_) => unawaited(loadFromSupabase()),
+        )
+        .subscribe();
+  }
+
+  void _startPeriodicRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(
+      const Duration(minutes: 10),
+      (_) => unawaited(loadFromSupabase()),
+    );
   }
 
   List<KmRegistro> get kmHistorico => List.unmodifiable(_kmHistorico);
@@ -434,7 +172,6 @@ class FleetRepository extends ChangeNotifier {
   void _recomputeDadosMensais() {
     _dadosMensais.clear();
     final now = DateTime.now();
-    // Gera 12 meses: 6 antes do atual até 5 depois
     for (int offset = -6; offset <= 5; offset++) {
       final d = DateTime(now.year, now.month + offset);
       final mLabel = '${_months[d.month - 1]}/${(d.year % 100).toString().padLeft(2, '0')}';
@@ -468,8 +205,14 @@ class FleetRepository extends ChangeNotifier {
     }
   }
 
-  /// Injeta veículos diretamente para uso em testes unitários.
-  /// Não deve ser chamado em código de produção.
+  /// Popula o repositório com dados do cache offline antes do primeiro load do Supabase.
+  void seedFromCache(List<VehicleData> vehicles) {
+    if (_frota.isNotEmpty) return; // já carregado, não sobrescreve
+    _frota.addAll(vehicles);
+    _recomputeDadosMensais();
+    notifyListeners();
+  }
+
   @visibleForTesting
   void seedForTest(List<VehicleData> vehicles,
       {List<DriverData> drivers = const []}) {
@@ -499,7 +242,8 @@ class FleetRepository extends ChangeNotifier {
   VehicleData? getVehicleByPlate(String placa) {
     try {
       return _frota.firstWhere((v) => v.placa == placa);
-    } catch (_) {
+    } catch (e) {
+      AppLogger.warning('FleetRepository.getVehicleByPlate falhou para "$placa": $e');
       return null;
     }
   }
@@ -543,15 +287,112 @@ class FleetRepository extends ChangeNotifier {
     return true;
   }
 
-  bool updateVehicleStatus({
+  Future<bool> updateVehicleStatus({
     required String placa,
     required VehicleStatus status,
-  }) {
+  }) async {
     final index = _frota.indexWhere((v) => v.placa == placa);
     if (index == -1) return false;
+    const map = {
+      VehicleStatus.emRota: 'Operando ATR',
+      VehicleStatus.reserva: 'Locado',
+      VehicleStatus.emOficina: 'Em manutenção',
+      VehicleStatus.parado: 'Parado',
+    };
+    try {
+      await FleetSupabaseService.updateVehicleStatus(
+        placa: placa,
+        novasSituacao: map[status]!,
+        alteradoPor: Supabase.instance.client.auth.currentUser?.email ?? 'sistema',
+      );
+    } catch (e) {
+      AppLogger.error('FleetRepository.updateVehicleStatus falhou para "$placa"', e);
+      return false;
+    }
     _frota[index] = _frota[index].copyWith(status: status);
     notifyListeners();
     return true;
+  }
+
+  Future<String?> addVehicle({
+    required String placa,
+    required String modelo,
+    required int ano,
+    required String locadora,
+    double kmPorMes = 3000,
+    double? kmHodometro,
+    String status = 'disponivel',
+    double? valorVeiculo,
+  }) async {
+    try {
+      final tenantId = Supabase.instance.client.auth.currentUser
+          ?.appMetadata['tenant_id'] as String?;
+      final insert = <String, dynamic>{
+        'placa': placa.toUpperCase(),
+        'modelo': modelo,
+        'ano_fabricacao_modelo': ano.toString(),
+        'km_inicial': kmHodometro?.toInt() ?? 0,
+        'situacao_operacional': status,
+        'tenant_id': tenantId,
+        'data_compra': DateTime.now().toIso8601String(),
+      };
+      if (valorVeiculo != null) insert['valor_veiculo'] = valorVeiculo;
+      final response = await Supabase.instance.client
+          .from('veiculos')
+          .insert(insert)
+          .select('id')
+          .single();
+      await loadFromSupabase();
+      return response['id'] as String?;
+    } catch (e) {
+      _loadError = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<bool> editVehicle({
+    required String placa,
+    String? novoModelo,
+    int? novoAno,
+    String? novaLocadora,
+    double? kmPorMes,
+    double? kmHodometro,
+    double? valorVeiculo,
+  }) async {
+    try {
+      final updates = <String, dynamic>{};
+      if (novoModelo != null) updates['modelo'] = novoModelo;
+      if (novoAno != null) updates['ano_fabricacao_modelo'] = novoAno.toString();
+      if (kmHodometro != null) updates['km_atual'] = kmHodometro.toInt();
+      if (valorVeiculo != null) updates['valor_veiculo'] = valorVeiculo;
+      if (updates.isEmpty) return true;
+      await Supabase.instance.client
+          .from('veiculos')
+          .update(updates)
+          .eq('placa', placa);
+      await loadFromSupabase();
+      return true;
+    } catch (e) {
+      _loadError = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteVehicle(String placa) async {
+    try {
+      await Supabase.instance.client
+          .from('veiculos')
+          .update({'situacao_operacional': 'Inativo'})
+          .eq('placa', placa);
+      await loadFromSupabase();
+      return true;
+    } catch (e) {
+      _loadError = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 
   bool updateVehicleKm({
@@ -578,82 +419,61 @@ class FleetRepository extends ChangeNotifier {
 
     for (final d in _motoristas) {
       if (d.statusCNH == CnhStatus.vencida) {
-        a.add(
-          AlertItem(
-            tipo: AlertType.danger,
-            titulo: 'CNH Vencida',
-            mensagem:
-                '${d.nome} - CNH vencida em ${formatDate(d.vencimentoCNH)}. Regularizar imediatamente.',
-          ),
-        );
+        a.add(AlertItem(
+          tipo: AlertType.danger,
+          titulo: 'CNH Vencida',
+          mensagem: '${d.nome} - CNH vencida em ${formatDate(d.vencimentoCNH)}. Regularizar imediatamente.',
+        ));
       }
       if (d.statusCNH == CnhStatus.vencendo) {
-        a.add(
-          AlertItem(
-            tipo: AlertType.warning,
-            titulo: 'CNH Vencendo',
-            mensagem:
-                '${d.nome} - CNH vence em ${formatDate(d.vencimentoCNH)}. Agendar renovação.',
-          ),
-        );
+        a.add(AlertItem(
+          tipo: AlertType.warning,
+          titulo: 'CNH Vencendo',
+          mensagem: '${d.nome} - CNH vence em ${formatDate(d.vencimentoCNH)}. Agendar renovação.',
+        ));
       }
     }
 
     for (final v in _frota) {
       if (v.kmParaProxRevisao < 2000) {
-        a.add(
-          AlertItem(
-            tipo: AlertType.warning,
-            titulo: 'Revisão Próxima',
-            mensagem:
-                '${v.placa} (${v.nome}) - Faltam ${formatKm(v.kmParaProxRevisao)} para próxima revisão.',
-          ),
-        );
+        a.add(AlertItem(
+          tipo: AlertType.warning,
+          titulo: 'Revisão Próxima',
+          mensagem: '${v.placa} (${v.nome}) - Faltam ${formatKm(v.kmParaProxRevisao)} para próxima revisão.',
+        ));
       }
-
       if (v.vencimentoSeguro.isBefore(hoje.add(const Duration(days: 15)))) {
-        a.add(
-          AlertItem(
-            tipo: AlertType.danger,
-            titulo: 'Seguro Expirando',
-            mensagem:
-                '${v.placa} - Seguro vence em ${formatDate(v.vencimentoSeguro)}. Renovação Urgente!',
-          ),
-        );
+        a.add(AlertItem(
+          tipo: AlertType.danger,
+          titulo: 'Seguro Expirando',
+          mensagem: '${v.placa} - Seguro vence em ${formatDate(v.vencimentoSeguro)}. Renovação Urgente!',
+        ));
       }
       if (v.vencimentoIPVA.isBefore(hoje.add(const Duration(days: 20)))) {
-        a.add(
-          AlertItem(
-            tipo: AlertType.warning,
-            titulo: 'IPVA Próximo',
-            mensagem:
-                '${v.placa} - IPVA vence em ${formatDate(v.vencimentoIPVA)}. Verificar pagamento.',
-          ),
-        );
+        a.add(AlertItem(
+          tipo: AlertType.warning,
+          titulo: 'IPVA Próximo',
+          mensagem: '${v.placa} - IPVA vence em ${formatDate(v.vencimentoIPVA)}. Verificar pagamento.',
+        ));
       }
     }
 
     for (final v in _frota.where((v) => v.isFinanciado)) {
       if (v.financiamento!.parcelasRestantes <= 7) {
-        a.add(
-          AlertItem(
-            tipo: AlertType.info,
-            titulo: 'Quitação Próxima',
-            mensagem:
-                '${v.placa} - Faltam apenas ${v.financiamento!.parcelasRestantes} parcelas. Previsão: ${v.financiamento!.previsaoQuitacao}.',
-          ),
-        );
+        a.add(AlertItem(
+          tipo: AlertType.info,
+          titulo: 'Quitação Próxima',
+          mensagem: '${v.placa} - Faltam apenas ${v.financiamento!.parcelasRestantes} parcelas. Previsão: ${v.financiamento!.previsaoQuitacao}.',
+        ));
       }
     }
     for (final d in _motoristas) {
       if (d.multas > 0) {
-        a.add(
-          AlertItem(
-            tipo: AlertType.warning,
-            titulo: 'Multas Pendentes',
-            mensagem: '${d.nome} - ${d.multas} multa(s) pendente(s).',
-          ),
-        );
+        a.add(AlertItem(
+          tipo: AlertType.warning,
+          titulo: 'Multas Pendentes',
+          mensagem: '${d.nome} - ${d.multas} multa(s) pendente(s).',
+        ));
       }
     }
     _cachedAlertas = a;
@@ -666,51 +486,22 @@ class FleetRepository extends ChangeNotifier {
       ..sort((a, b) => a.kmParaProxRevisao.compareTo(b.kmParaProxRevisao));
     for (final v in sorted.take(3)) {
       final meses = (v.kmParaProxRevisao / v.kmPorMes).toStringAsFixed(1);
-      e.add(
-        UpcomingEvent(
-          titulo: 'Revisão ${v.placa}',
-          descricao: '${v.nome} - ~${formatKm(v.kmParaProxRevisao)} restantes',
-          prazo: '~$meses meses',
-          tipo: EventType.maintenance,
-        ),
-      );
+      e.add(UpcomingEvent(
+        titulo: 'Revisão ${v.placa}',
+        descricao: '${v.nome} - ~${formatKm(v.kmParaProxRevisao)} restantes',
+        prazo: '~$meses meses',
+        tipo: EventType.maintenance,
+      ));
     }
 
     for (final v in _frota.where((v) => v.isFinanciado)) {
-      e.add(
-        UpcomingEvent(
-          titulo:
-              'Parcela ${v.financiamento!.parcelasPagas + 1}/${v.financiamento!.totalParcelas}',
-          descricao:
-              '${v.placa} - ${formatCurrency(v.financiamento!.valorParcela)}',
-          prazo: 'Este mês',
-          tipo: EventType.payment,
-        ),
-      );
+      e.add(UpcomingEvent(
+        titulo: 'Parcela ${v.financiamento!.parcelasPagas + 1}/${v.financiamento!.totalParcelas}',
+        descricao: '${v.placa} - ${formatCurrency(v.financiamento!.valorParcela)}',
+        prazo: 'Este mês',
+        tipo: EventType.payment,
+      ));
     }
     return e;
   }
 }
-
-final DateFormat _dateFormatter = DateFormat('dd/MM/yyyy');
-final NumberFormat _thousandsFormatter = NumberFormat.decimalPattern('pt_BR');
-
-String formatDate(DateTime date) {
-  return _dateFormatter.format(date);
-}
-
-String formatCurrency(double value) {
-  final isNeg = value < 0;
-  final abs = value.abs();
-  final intP = abs.toInt();
-  final dec = ((abs - intP) * 100).round().toString().padLeft(2, '0');
-  final fmt = _thousandsFormatter.format(intP);
-  return '${isNeg ? '-' : ''}R\$ $fmt,$dec';
-}
-
-String formatKm(double km) {
-  final intKm = km.toInt();
-  return '${_thousandsFormatter.format(intKm)} km';
-}
-
-const List<VehicleStatus> statusOptions = VehicleStatus.values;

@@ -22,12 +22,12 @@ export const listMaintenances: AtrTool = {
       start_date: {
         type: "string",
         description:
-          "Data inicial do filtro (YYYY-MM-DD). Filtra por data_servico >= start_date.",
+          "Data inicial do filtro (YYYY-MM-DD). Filtra por data >= start_date.",
       },
       end_date: {
         type: "string",
         description:
-          "Data final do filtro (YYYY-MM-DD). Filtra por data_servico <= end_date.",
+          "Data final do filtro (YYYY-MM-DD). Filtra por data <= end_date.",
       },
       type: {
         type: "string",
@@ -51,7 +51,6 @@ export const listMaintenances: AtrTool = {
     if (input.vehicle_identifier) {
       const ident = input.vehicle_identifier;
 
-      // Tenta como UUID primeiro
       const isUuid =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ident);
 
@@ -66,9 +65,8 @@ export const listMaintenances: AtrTool = {
         if (!byId) {
           return { ok: false, error: `Veículo com ID "${ident}" não encontrado.` };
         }
-        veiculoId = byId.id;
+        veiculoId = (byId as any).id;
       } else {
-        // Busca por placa (case-insensitive, sem hífen)
         const placaQuery = ident.replace("-", "").toUpperCase();
         const { data: byPlaca } = await supabase
           .from("veiculos")
@@ -80,7 +78,7 @@ export const listMaintenances: AtrTool = {
         if (!byPlaca) {
           return { ok: false, error: `Veículo com placa "${ident}" não encontrado.` };
         }
-        veiculoId = byPlaca.id;
+        veiculoId = (byPlaca as any).id;
       }
     }
 
@@ -88,23 +86,23 @@ export const listMaintenances: AtrTool = {
     let query = supabase
       .from("manutencoes")
       .select(
-        "id, veiculo_id, data_servico, descricao, tipo_servico, oficina, valor_servico, km_registro, status_pagamento, observacoes"
+        "id, veiculo_id, data, descricao, tipo, fornecedor, custo, km_no_servico"
       )
       .eq("tenant_id", tenantId)
-      .order("data_servico", { ascending: false })
+      .order("data", { ascending: false })
       .limit(limit);
 
     if (veiculoId) {
       query = query.eq("veiculo_id", veiculoId);
     }
     if (input.start_date) {
-      query = query.gte("data_servico", input.start_date);
+      query = query.gte("data", input.start_date);
     }
     if (input.end_date) {
-      query = query.lte("data_servico", input.end_date);
+      query = query.lte("data", input.end_date);
     }
     if (input.type) {
-      query = query.ilike("tipo_servico", `%${input.type}%`);
+      query = query.ilike("tipo", `%${input.type}%`);
     }
 
     const { data, error } = await query;
@@ -112,7 +110,7 @@ export const listMaintenances: AtrTool = {
 
     // Soma dos valores para informação adicional
     const totalValor = (data || []).reduce(
-      (sum, m) => sum + (Number(m.valor_servico) || 0),
+      (sum, m) => sum + (Number(m.custo) || 0),
       0
     );
 

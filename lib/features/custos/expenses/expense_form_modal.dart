@@ -489,8 +489,7 @@ class ExpenseFormModal {
                     final litrosValue = litros ?? 0.0;
 
                     final result = DespesaItem(
-                      id: item?.id ??
-                          DateTime.now().millisecondsSinceEpoch.toString(),
+                      id: item?.id ?? '', // Supabase gera UUID via DEFAULT
                       data: dataSelecionada!,
                       tipo: tipoSelecionado!,
                       veiculoPlaca: placaSelecionada!,

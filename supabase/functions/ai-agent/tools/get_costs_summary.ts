@@ -36,7 +36,7 @@ export const getCostsSummary: AtrTool = {
         description:
           "Como agrupar os resultados. 'month' (padrão): agrupa por mês YYYY-MM. " +
           "'vehicle': agrupa por veículo (placa + modelo). " +
-          "'category': agrupa por tipo de custo (despesas.tipo + manutenções.tipo_servico).",
+          "'category': agrupa por tipo de custo (despesas.tipo + manutenções.tipo).",
       },
     },
     required: ["start_date", "end_date"],
@@ -102,10 +102,10 @@ export const getCostsSummary: AtrTool = {
     // Busca manutenções no período
     let manutQuery = supabase
       .from("manutencoes")
-      .select("id, veiculo_id, data_servico, tipo_servico, valor_servico")
+      .select("id, veiculo_id, data, tipo, custo")
       .eq("tenant_id", tenantId)
-      .gte("data_servico", startDate)
-      .lte("data_servico", endDate);
+      .gte("data", startDate)
+      .lte("data", endDate);
 
     if (veiculoId) {
       manutQuery = manutQuery.eq("veiculo_id", veiculoId);
@@ -150,12 +150,12 @@ export const getCostsSummary: AtrTool = {
           return `placa:${item.veiculo_placa || "sem_placa"}`;
 
         case "category":
-          if (source === "manutencao") return `manutencao: ${item.tipo_servico || "sem tipo"}`;
+          if (source === "manutencao") return `manutencao: ${item.tipo || "sem tipo"}`;
           return `despesa: ${item.tipo || "sem tipo"}`;
 
         case "month":
         default:
-          const dateStr = (item.data_servico || item.data) as string;
+          const dateStr = (item.data || "0000-00") as string;
           return dateStr.substring(0, 7); // YYYY-MM
       }
     };
@@ -166,7 +166,7 @@ export const getCostsSummary: AtrTool = {
       if (!grupos[key]) {
         grupos[key] = { manutencao_total: 0, despesas_total: 0, total: 0, count: 0 };
       }
-      const valor = Number(m.valor_servico) || 0;
+      const valor = Number(m.custo) || 0;
       grupos[key].manutencao_total += valor;
       grupos[key].total += valor;
       grupos[key].count += 1;

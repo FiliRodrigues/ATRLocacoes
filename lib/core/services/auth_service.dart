@@ -148,7 +148,7 @@ class AuthService extends ChangeNotifier {
           .select('must_change_password')
           .eq('id', Supabase.instance.client.auth.currentUser!.id)
           .maybeSingle();
-      if (rows != null && mounted) {
+      if (rows != null && !_disposed) {
         _currentUser = AuthUser(
           username: _currentUser!.username,
           role: _currentUser!.role,
@@ -158,10 +158,18 @@ class AuthService extends ChangeNotifier {
         );
         notifyListeners();
       }
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.warning('Falha ao atualizar must_change_password: $e');
+    }
   }
 
-  bool get mounted => true;
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   // ── Restaurar sessão persistida (chamada na inicialização) ─────────
   Future<void> checkAuth() async {

@@ -4,12 +4,12 @@ abstract class ICustosRepository {
   /// Busca manutenções com paginação. [page] começa em 0, [pageSize] define
   /// quantos registros retornar por vez.
   Future<List<ManutencaoItem>> fetchManutencoes({int page = 0, int pageSize = 50});
-  Future<void> saveManutencao(ManutencaoItem item);
+  Future<String> saveManutencao(ManutencaoItem item);
   Future<void> deleteManutencao(String id);
   /// Busca despesas com paginação. [page] começa em 0, [pageSize] define
   /// quantos registros retornar por vez.
   Future<List<DespesaItem>> fetchDespesas({int page = 0, int pageSize = 50});
-  Future<void> saveDespesa(DespesaItem item);
+  Future<String> saveDespesa(DespesaItem item);
   Future<void> deleteDespesa(String id);
 }
 
@@ -27,14 +27,16 @@ class LocalCustosRepository implements ICustosRepository {
   }
 
   @override
-  Future<void> saveManutencao(ManutencaoItem item) {
+  Future<String> saveManutencao(ManutencaoItem item) {
     final index = _manutencoes.indexWhere((m) => m.id == item.id);
     if (index == -1) {
-      _manutencoes.add(item);
+      final newId = 'local_${_manutencoes.length}';
+      _manutencoes.add(item.copyWith(id: newId));
+      return Future.value(newId);
     } else {
       _manutencoes[index] = item;
+      return Future.value(item.id);
     }
-    return Future.value();
   }
 
   @override
@@ -53,14 +55,16 @@ class LocalCustosRepository implements ICustosRepository {
   }
 
   @override
-  Future<void> saveDespesa(DespesaItem item) {
+  Future<String> saveDespesa(DespesaItem item) {
     final index = _despesas.indexWhere((d) => d.id == item.id);
     if (index == -1) {
-      _despesas.add(item);
+      final newId = 'local_${_despesas.length}';
+      _despesas.add(item.copyWith(id: newId));
+      return Future.value(newId);
     } else {
       _despesas[index] = item;
+      return Future.value(item.id);
     }
-    return Future.value();
   }
 
   @override

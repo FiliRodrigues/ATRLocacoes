@@ -295,6 +295,15 @@ class _RegraTile extends StatelessWidget {
                 onChanged: (_) => provider.toggleRegra(regra.id),
               ),
               IconButton(
+                onPressed: () => _showEditRegra(context),
+                icon: const Icon(
+                  LucideIcons.pencil,
+                  size: 16,
+                  color: AppColors.statusInfo,
+                ),
+                tooltip: 'Editar regra',
+              ),
+              IconButton(
                 onPressed: () => _confirmDelete(context, provider),
                 icon: Icon(
                   LucideIcons.trash2,
@@ -308,6 +317,19 @@ class _RegraTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _showEditRegra(BuildContext context) async {
+    final provider = context.read<RegrasManutencaoProvider>();
+    final fleet = context.read<FleetRepository>();
+    final updated = await _RegraFormDialog.show(
+      context,
+      fleet: fleet,
+      existing: regra,
+    );
+    if (updated != null) {
+      await provider.updateRegra(updated);
+    }
   }
 
   Future<void> _confirmDelete(
@@ -401,15 +423,17 @@ class _PriorityBadge extends StatelessWidget {
 
 class _RegraFormDialog extends StatefulWidget {
   final FleetRepository fleet;
-  const _RegraFormDialog({required this.fleet});
+  final RegraManutencao? existing;
+  const _RegraFormDialog({required this.fleet, this.existing});
 
   static Future<RegraManutencao?> show(
     BuildContext context, {
     required FleetRepository fleet,
+    RegraManutencao? existing,
   }) {
     return showDialog<RegraManutencao>(
       context: context,
-      builder: (_) => _RegraFormDialog(fleet: fleet),
+      builder: (_) => _RegraFormDialog(fleet: fleet, existing: existing),
     );
   }
 
@@ -441,6 +465,21 @@ class _RegraFormDialogState extends State<_RegraFormDialog> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    final r = widget.existing;
+    if (r != null) {
+      _tituloCtrl.text = r.titulo;
+      _tipoCtrl.text = r.tipo;
+      _veiculoPlaca = r.veiculoPlaca;
+      if (r.intervaloKm != null) _kmCtrl.text = r.intervaloKm.toString();
+      if (r.intervaloDias != null) _diasCtrl.text = r.intervaloDias.toString();
+      _custoCtrl.text = r.custoEstimado.toString();
+      _prioridade = r.prioridade;
+    }
+  }
+
+  @override
   void dispose() {
     _tituloCtrl.dispose();
     _tipoCtrl.dispose();
@@ -455,11 +494,11 @@ class _RegraFormDialogState extends State<_RegraFormDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(LucideIcons.alarmClock, color: AppColors.atrOrange, size: 20),
-          SizedBox(width: 10),
-          Text('Nova Regra Preventiva'),
+          const Icon(LucideIcons.alarmClock, color: AppColors.atrOrange, size: 20),
+          const SizedBox(width: 10),
+          Text(widget.existing != null ? 'Editar Regra Preventiva' : 'Nova Regra Preventiva'),
         ],
       ),
       content: SizedBox(
@@ -636,7 +675,7 @@ class _RegraFormDialogState extends State<_RegraFormDialog> {
         ),
         const SizedBox(width: 8),
         AtrPrimaryButton(
-          label: 'Criar Regra',
+          label: widget.existing != null ? 'Salvar Alterações' : 'Criar Regra',
           onPressed: _submit,
         ),
       ],
@@ -662,7 +701,7 @@ class _RegraFormDialogState extends State<_RegraFormDialog> {
     }
 
     final regra = RegraManutencao(
-      id: 'regra_${DateTime.now().millisecondsSinceEpoch}',
+      id: widget.existing?.id ?? '', // Supabase gera UUID via DEFAULT
       titulo: _tituloCtrl.text.trim(),
       tipo: _tipoCtrl.text.trim(),
       veiculoPlaca: _veiculoPlaca,
@@ -671,6 +710,9 @@ class _RegraFormDialogState extends State<_RegraFormDialog> {
       custoEstimado:
           double.tryParse(_custoCtrl.text.replaceAll(',', '.')) ?? 0.0,
       prioridade: _prioridade,
+      isAtiva: widget.existing?.isAtiva ?? true,
+      kmUltimaExecucao: widget.existing?.kmUltimaExecucao,
+      dataUltimaExecucao: widget.existing?.dataUltimaExecucao,
     );
 
     Navigator.pop(context, regra);

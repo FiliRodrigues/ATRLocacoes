@@ -115,7 +115,7 @@ export const extractInvoiceData: AtrTool = {
     for (let i = 0; i < invoices.length; i++) {
       const inv = invoices[i];
       if (inv.vehicle_plate) {
-        const placaNorm = String(inv.vehicle_plate).replace("-", "").toUpperCase();
+        const placaNorm = String(inv.vehicle_plate).replace(/-/g, "").toUpperCase();
         placasParaBuscar.add(placaNorm);
         // Guarda a placa normalizada de volta no objeto para uso posterior
         inv._placa_norm = placaNorm;
@@ -125,13 +125,18 @@ export const extractInvoiceData: AtrTool = {
       }
     }
 
-    // Batch: busca veículos por placa
+    // Batch: busca veículos por placa (aceita DB com ou sem hífen)
     const placaToVeiculo: Record<string, { id: string; placa: string; modelo: string; marca: string }> = {};
     if (placasParaBuscar.size > 0) {
-      const placasArray = Array.from(placasParaBuscar);
-      // Supabase in filter tem limites, faz em batches de 50
-      for (let i = 0; i < placasArray.length; i += 50) {
-        const batch = placasArray.slice(i, i + 50);
+      const placasNorm = Array.from(placasParaBuscar); // sem hífen, uppercase
+      // Monta variantes com hífen para cobrir o formato "ABC-1234"
+      const placasComHifen = placasNorm
+        .filter((p) => p.length === 7)
+        .map((p) => `${p.slice(0, 3)}-${p.slice(3)}`);
+      const todasPlacas = [...new Set([...placasNorm, ...placasComHifen])];
+
+      for (let i = 0; i < todasPlacas.length; i += 50) {
+        const batch = todasPlacas.slice(i, i + 50);
         const { data: veiculos, error: vErr } = await supabase
           .from("veiculos")
           .select("id, placa, modelo, marca")
@@ -140,7 +145,9 @@ export const extractInvoiceData: AtrTool = {
 
         if (!vErr && veiculos) {
           for (const v of veiculos) {
-            placaToVeiculo[v.placa] = v;
+            // Indexa pela versão normalizada (sem hífen) para que o match sempre funcione
+            const chave = v.placa.replace(/-/g, "").toUpperCase();
+            placaToVeiculo[chave] = v;
           }
         }
       }

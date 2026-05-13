@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/data/locacao_models.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/relatorio_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/atr_button.dart';
 import '../../core/widgets/atr_page_background.dart';
+import '../custos/custos_provider.dart';
 import 'locacao_provider.dart';
 import 'widgets/checklist_form_sheet.dart';
 import 'widgets/ocorrencia_form_sheet.dart';
@@ -42,6 +46,57 @@ class _ContratoDetalheScreenState extends State<ContratoDetalheScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _exportPdf(
+    BuildContext context, Contrato contrato) async {
+    final fleet = context.read<FleetRepository>();
+    final vehicle = fleet.frota
+        .where((v) => v.placa == contrato.veiculoPlaca)
+        .firstOrNull;
+    if (vehicle == null) return;
+
+    final custosProvider = context.read<CustosProvider>();
+    final manutencoes = [
+      ...custosProvider.pendentes,
+      ...custosProvider.emOficina,
+      ...custosProvider.concluidos,
+    ].where((m) => m.veiculoPlaca == vehicle.placa)
+     .toList()
+     ..sort((a, b) => b.data.compareTo(a.data));
+
+    final data = VeiculoPdfData(
+      placa: vehicle.placa,
+      nome: vehicle.nome,
+      motorista: vehicle.motorista,
+      kmAtual: vehicle.kmAtual,
+      custoTotalManutencao: vehicle.custoTotalManutencao,
+      totalRevisoes: vehicle.totalRevisoes,
+      manutencoes: manutencoes.map((m) => VeiculoManutencaoPdfRow(
+        titulo: m.titulo,
+        tipo: m.tipo,
+        data: m.data,
+        fornecedor: m.fornecedor,
+        custo: m.custo,
+        km: m.kmNoServico.toInt(),
+        prioridade: m.prioridade.name,
+        isPreventiva: m.isPreventiva,
+      )).toList(),
+    );
+
+    try {
+      final bytes = await RelatorioService.gerarPdfVeiculo(data);
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'contrato_${contrato.numero}_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao exportar PDF: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -86,6 +141,41 @@ class _ContratoDetalheScreenState extends State<ContratoDetalheScreen>
               backgroundColor: Colors.transparent,
               builder: (_) => ContratoFormSheet(contrato: contrato),
             ),
+          ),
+          IconButton(
+            icon: const Icon(LucideIcons.fileText, size: 20),
+            tooltip: 'Exportar PDF',
+            onPressed: () => _exportPdf(context, contrato),
+          ),
+          IconButton(
+            icon: const Icon(LucideIcons.trash2),
+            tooltip: 'Excluir contrato',
+            onPressed: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Excluir contrato?'),
+                  content: const Text('Esta ação não pode ser desfeita.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancelar'),
+                    ),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.statusError,
+                      ),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Excluir'),
+                    ),
+                  ],
+                ),
+              );
+              if (ok == true && mounted) {
+                await context.read<LocacaoProvider>().deletarContrato(contrato.id);
+                if (mounted) context.pop();
+              }
+            },
           ),
         ],
         bottom: TabBar(
@@ -221,6 +311,15 @@ class _ChecklistTab extends StatelessWidget {
               itemBuilder: (ctx, i) => _ChecklistCard(
                 evento: lista[i],
                 isDark: isDark,
+                onEdit: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => ChecklistFormSheet(
+                    contratoId: contrato.id,
+                    evento: lista[i],
+                  ),
+                ),
               ),
             ),
       floatingActionButton: FloatingActionButton.extended(
@@ -242,7 +341,8 @@ class _ChecklistTab extends StatelessWidget {
 class _ChecklistCard extends StatelessWidget {
   final ChecklistEvento evento;
   final bool isDark;
-  const _ChecklistCard({required this.evento, required this.isDark});
+  final VoidCallback? onEdit;
+  const _ChecklistCard({required this.evento, required this.isDark, this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -333,6 +433,15 @@ class _ChecklistCard extends StatelessWidget {
               ],
             ],
           ),
+          if (onEdit != null) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              icon: Icon(LucideIcons.pencil, size: 16),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onPressed: onEdit,
+            ),
+          ],
         ],
       ),
     );
@@ -368,6 +477,15 @@ class _OcorrenciasTab extends StatelessWidget {
                 isDark: isDark,
                 onUpdate: (atualizada) =>
                     context.read<LocacaoProvider>().atualizarOcorrencia(atualizada),
+                onEdit: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => OcorrenciaFormSheet(
+                    contratoId: contrato.id,
+                    ocorrencia: lista[i],
+                  ),
+                ),
               ),
             ),
       floatingActionButton: FloatingActionButton.extended(
@@ -390,10 +508,12 @@ class _OcorrenciaCard extends StatelessWidget {
   final Ocorrencia ocorrencia;
   final bool isDark;
   final Future<void> Function(Ocorrencia) onUpdate;
+  final VoidCallback? onEdit;
   const _OcorrenciaCard({
     required this.ocorrencia,
     required this.isDark,
     required this.onUpdate,
+    this.onEdit,
   });
 
   @override
@@ -444,6 +564,13 @@ class _OcorrenciaCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              if (onEdit != null)
+                IconButton(
+                  icon: Icon(LucideIcons.pencil, size: 16),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  onPressed: onEdit,
+                ),
               if (ocorrencia.status == OcorrenciaStatus.aberta)
                 AtrGhostButton(
                   label: 'Resolver',

@@ -7,6 +7,7 @@ import '../data/regras_manutencao_models.dart';
 import '../data/regras_manutencao_repository.dart';
 import '../enums/kanban_column.dart';
 import '../services/audit_service.dart';
+import '../utils/app_logger.dart';
 import '../../features/custos/custos_provider.dart';
 
 /// Provider de Regras de Manutenção Preventiva.
@@ -24,21 +25,28 @@ class RegrasManutencaoProvider extends ChangeNotifier {
     required CustosProvider custosProvider,
   })  : _repo = repo,
         _custos = custosProvider {
-    _init();
     FleetRepository.instance.addListener(_onFrotaUpdated);
-    // Recarrega dados se o primeiro load foi bloqueado pela RLS (anon)
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      if (data.event == AuthChangeEvent.signedIn) {
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.tokenRefreshed) {
         _reloadFromSupabase();
       }
     });
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session != null) {
+      _init();
+    } else {
+      _loading = false;
+    }
   }
 
   final RegrasManutencaoRepository _repo;
   final CustosProvider _custos;
   bool _disposed = false;
   bool _loading = true;
+  String? _erro;
   bool get isLoading => _loading;
+  String? get erro => _erro;
 
   List<RegraManutencao> _regras = [];
   List<RegraManutencao> get regras => List.unmodifiable(_regras);
@@ -58,11 +66,18 @@ class RegrasManutencaoProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-    _regras = await _repo.fetchAll();
-    _loading = false;
-    _safeNotify();
-    if (FleetRepository.instance.frota.isNotEmpty) {
-      await checkAndSchedule();
+    try {
+      _regras = await _repo.fetchAll();
+      _erro = null;
+      if (FleetRepository.instance.frota.isNotEmpty) {
+        await checkAndSchedule();
+      }
+    } catch (e, st) {
+      _erro = e.toString();
+      AppLogger.error('RegrasManutencaoProvider._init falhou', e, st);
+    } finally {
+      _loading = false;
+      _safeNotify();
     }
   }
 
@@ -85,23 +100,48 @@ class RegrasManutencaoProvider extends ChangeNotifier {
   // ─────────────────────────────────────────────────────────────────
 
   Future<void> addRegra(RegraManutencao regra) async {
-    await _repo.save(regra);
-    _regras.add(regra);
-    _safeNotify();
-    await checkAndScheduleForRegra(regra);
+    try {
+      final newId = await _repo.save(regra);
+      final saved = regra.copyWith(id: newId);
+      _regras.add(saved);
+      _erro = null;
+      _safeNotify();
+      await checkAndScheduleForRegra(saved);
+    } catch (e, st) {
+      _erro = e.toString();
+      AppLogger.error('RegrasManutencaoProvider.addRegra falhou', e, st);
+      _safeNotify();
+      rethrow;
+    }
   }
 
   Future<void> updateRegra(RegraManutencao regra) async {
-    await _repo.save(regra);
-    final idx = _regras.indexWhere((r) => r.id == regra.id);
-    if (idx != -1) _regras[idx] = regra;
-    _safeNotify();
+    try {
+      await _repo.save(regra);
+      final idx = _regras.indexWhere((r) => r.id == regra.id);
+      if (idx != -1) _regras[idx] = regra;
+      _erro = null;
+      _safeNotify();
+    } catch (e, st) {
+      _erro = e.toString();
+      AppLogger.error('RegrasManutencaoProvider.updateRegra falhou', e, st);
+      _safeNotify();
+      rethrow;
+    }
   }
 
   Future<void> deleteRegra(String id) async {
-    await _repo.delete(id);
-    _regras.removeWhere((r) => r.id == id);
-    _safeNotify();
+    try {
+      await _repo.delete(id);
+      _regras.removeWhere((r) => r.id == id);
+      _erro = null;
+      _safeNotify();
+    } catch (e, st) {
+      _erro = e.toString();
+      AppLogger.error('RegrasManutencaoProvider.deleteRegra falhou', e, st);
+      _safeNotify();
+      rethrow;
+    }
   }
 
   Future<void> toggleRegra(String id) async {
@@ -132,67 +172,77 @@ class RegrasManutencaoProvider extends ChangeNotifier {
 
     final agora = DateTime.now();
 
-    for (final veiculo in veiculosAlvo) {
-      if (!regra.deveDisparar(
-        kmAtual: veiculo.kmAtual,
-        dataReferencia: agora,
-      )) {
-        continue;
+    try {
+      for (final veiculo in veiculosAlvo) {
+        if (!regra.deveDisparar(
+          kmAtual: veiculo.kmAtual,
+          dataReferencia: agora,
+        )) {
+          continue;
+        }
+
+        // Verifica se já existe OS aberta (pendente ou em oficina) para este tipo + veículo
+        final osExistente = _custos.pendentes
+                .any((m) =>
+                    m.veiculoPlaca == veiculo.placa && m.tipo == regra.tipo) ||
+            _custos.emOficina
+                .any((m) =>
+                    m.veiculoPlaca == veiculo.placa && m.tipo == regra.tipo);
+
+        if (osExistente) continue;
+
+        // Cria OS automaticamente
+        final novaOs = ManutencaoItem(
+          id: 'auto_${regra.id}_${veiculo.placa}_${agora.millisecondsSinceEpoch}',
+          veiculoPlaca: veiculo.placa,
+          veiculoNome: veiculo.nome,
+          titulo: '${regra.titulo} [Auto]',
+          descricao:
+              'OS gerada automaticamente pela regra de manutenção preventiva.',
+          tipo: regra.tipo,
+          data: agora,
+          kmNoServico: veiculo.kmAtual.toInt(),
+          custo: regra.custoEstimado,
+          prioridade: regra.prioridade,
+          coluna: KanbanColumn.pendentes,
+          isPreventiva: true,
+        );
+
+        await _custos.addManutencao(novaOs);
+
+        // Marca execução no banco para não re-disparar
+        final regraAtualizada = regra.copyWith(
+          kmUltimaExecucao: veiculo.kmAtual.toInt(),
+          dataUltimaExecucao: agora,
+        );
+        await _repo.marcarExecucao(
+          id: regra.id,
+          kmExecucao: veiculo.kmAtual.toInt(),
+          dataExecucao: agora,
+        );
+
+        final idx = _regras.indexWhere((r) => r.id == regra.id);
+        if (idx != -1) _regras[idx] = regraAtualizada;
+
+        AuditService.log(
+          action: AuditAction.criar,
+          entity: AuditEntity.manutencao,
+          entityId: novaOs.id,
+          payload: {
+            'origem': 'regra_automatica',
+            'regra_id': regra.id,
+            'veiculo': veiculo.placa,
+            'tipo': regra.tipo,
+          },
+        );
       }
-
-      // Verifica se já existe OS aberta (pendente ou em oficina) para este tipo + veículo
-      final osExistente = _custos.pendentes
-              .any((m) =>
-                  m.veiculoPlaca == veiculo.placa && m.tipo == regra.tipo) ||
-          _custos.emOficina
-              .any((m) =>
-                  m.veiculoPlaca == veiculo.placa && m.tipo == regra.tipo);
-
-      if (osExistente) continue;
-
-      // Cria OS automaticamente
-      final novaOs = ManutencaoItem(
-        id: 'auto_${regra.id}_${veiculo.placa}_${agora.millisecondsSinceEpoch}',
-        veiculoPlaca: veiculo.placa,
-        veiculoNome: veiculo.nome,
-        titulo: '${regra.titulo} [Auto]',
-        descricao:
-            'OS gerada automaticamente pela regra de manutenção preventiva.',
-        tipo: regra.tipo,
-        data: agora,
-        kmNoServico: veiculo.kmAtual.toInt(),
-        custo: regra.custoEstimado,
-        prioridade: regra.prioridade,
-        coluna: KanbanColumn.pendentes,
-        isPreventiva: true,
-      );
-
-      await _custos.addManutencao(novaOs);
-
-      // Marca execução no banco para não re-disparar
-      final regraAtualizada = regra.copyWith(
-        kmUltimaExecucao: veiculo.kmAtual.toInt(),
-        dataUltimaExecucao: agora,
-      );
-      await _repo.marcarExecucao(
-        id: regra.id,
-        kmExecucao: veiculo.kmAtual.toInt(),
-        dataExecucao: agora,
-      );
-
-      final idx = _regras.indexWhere((r) => r.id == regra.id);
-      if (idx != -1) _regras[idx] = regraAtualizada;
-
-      AuditService.log(
-        action: AuditAction.criar,
-        entity: AuditEntity.manutencao,
-        entityId: novaOs.id,
-        payload: {
-          'origem': 'regra_automatica',
-          'regra_id': regra.id,
-          'veiculo': veiculo.placa,
-          'tipo': regra.tipo,
-        },
+      _erro = null;
+    } catch (e, st) {
+      _erro = e.toString();
+      AppLogger.error(
+        'RegrasManutencaoProvider.checkAndScheduleForRegra falhou',
+        e,
+        st,
       );
     }
 

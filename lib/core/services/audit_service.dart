@@ -59,8 +59,8 @@ class AuditService {
         AppLogger.warning('AuditService: Supabase não inicializado. Ignorando log.');
         return;
       }
-      
-      await Supabase.instance.client.from('audit_log').insert({
+
+      final record = <String, dynamic>{
         'username':       _currentUsername ?? 'desconhecido',
         'effective_user': _currentUsername ?? 'desconhecido',
         'tenant_id':      _currentTenantId,
@@ -72,13 +72,35 @@ class AuditService {
         'after_state':    afterState,
         'origin':         origin,
         'created_at':     DateTime.now().toIso8601String(),
-      });
+      };
+
+      await _retryInsert(record, action, entity);
     } catch (error, stackTrace) {
-      // Auditoria nunca deve derrubar o fluxo — somente log local.
       AppLogger.warning(
         'AuditService.log falhou [action=${action.name}, entity=${entity.name}]: $error',
       );
       AppLogger.error('AuditService stack', error, stackTrace);
+    }
+  }
+
+  static Future<void> _retryInsert(
+    Map<String, dynamic> record,
+    AuditAction action,
+    AuditEntity entity,
+  ) async {
+    const delays = [500, 1000, 2000];
+    for (var i = 0; i <= delays.length; i++) {
+      try {
+        await Supabase.instance.client.from('audit_log').insert(record);
+        return;
+      } catch (e) {
+        if (i < delays.length) {
+          AppLogger.warning('AuditService retry ${i + 1}/${delays.length + 1} [${action.name}/${entity.name}]: $e');
+          await Future.delayed(Duration(milliseconds: delays[i]));
+        } else {
+          AppLogger.error('AuditService: todas as tentativas falharam [${action.name}/${entity.name}]', e);
+        }
+      }
     }
   }
 }

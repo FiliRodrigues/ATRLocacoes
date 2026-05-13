@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ATR (Windows)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define=SUPABASE_URL=https://ybajzitijjtzhavgrarz.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=sb_publishable_SAX5OUy6ECnlYp_x0IuV-A_Veo9AvJA"
+      ]
+    },
+    {
+      "name": "ATR (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "chrome",
+      "args": [
+        "--web-port=5000",
+        "--dart-define=SUPABASE_URL=https://ybajzitijjtzhavgrarz.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=sb_publishable_SAX5OUy6ECnlYp_x0IuV-A_Veo9AvJA"
+      ]
+    }
+  ]
+}

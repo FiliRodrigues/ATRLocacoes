@@ -13,6 +13,10 @@ import '../../core/data/locacao_models.dart';
 import 'widgets/contrato_form_sheet.dart';
 import 'contrato_detalhe_screen.dart';
 
+import '../../core/utils/export_csv_stub.dart'
+    if (dart.library.html) '../../core/utils/export_csv_html.dart'
+    if (dart.library.io) '../../core/utils/export_csv_io.dart';
+
 final _brl = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 final _dateFmt = DateFormat('dd/MM/yyyy');
 
@@ -26,6 +30,10 @@ class ContratosScreen extends StatefulWidget {
 class _ContratosScreenState extends State<ContratosScreen> {
   ContratoStatus? _filtroStatus;
   String _busca = '';
+  Set<String> _selectedIds = {};
+  bool _bulkProcessing = false;
+
+  bool get _selectionMode => _selectedIds.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -52,12 +60,13 @@ class _ContratosScreenState extends State<ContratosScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(context, isDark, provider),
+                    _buildHeader(context, isDark, provider, contratos),
                     _buildMetrics(isDark, provider),
                   ],
                 ),
               ),
               _buildFiltros(isDark),
+              if (_selectionMode) _buildSelectionBar(contratos, isDark),
               Expanded(
                 child: provider.isLoading
                     ? const Center(child: CircularProgressIndicator())
@@ -72,11 +81,53 @@ class _ContratosScreenState extends State<ContratosScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, bool isDark, LocacaoProvider provider) {
+  Widget _buildHeader(BuildContext context, bool isDark, LocacaoProvider provider, List<Contrato> contratos) {
     return AtrTopBar(
       title: 'Contratos de Locação',
       subtitle: '${provider.contratosAtivos.length} contratos ativos · ${_brl.format(provider.receitaMensalAtiva)}/mês',
       actions: [
+        PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'csv') {
+              _exportCsv(contratos);
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(
+              value: 'csv',
+              child: Row(
+                children: [
+                  Icon(LucideIcons.fileSpreadsheet, size: 16),
+                  SizedBox(width: 8),
+                  Text('Exportar CSV'),
+                ],
+              ),
+            ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.borderLight),
+              borderRadius: BorderRadius.circular(12),
+              color: Theme.of(context).colorScheme.surface,
+            ),
+            child: const Row(
+              children: [
+                Icon(LucideIcons.download,
+                    size: 16, color: AppColors.textSecondaryLight),
+                SizedBox(width: 8),
+                Text(
+                  'Exportar',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondaryLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
         AtrPrimaryButton(
           label: 'Novo Contrato',
           icon: LucideIcons.plus,
@@ -134,6 +185,117 @@ class _ContratosScreenState extends State<ContratosScreen> {
     );
   }
 
+  void _toggleSelectAll(List<Contrato> contratos) {
+    setState(() {
+      if (_selectedIds.length == contratos.length) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds = contratos.map((c) => c.id).toSet();
+      }
+    });
+  }
+
+  void _toggleItemSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  Widget _buildSelectionBar(List<Contrato> contratos, bool isDark) {
+    final ativosSelecionados = contratos
+        .where((c) => _selectedIds.contains(c.id) && c.status == ContratoStatus.ativo)
+        .length;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.atrOrange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.atrOrange.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => _toggleSelectAll(contratos),
+            child: Row(
+              children: [
+                Icon(
+                  _selectedIds.length == contratos.length
+                      ? LucideIcons.checkSquare
+                      : LucideIcons.square,
+                  size: 16,
+                  color: AppColors.atrOrange,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${_selectedIds.length} selecionados',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: AppColors.atrOrange,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          if (ativosSelecionados > 0)
+            AtrPrimaryButton(
+              label: _bulkProcessing ? 'Processando...' : 'Encerrar ($ativosSelecionados)',
+              onPressed: _bulkProcessing ? null : () => _bulkEncerrar(contratos),
+            ),
+          const SizedBox(width: 8),
+          AtrGhostButton(
+            label: 'Cancelar',
+            onPressed: () => setState(() => _selectedIds.clear()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _bulkEncerrar(List<Contrato> contratos) async {
+    final toClose = contratos
+        .where((c) => _selectedIds.contains(c.id) && c.status == ContratoStatus.ativo)
+        .toList();
+    if (toClose.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Encerrar contratos?'),
+        content: Text('Deseja encerrar ${toClose.length} contrato(s) ativo(s)?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirmar')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _bulkProcessing = true);
+    try {
+      for (final c in toClose) {
+        await context.read<LocacaoProvider>().encerrarContrato(c.id);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${toClose.length} contrato(s) encerrado(s).')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao encerrar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _selectedIds.clear(); _bulkProcessing = false; });
+    }
+  }
+
   Widget _buildFiltros(bool isDark) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 0, 28, 16),
@@ -187,12 +349,21 @@ class _ContratosScreenState extends State<ContratosScreen> {
       itemBuilder: (ctx, i) => _ContratoCard(
         contrato: contratos[i],
         isDark: isDark,
-        onTap: () => Navigator.push(
-          ctx,
-          MaterialPageRoute(
-            builder: (_) => ContratoDetalheScreen(contratoId: contratos[i].id),
-          ),
-        ),
+        isSelected: _selectedIds.contains(contratos[i].id),
+        showCheckbox: _selectionMode,
+        onTap: () {
+          if (_selectionMode) {
+            _toggleItemSelection(contratos[i].id);
+          } else {
+            Navigator.push(
+              ctx,
+              MaterialPageRoute(
+                builder: (_) => ContratoDetalheScreen(contratoId: contratos[i].id),
+              ),
+            );
+          }
+        },
+        onLongPress: () => _toggleItemSelection(contratos[i].id),
       ),
     );
   }
@@ -224,6 +395,42 @@ class _ContratosScreenState extends State<ContratosScreen> {
       builder: (_) => const ContratoFormSheet(),
     );
   }
+
+  Future<void> _exportCsv(List<Contrato> itens) async {
+    final buffer = StringBuffer();
+    buffer.writeln(
+      '"NUMERO";"CLIENTE";"CNPJ";"PLACA";"DATA INICIO";"DATA FIM";"SLA KM/MES";"VALOR MENSAL";"STATUS"',
+    );
+
+    for (final c in itens) {
+      final valorStr = c.valorMensal.toStringAsFixed(2).replaceAll('.', ',');
+      buffer.writeln(
+        '${_csvField(c.numero)};${_csvField(c.clienteNome)};${_csvField(c.clienteCnpj)};${_csvField(c.veiculoPlaca)};${_csvField(_dateFmt.format(c.dataInicio))};${_csvField(_dateFmt.format(c.dataFim))};${_csvField(c.slaKmMes.toString())};${_csvField(valorStr)};${_csvField(c.status.label)}',
+      );
+    }
+
+    try {
+      final fileName =
+          'contratos_export_${DateTime.now().millisecondsSinceEpoch}.csv';
+      await exportCsv(fileName, buffer.toString());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('CSV exportado: $fileName')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao exportar CSV: $e')),
+        );
+      }
+    }
+  }
+
+  String _csvField(String value) {
+    final escaped = value.replaceAll('"', '""');
+    return '"$escaped"';
+  }
 }
 
 // ── Widgets internos ──────────────────────────────────
@@ -232,24 +439,51 @@ class _ContratoCard extends StatelessWidget {
   final Contrato contrato;
   final bool isDark;
   final VoidCallback onTap;
-  const _ContratoCard({required this.contrato, required this.isDark, required this.onTap});
+  final VoidCallback? onLongPress;
+  final bool isSelected;
+  final bool showCheckbox;
+  const _ContratoCard({
+    required this.contrato,
+    required this.isDark,
+    required this.onTap,
+    this.onLongPress,
+    this.isSelected = false,
+    this.showCheckbox = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          color: isSelected
+              ? AppColors.atrOrange.withValues(alpha: 0.08)
+              : isDark
+                  ? AppColors.surfaceDark
+                  : AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isDark ? AppColors.borderDark : AppColors.borderLight,
+            color: isSelected
+                ? AppColors.atrOrange.withValues(alpha: 0.4)
+                : isDark
+                    ? AppColors.borderDark
+                    : AppColors.borderLight,
           ),
         ),
         child: Row(
           children: [
+            if (showCheckbox) ...[
+              Icon(
+                isSelected ? LucideIcons.checkSquare : LucideIcons.square,
+                size: 18,
+                color: isSelected ? AppColors.atrOrange : AppColors.textMutedDark,
+              ),
+              const SizedBox(width: 10),
+            ],
             // Status indicator
             Container(
               width: 4,

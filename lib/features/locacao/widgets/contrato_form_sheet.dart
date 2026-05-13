@@ -85,6 +85,12 @@ class _ContratoFormSheetState extends State<ContratoFormSheet> {
       );
       return;
     }
+    if (!_dataFim.isAfter(_dataInicio)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A data de fim deve ser após a data de início')),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       final username =

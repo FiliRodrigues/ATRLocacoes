@@ -11,8 +11,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/navigation/app_router.dart';
 import 'core/data/fleet_data.dart';
+import 'core/data/fleet_cache.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/supabase_service.dart';
+import 'core/services/notification_service.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/atr_theme_state.dart';
@@ -26,6 +28,10 @@ import 'features/locacao/locacao_provider.dart';
 import 'core/data/combustivel_repository.dart';
 import 'core/providers/combustivel_provider.dart';
 import 'core/providers/score_motorista_provider.dart';
+import 'features/ai_assistant/data/ai_chat_repository.dart';
+import 'features/ai_assistant/domain/ai_chat_provider.dart';
+import 'features/ai_assistant/presentation/floating_chat_button.dart';
+import 'l10n/app_localizations.dart';
 
 export 'core/services/auth_service.dart' show AuthService;
 
@@ -41,18 +47,9 @@ final bool _kCheckerboardRasterCacheImages =
 final bool _kCheckerboardOffscreenLayers =
     _envFlag('ATR_CHECKERBOARD_OFFSCREEN_LAYERS');
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('pt_BR');
 
-  if (!kSupabaseConfigured) {
-    throw StateError(
-      'SUPABASE_URL e SUPABASE_ANON_KEY são obrigatórias. '
-      'Forneça-as via --dart-define no build/run (ex.: run_atr.local.bat).',
-    );
-  }
-
-  // ── Blindagem de erros antes de qualquer widget ──
   ErrorWidget.builder = (FlutterErrorDetails details) {
     saveErrorLog(
         'UI Build Error: ${details.exceptionAsString()}\nTrace:\n${details.stack}');
@@ -88,19 +85,70 @@ void main() async {
     return true;
   };
 
-  // ── Mostra splash instantaneamente enquanto Supabase conecta ──
-  runApp(const _SplashApp());
+  runApp(const _AppLoader());
+}
 
-  await Supabase.initialize(
-    url: kSupabaseUrl,
-    anonKey: kSupabaseAnonKey,
-  );
+class _AppLoader extends StatefulWidget {
+  const _AppLoader();
 
-  unawaited(FleetRepository.instance.loadFromSupabase());
+  @override
+  State<_AppLoader> createState() => _AppLoaderState();
+}
 
-  final authService = AuthService();
-  runApp(
-    MultiProvider(
+class _AppLoaderState extends State<_AppLoader> {
+  bool _ready = false;
+  late AuthService _authService;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    if (!kSupabaseConfigured) {
+      throw StateError(
+        'SUPABASE_URL e SUPABASE_ANON_KEY são obrigatórias. '
+        'Forneça-as via --dart-define no build/run (ex.: run_atr.local.bat).',
+      );
+    }
+
+    try {
+      await initializeDateFormatting('pt_BR');
+    } catch (_) {}
+
+    try {
+      await AtrThemeState.init();
+    } catch (_) {}
+
+    try {
+      await FleetCache.init();
+      final cachedFrota = FleetCache.loadFrota();
+      if (cachedFrota != null) {
+        FleetRepository.instance.seedFromCache(cachedFrota);
+      }
+    } catch (_) {}
+
+    try {
+      await Supabase.initialize(
+        url: kSupabaseUrl,
+        anonKey: kSupabaseAnonKey,
+      );
+    } catch (e) {
+      saveErrorLog('Supabase.initialize failed: $e');
+    }
+
+    unawaited(FleetRepository.instance.loadFromSupabase());
+
+    _authService = AuthService();
+    if (mounted) setState(() => _ready = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) return const _SplashScreen();
+
+    return MultiProvider(
       providers: [
         ChangeNotifierProvider(
           create: (_) => CustosProvider(SupabaseCustosRepository()),
@@ -120,24 +168,28 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => ScoreMotoristaProvider(),
         ),
+        ChangeNotifierProvider(
+          create: (_) => AiChatProvider(AiChatRepository(Supabase.instance.client)),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => NotificationService(),
+        ),
         ChangeNotifierProvider.value(value: FleetRepository.instance),
-        ChangeNotifierProvider.value(value: authService),
+        ChangeNotifierProvider.value(value: _authService),
       ],
-      child: ATRApp(authService: authService),
-    ),
-  );
+      child: ATRApp(authService: _authService),
+    );
+  }
 }
 
-/// Splash mínimo que aparece enquanto o Supabase conecta.
-class _SplashApp extends StatelessWidget {
-  const _SplashApp();
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(),
-      home: const Scaffold(
+      home: Scaffold(
         backgroundColor: AppColors.backgroundDark,
         body: Center(
           child: Column(
@@ -200,12 +252,14 @@ class _ATRAppState extends State<ATRApp> {
           checkerboardRasterCacheImages: _kCheckerboardRasterCacheImages,
           checkerboardOffscreenLayers: _kCheckerboardOffscreenLayers,
           localizationsDelegates: const [
+            AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: const [
             Locale('pt', 'BR'),
+            Locale('en'),
           ],
           themeMode: currentMode,
           theme: AppTheme.lightTheme,
@@ -215,6 +269,7 @@ class _ATRAppState extends State<ATRApp> {
               children: [
                 EscapeKeyGuard(child: child ?? const SizedBox.shrink()),
                 _AdminCircleButton(authService: widget.authService),
+                const FloatingChatButton(),
               ],
             );
           },
@@ -265,10 +320,16 @@ class _AdminCircleButton extends StatelessWidget {
   Widget build(BuildContext context) {
     if (authService.currentRole != AuthUserRole.admin) return const SizedBox.shrink();
     return Positioned(
-      bottom: 28,
+      bottom: 92,
       right: 28,
       child: GestureDetector(
-        onTap: () => GoRouter.of(context).go('/admin/users'),
+        onTap: () {
+                try {
+                  GoRouter.of(context).go('/admin/users');
+                } catch (_) {
+                  // context may not have GoRouter during splash
+                }
+              },
         child: Container(
           width: 44,
           height: 44,

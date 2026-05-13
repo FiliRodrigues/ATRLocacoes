@@ -4,6 +4,7 @@ import '../utils/app_logger.dart';
 import 'regras_manutencao_models.dart';
 
 import '../constants.dart';
+import '../services/audit_service.dart';
 const String _kTable = 'regras_manutencao';
 
 // ─────────────────────────────────────────────────────────────────────
@@ -32,8 +33,7 @@ RegraManutencao _fromRow(Map<String, dynamic> row) {
 }
 
 Map<String, dynamic> _toRow(RegraManutencao r, String tenantId) {
-  return {
-    'id': r.id,
+  final row = <String, dynamic>{
     'titulo': r.titulo,
     'tipo': r.tipo,
     'veiculo_placa': r.veiculoPlaca,
@@ -46,6 +46,9 @@ Map<String, dynamic> _toRow(RegraManutencao r, String tenantId) {
     'data_ultima_execucao': r.dataUltimaExecucao?.toIso8601String(),
     'tenant_id': tenantId,
   };
+  // Só inclui id se for UUID (tem hífen) — senão Supabase gera via DEFAULT
+  if (r.id.contains('-')) row['id'] = r.id;
+  return row;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -55,8 +58,7 @@ Map<String, dynamic> _toRow(RegraManutencao r, String tenantId) {
 class RegrasManutencaoRepository {
   SupabaseClient get _client => Supabase.instance.client;
 
-  final String tenantId;
-  RegrasManutencaoRepository({this.tenantId = kDefaultTenantId});
+  String get tenantId => AuditService.currentTenantId ?? kDefaultTenantId;
 
   Future<List<RegraManutencao>> fetchAll() async {
     try {
@@ -64,7 +66,8 @@ class RegrasManutencaoRepository {
           .from(_kTable)
           .select('id, titulo, tipo, veiculo_placa, intervalo_km, intervalo_dias, custo_estimado, prioridade, is_ativa, km_ultima_execucao, data_ultima_execucao, tenant_id')
           .eq('tenant_id', tenantId)
-          .order('titulo', ascending: true);
+          .order('titulo', ascending: true)
+          .limit(200);
       return (rows as List<dynamic>)
           .map((r) => _fromRow(r as Map<String, dynamic>))
           .toList();
@@ -74,12 +77,17 @@ class RegrasManutencaoRepository {
     }
   }
 
-  Future<void> save(RegraManutencao regra) async {
+  Future<String> save(RegraManutencao regra) async {
     try {
-      await _client.from(_kTable).upsert(
-        _toRow(regra, tenantId),
-        onConflict: 'id',
-      );
+      final row = _toRow(regra, tenantId);
+      final isNew = !regra.id.contains('-'); // UUID tem hífen
+      if (isNew) {
+        final result = await _client.from(_kTable).insert(row).select('id').single();
+        return result['id'] as String;
+      } else {
+        await _client.from(_kTable).update(row).eq('id', regra.id);
+        return regra.id;
+      }
     } catch (e, st) {
       AppLogger.error(
           'RegrasManutencaoRepository.save falhou [id=${regra.id}]', e, st);
