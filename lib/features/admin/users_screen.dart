@@ -25,11 +25,14 @@ class _UsersScreenState extends State<UsersScreen> {
   String _searchQuery = '';
   int _currentPage = 0;
   static const int _pageSize = 10;
+  bool _isUnlocked = false;
+  bool _verifying = false;
+  String? _authError;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showAuthGate());
     _searchCtrl.addListener(() {
       setState(() {
         _searchQuery = _searchCtrl.text.trim().toLowerCase();
@@ -78,6 +81,13 @@ class _UsersScreenState extends State<UsersScreen> {
     if (auth.currentRole != AuthUserRole.admin) {
       WidgetsBinding.instance.addPostFrameCallback((_) => context.go('/'));
       return const SizedBox.shrink();
+    }
+
+    if (!_isUnlocked) {
+      return Scaffold(
+        backgroundColor: AppColors.backgroundDark,
+        body: const Center(child: CircularProgressIndicator(color: AppColors.atrOrange)),
+      );
     }
 
     return Scaffold(
@@ -256,6 +266,7 @@ class _UsersScreenState extends State<UsersScreen> {
                   DataColumn(label: Text('FUNÇÃO')),
                   DataColumn(label: Text('TELAS')),
                   DataColumn(label: Text('ÚLTIMO LOGIN')),
+                  DataColumn(label: Text('STATUS')),
                   DataColumn(label: Text('')),
                 ],
                 rows: _pagedUsers.map((u) {
@@ -281,6 +292,7 @@ class _UsersScreenState extends State<UsersScreen> {
                     DataCell(_roleBadge(u.role, u.isAdmin)),
                     DataCell(Text('${u.allowedFeatures.length} telas', style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 12))),
                     DataCell(Text(u.lastLogin != null ? '${u.lastLogin!.day}/${u.lastLogin!.month}/${u.lastLogin!.year}' : '—', style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 12))),
+                    DataCell(_statusBadge(u.ativo)),
                     DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
                       IconButton(
                         icon: const Icon(LucideIcons.pencil, size: 16),
@@ -295,12 +307,31 @@ class _UsersScreenState extends State<UsersScreen> {
                           if (edited == true) _load();
                         },
                       ),
-                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(LucideIcons.keyRound, size: 16),
+                        color: AppColors.textSecondaryDark,
+                        tooltip: 'Resetar senha',
+                        onPressed: () => _showResetPasswordDialog(u),
+                      ),
+                      if (u.ativo)
+                        IconButton(
+                          icon: const Icon(LucideIcons.userX, size: 16),
+                          color: AppColors.statusWarning,
+                          tooltip: 'Desativar',
+                          onPressed: () => _confirmDeactivate(u),
+                        )
+                      else
+                        IconButton(
+                          icon: const Icon(LucideIcons.userCheck, size: 16),
+                          color: AppColors.statusSuccess,
+                          tooltip: 'Reativar',
+                          onPressed: () => _reactivate(u),
+                        ),
                       IconButton(
                         icon: const Icon(LucideIcons.trash2, size: 16),
                         color: AppColors.statusError,
-                        tooltip: 'Desativar',
-                        onPressed: () => _confirmDeactivate(u),
+                        tooltip: 'Excluir permanentemente',
+                        onPressed: () => _confirmDelete(u),
                       ),
                     ])),
                   ]);
@@ -356,6 +387,206 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
+  Widget _statusBadge(bool ativo) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: ativo ? AppColors.statusSuccess.withValues(alpha: 0.12) : AppColors.textMutedDark.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        border: Border.all(color: ativo ? AppColors.statusSuccess.withValues(alpha: 0.25) : AppColors.textMutedDark.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        ativo ? 'Ativo' : 'Inativo',
+        style: TextStyle(color: ativo ? AppColors.statusSuccess : AppColors.textMutedDark, fontSize: 11, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+
+  void _showAuthGate() {
+    final passCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            backgroundColor: AppColors.surfaceDark,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.xl)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.atrOrange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(LucideIcons.shieldCheck, color: AppColors.atrOrange, size: 20),
+                ),
+                const SizedBox(width: 12),
+                const Text('Verificação de segurança', style: TextStyle(color: AppColors.textPrimaryDark, fontSize: 16, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Digite sua senha para gerenciar usuários', style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Senha do administrador',
+                      hintStyle: const TextStyle(color: AppColors.textMutedDark, fontSize: 13),
+                      prefixIcon: const Icon(LucideIcons.lock, size: 16, color: AppColors.textSecondaryDark),
+                      filled: true,
+                      fillColor: AppColors.surfaceDarkAlt,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.borderDark),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.borderDark),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.atrOrange),
+                      ),
+                    ),
+                    onSubmitted: (v) => _verifyPassword(v, ctx, passCtrl),
+                  ),
+                  if (_authError != null) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.alertCircle, color: AppColors.statusError, size: 14),
+                        const SizedBox(width: 6),
+                        Text(_authError!, style: const TextStyle(color: AppColors.statusError, fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () { Navigator.pop(ctx); if (mounted) context.go('/configuracoes'); },
+                child: const Text('Cancelar', style: TextStyle(color: AppColors.textSecondaryDark)),
+              ),
+              AtrButton.primary(
+                label: 'Confirmar',
+                loading: _verifying,
+                onPressed: () => _verifyPassword(passCtrl.text, ctx, passCtrl),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _verifyPassword(String password, BuildContext dialogContext, TextEditingController passCtrl) async {
+    setState(() { _verifying = true; _authError = null; });
+    final ok = await _service.verifyAdminPassword(password);
+    if (!mounted) return;
+    if (ok) {
+      setState(() { _isUnlocked = true; _verifying = false; });
+      Navigator.pop(dialogContext);
+      _load();
+    } else {
+      setState(() { _authError = 'Senha incorreta'; _verifying = false; });
+    }
+  }
+
+  void _showResetPasswordDialog(AppUser user) {
+    final passCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.xl)),
+        title: Text('Resetar senha de "${user.nomeCompleto}"', style: const TextStyle(color: AppColors.textPrimaryDark)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: passCtrl,
+              obscureText: true,
+              style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Nova senha',
+                hintText: 'Mínimo 12 caracteres',
+                labelStyle: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 11),
+                filled: true,
+                fillColor: AppColors.surfaceDarkAlt,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.borderDark)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.borderDark)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.atrOrange)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmCtrl,
+              obscureText: true,
+              style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Confirmar senha',
+                labelStyle: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 11),
+                filled: true,
+                fillColor: AppColors.surfaceDarkAlt,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.borderDark)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.borderDark)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.atrOrange)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          AtrButton.ghost(label: 'Cancelar', onPressed: () => Navigator.pop(ctx)),
+          AtrButton.primary(
+            label: 'Resetar',
+            onPressed: () async {
+              if (passCtrl.text.length < 12) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A senha deve ter no mínimo 12 caracteres.')));
+                return;
+              }
+              if (passCtrl.text != confirmCtrl.text) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Senhas não conferem.')));
+                return;
+              }
+              try {
+                await _service.resetPassword(id: user.id!, newPassword: passCtrl.text);
+                Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Senha resetada com sucesso.'), backgroundColor: AppColors.statusSuccess));
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e')));
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _reactivate(AppUser user) async {
+    await _service.reactivateUser(user.id!);
+    _load();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${user.nomeCompleto} reativado.'), backgroundColor: AppColors.statusSuccess),
+      );
+    }
+  }
+
   void _confirmDeactivate(AppUser user) {
     final currentUser = context.read<AuthService>().currentUser;
     if (user.username == currentUser?.username) {
@@ -380,6 +611,101 @@ class _UsersScreenState extends State<UsersScreen> {
               await _service.setActive(user.id!, false);
               Navigator.pop(ctx);
               _load();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(AppUser user) {
+    final currentUser = context.read<AuthService>().currentUser;
+    if (user.username == currentUser?.username) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Você não pode excluir seu próprio usuário.')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.xl)),
+        title: const Text('Excluir permanentemente', style: TextStyle(color: AppColors.textPrimaryDark)),
+        content: Text('Tem certeza que deseja excluir permanentemente "${user.nomeCompleto}" (${user.username})?', style: const TextStyle(color: AppColors.textSecondaryDark)),
+        actions: [
+          AtrButton.ghost(label: 'Cancelar', onPressed: () => Navigator.pop(ctx)),
+          AtrButton.primary(
+            label: 'Excluir',
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showDeleteConfirmFinal(user);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmFinal(AppUser user) {
+    final confirmCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.xl)),
+        title: const Row(
+          children: [
+            Icon(LucideIcons.alertTriangle, color: AppColors.statusError, size: 20),
+            SizedBox(width: 8),
+            Text('Confirmação final', style: TextStyle(color: AppColors.statusError, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Esta ação é irreversível.', style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 13)),
+            const SizedBox(height: 8),
+            Text('Digite "${user.username}" para confirmar:', style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: confirmCtrl,
+              style: const TextStyle(color: AppColors.textPrimaryDark, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: user.username,
+                filled: true,
+                fillColor: AppColors.surfaceDarkAlt,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          AtrButton.ghost(label: 'Cancelar', onPressed: () => Navigator.pop(ctx)),
+          AtrButton.primary(
+            label: 'Confirmar exclusão',
+            onPressed: () async {
+              if (confirmCtrl.text.trim() != user.username) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username não confere.')));
+                return;
+              }
+              try {
+                await _service.deleteUser(user.id!);
+                Navigator.pop(ctx);
+                _load();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${user.nomeCompleto} excluído permanentemente.'), backgroundColor: AppColors.statusError),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e')));
+                }
+              }
             },
           ),
         ],

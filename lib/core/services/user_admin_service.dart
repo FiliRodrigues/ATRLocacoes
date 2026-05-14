@@ -67,8 +67,9 @@ class UserAdminService {
     required List<String> allowedFeatures,
   }) async {
     final res = await Supabase.instance.client.functions.invoke(
-      'create-user',
+      'manage-users',
       body: {
+        'action': 'create_user',
         'email': email,
         'password': password,
         'username': username,
@@ -89,7 +90,6 @@ class UserAdminService {
     final rows = await Supabase.instance.client
         .from('app_users')
         .select()
-        .eq('ativo', true)
         .order('username')
         .limit(500);
     return (rows as List).map((r) => AppUser.fromJson(r as Map<String, dynamic>)).toList();
@@ -105,5 +105,88 @@ class UserAdminService {
     await Supabase.instance.client
         .from('app_users')
         .update({'allowed_features': features}).eq('id', userId);
+  }
+
+  Future<void> updateUser({
+    required String id,
+    String? username,
+    String? nomeCompleto,
+    String? role,
+    List<String>? features,
+  }) async {
+    final res = await Supabase.instance.client.functions.invoke(
+      'manage-users',
+      body: {
+        'action': 'update_user',
+        'user_id': id,
+        if (username != null) 'username': username,
+        if (nomeCompleto != null) 'nome_completo': nomeCompleto,
+        if (role != null) 'role': role,
+        if (features != null) 'allowed_features': features,
+      },
+    );
+
+    if (res.status != 200) {
+      final data = res.data;
+      final error = data is Map ? (data['error'] ?? 'Erro desconhecido') : 'Erro desconhecido';
+      throw UserAdminException(error.toString());
+    }
+  }
+
+  Future<void> resetPassword({
+    required String id,
+    required String newPassword,
+  }) async {
+    final res = await Supabase.instance.client.functions.invoke(
+      'manage-users',
+      body: {
+        'action': 'reset_password',
+        'user_id': id,
+        'password': newPassword,
+      },
+    );
+
+    if (res.status != 200) {
+      final data = res.data;
+      final error = data is Map ? (data['error'] ?? 'Erro desconhecido') : 'Erro desconhecido';
+      throw UserAdminException(error.toString());
+    }
+  }
+
+  Future<void> deleteUser(String id) async {
+    final res = await Supabase.instance.client.functions.invoke(
+      'manage-users',
+      body: {
+        'action': 'delete_user',
+        'user_id': id,
+      },
+    );
+
+    if (res.status != 200) {
+      final data = res.data;
+      final error = data is Map ? (data['error'] ?? 'Erro desconhecido') : 'Erro desconhecido';
+      throw UserAdminException(error.toString());
+    }
+  }
+
+  Future<void> reactivateUser(String userId) async {
+    await Supabase.instance.client
+        .from('app_users')
+        .update({'ativo': true}).eq('id', userId);
+  }
+
+  Future<bool> verifyAdminPassword(String password) async {
+    try {
+      final currentEmail = Supabase.instance.client.auth.currentUser?.email;
+      if (currentEmail == null) return false;
+
+      final res = await Supabase.instance.client.auth.signInWithPassword(
+        email: currentEmail,
+        password: password,
+      );
+      return res.session != null;
+    } catch (_) {
+      return false;
+    }
   }
 }

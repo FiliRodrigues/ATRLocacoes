@@ -81,7 +81,19 @@ class _UserFormModalState extends State<UserFormModal> {
     try {
       final service = UserAdminService();
       if (_isEditing) {
-        await service.updatePermissions(widget.existing!.id!, _selectedFeatures.toList());
+        await service.updateUser(
+          id: widget.existing!.id!,
+          username: _userCtrl.text.trim(),
+          nomeCompleto: _nomeCtrl.text.trim(),
+          role: _role,
+          features: _role == 'admin' ? [] : _selectedFeatures.toList(),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Usuário atualizado.'), backgroundColor: AppColors.statusSuccess),
+          );
+          Navigator.pop(context, true);
+        }
       } else {
         await service.createUser(
           email: _emailCtrl.text.trim(),
@@ -91,15 +103,12 @@ class _UserFormModalState extends State<UserFormModal> {
           role: _role,
           allowedFeatures: _role == 'admin' ? [] : _selectedFeatures.toList(),
         );
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isEditing ? 'Permissões atualizadas.' : 'Usuário criado. Ele já pode fazer login com email e senha.'),
-            backgroundColor: AppColors.statusSuccess,
-          ),
-        );
-        Navigator.pop(context, true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Usuário criado. Ele já pode fazer login com email e senha.'), backgroundColor: AppColors.statusSuccess),
+          );
+          Navigator.pop(context, true);
+        }
       }
     } on UserAdminException catch (e) {
       if (mounted) setState(() { _error = e.message; _saving = false; });
@@ -177,7 +186,7 @@ class _UserFormModalState extends State<UserFormModal> {
                     if (v == null || v.trim().isEmpty) return 'Obrigatório';
                     if (v.trim().length < 3) return 'Mínimo 3 caracteres';
                     return null;
-                  }, readOnly: _isEditing),
+                  }),
                   const SizedBox(height: 14),
 
                   _buildField('Nome completo', _nomeCtrl, LucideIcons.userCircle, null),
@@ -338,7 +347,7 @@ class _UserFormModalState extends State<UserFormModal> {
   Widget _buildRoleOption(String value, String title, String desc) {
     final selected = _role == value;
     return GestureDetector(
-      onTap: _isEditing ? null : () => setState(() => _role = value),
+      onTap: () => setState(() => _role = value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(12),
