@@ -12,17 +12,21 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
-  if (contentLength > 20 * 1024 * 1024) {
-    return new Response(
-      JSON.stringify({ error: "Payload muito grande. Limite: 20MB." }),
-      { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-
   try {
+    const rawBuffer = await req.arrayBuffer();
+    if (rawBuffer.byteLength > 20 * 1024 * 1024) {
+      return new Response(
+        JSON.stringify({ error: "Payload muito grande. Limite: 20MB." }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const bodyStr = new TextDecoder().decode(rawBuffer);
+    const body = JSON.parse(bodyStr);
+
+    let shouldCountRateLimit = false;
+
     // Parse do body primeiro para poder usar na autenticacao webhook (WhatsApp suporta body.phone)
-    const body = await req.json().catch(() => ({}));
+    // const body = await req.json().catch(() => ({}));
 
     // Autentica o request (JWT Bearer ou x-webhook-secret)
     const auth = await authenticate(req, { phone: body.phone });
@@ -60,8 +64,9 @@ serve(async (req: Request) => {
     const serviceClient = getServiceClient();
 
     // Rate limiting antes de executar o agente
+    const channel = body.channel || "web";
     try {
-      await checkRateLimit(auth.tenant_id, auth.user_id, serviceClient);
+      await checkRateLimit(auth.tenant_id, auth.user_id, channel, serviceClient);
     } catch (err: unknown) {
       if (err instanceof RateLimitExceeded) {
         return new Response(
@@ -81,6 +86,7 @@ serve(async (req: Request) => {
         tenant_id: auth.tenant_id,
         user_id: auth.user_id,
         channel: body.channel || "web",
+        screen_context: body.screen_context,
         conversation_id: body.conversation_id,
         message: {
           role: "user",
@@ -93,22 +99,47 @@ serve(async (req: Request) => {
         serviceClient,
       });
 
+      shouldCountRateLimit = true;
+
       return new Response(JSON.stringify(result), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } finally {
-      // Incrementa rate limit sempre que possível
-      incrementRateLimit(auth.tenant_id, auth.user_id, serviceClient).catch(e => console.error("Erro incrementRateLimit", e));
+      if (shouldCountRateLimit) {
+        incrementRateLimit(auth.tenant_id, auth.user_id, channel, serviceClient).catch(e => console.error("Erro incrementRateLimit", e));
+      }
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[ai-agent] fatal:", msg);
+
+    let status = 500;
+    const errorHeaders: Record<string, string> = { ...corsHeaders, "Content-Type": "application/json" };
+    
+    if (msg.toLowerCase().includes("limite de taxa") || err instanceof RateLimitExceeded) {
+      status = 429;
+      if (err instanceof RateLimitExceeded) {
+        errorHeaders["Retry-After"] = String(err.retryAfter);
+      }
+    } else if (
+      msg.toLowerCase().includes("autenticacao") ||
+      msg.toLowerCase().includes("jwt") ||
+      msg.toLowerCase().includes("token")
+    ) {
+      status = 401;
+    } else if (
+      msg.toLowerCase().includes("timeout") ||
+      msg.toLowerCase().includes("indisponivel")
+    ) {
+      status = 503;
+    }
+
     return new Response(
-      JSON.stringify({ error: "internal_error" }),
+      JSON.stringify({ error: msg || "internal_error" }),
       {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status,
+        headers: errorHeaders,
       },
     );
   }

@@ -7,12 +7,22 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../domain/ai_chat_provider.dart';
 import '../../custos/custos_provider.dart';
+import '../../locacao/locacao_provider.dart';
 import 'widgets/message_bubble.dart';
 import 'widgets/pending_action_card.dart';
 import 'widgets/chat_input.dart';
 
 class ChatPanel extends StatefulWidget {
-  const ChatPanel({super.key});
+  final String channel;
+  final VoidCallback? onActionConfirmed;
+  final VoidCallback? onClose;
+
+  const ChatPanel({
+    super.key,
+    this.channel = 'web',
+    this.onActionConfirmed,
+    this.onClose,
+  });
 
   @override
   State<ChatPanel> createState() => _ChatPanelState();
@@ -44,10 +54,14 @@ class _ChatPanelState extends State<ChatPanel> {
             .map((a) => (mimeType: a.mimeType, base64: a.base64Data))
             .toList(),
         text.isEmpty ? null : text,
+        screenContext: widget.channel == 'web' ? null : widget.channel,
       );
       setState(() => _attachments.clear());
     } else {
-      provider.sendText(text);
+      provider.sendText(
+        text,
+        screenContext: widget.channel == 'web' ? null : widget.channel,
+      );
     }
     _controller.clear();
   }
@@ -98,8 +112,8 @@ class _ChatPanelState extends State<ChatPanel> {
       color: AppColors.surfaceDark,
       child: Column(
         children: [
-          const _ChatPanelHeader(),
-          Expanded(child: _ChatBody()),
+          _ChatPanelHeader(onClose: widget.onClose),
+          Expanded(child: _ChatBody(onActionConfirmed: widget.onActionConfirmed)),
           _ChatInputArea(
             controller: _controller,
             sending: sending,
@@ -116,7 +130,8 @@ class _ChatPanelState extends State<ChatPanel> {
 
 /// ── Header ───────────────────────────────────────────────────────────────
 class _ChatPanelHeader extends StatefulWidget {
-  const _ChatPanelHeader();
+  final VoidCallback? onClose;
+  const _ChatPanelHeader({this.onClose});
 
   @override
   State<_ChatPanelHeader> createState() => _ChatPanelHeaderState();
@@ -257,7 +272,13 @@ class _ChatPanelHeaderState extends State<_ChatPanelHeader>
             borderRadius: BorderRadius.circular(8),
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
-              onTap: () => Navigator.of(context).pop(),
+              onTap: () {
+                if (widget.onClose != null) {
+                  widget.onClose!();
+                } else {
+                  Navigator.of(context).pop();
+                }
+              },
               child: const Padding(
                 padding: EdgeInsets.all(6),
                 child: Icon(
@@ -276,6 +297,9 @@ class _ChatPanelHeaderState extends State<_ChatPanelHeader>
 
 /// ── Body ─────────────────────────────────────────────────────────────────
 class _ChatBody extends StatelessWidget {
+  final VoidCallback? onActionConfirmed;
+  const _ChatBody({this.onActionConfirmed});
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AiChatProvider>();
@@ -350,7 +374,9 @@ class _ChatBody extends StatelessWidget {
                     onConfirm: () async {
                       await context.read<AiChatProvider>().confirmAction(action.actionId);
                       if (context.mounted) {
+                        await context.read<LocacaoProvider>().recarregarContratos();
                         await context.read<CustosProvider>().refresh();
+                        onActionConfirmed?.call();
                       }
                     },
                     onCancel: () =>

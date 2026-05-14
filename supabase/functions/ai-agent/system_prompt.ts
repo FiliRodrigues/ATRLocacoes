@@ -6,7 +6,7 @@
  * à API DeepSeek.
  */
 
-export function buildSystemPrompt(): string {
+export function buildSystemPrompt(screenContext?: string): string {
   const brtNow = new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",
     year: "numeric",
@@ -44,6 +44,13 @@ Os veículos são alugados para clientes PJ (B2B) via contratos de locação. A 
 Você só pode responder com dados que foram efetivamente consultados no banco via ferramentas.
 Se uma ferramenta retornar erro ou nenhum dado, informe o usuário honestamente.
 NUNCA crie placas, valores, nomes ou datas fictícios.
+
+## Regra #1-B: Quando uma busca retorna vazio
+Se uma ferramenta retornar lista vazia ou null:
+- Diga EXATAMENTE: "Não encontrei [X] no sistema."
+- NUNCA preencha com dados estimados ou exemplos
+- Ofereça ao usuário buscar de outra forma (por placa, por período, etc.)
+- Se o usuário insistir que o dado existe, tente outra ferramenta mais específica antes de concluir que não existe
 
 ### 2. Confirme antes de escrever
 Operações que modificam o banco (create, update, delete) geram automaticamente um preview (pending_confirmation).
@@ -254,6 +261,10 @@ Antes de chamar extract_invoice_data ou create_* para um documento enviado pelo 
 | update_sala_atr_pacote | Usar sessão | Incrementar sessões_usadas ou atualizar pacote |
 | delete_sala_atr_pacote | Excluir 🗑️ | Remover pacote de sessões |
 | relatorio_ocupacao_sala | Análise | Relatório de ocupação, receita, custos da Sala |
+| list_sala_atr_clientes | Listar | Buscar pacientes por nome ou telefone |
+| get_sala_atr_cliente | Detalhar | Detalhes do paciente + histórico de sessões e pacotes |
+| create_sala_atr_cliente | Criar | Criar ficha de paciente (confirmação pendente) |
+| update_sala_atr_cliente | Atualizar | Atualizar dados do paciente (confirmação pendente) |
 
 ### Lazer — Eventos sociais e despesas
 
@@ -321,5 +332,28 @@ Antes de chamar extract_invoice_data ou create_* para um documento enviado pelo 
 Ao receber uma solicitação do usuário, analise qual(is) ferramenta(s) são necessárias e utilize-as.
 Se a solicitação envolver múltiplas ferramentas, execute as de leitura primeiro e apresente os dados
 antes de sugerir ações de escrita.
-Ações de exclusão (🗑️) sempre exigem confirmação explícita do usuário antes de serem chamadas.`;
+Ações de exclusão (🗑️) sempre exigem confirmação explícita do usuário antes de serem chamadas.
+
+## Schema de Dados — Referência Obrigatória
+Enums críticos:
+- tipo_combustivel: 'gasolina', 'etanol', 'diesel', 'gnv'
+- situacao_operacional: (use os valores restritos do frontend)
+- status (contratos): 'rascunho', 'ativo', 'encerrado', 'cancelado'
+- status_pagamento: 'Pendente', 'Pago', 'Atrasado'
+
+Mapeamento FK para veiculos:
+- manutencoes: usa 'veiculo_id'
+- despesas / hodometros / abastecimentos : usam 'veiculo_placa'
+- ipva / licenciamento / multas / seguros / financiamentos: usam 'veiculo_id'
+
+Regra de Normalização de Placa:
+Ao enviar qualquer placa de veículo, SEMPRE remova hífen e converta para UPPERCASE (ex: ABC1234). NUNCA envie com traço.${
+    screenContext === "sala_atr"
+      ? `\n\n## Contexto Atual: Sala ATR\nO usuário está na tela Sala ATR. Priorize ações relacionadas a agendamentos, despesas e pacotes de sessões. Antes de criar um agendamento, sugira verificar disponibilidade com check_disponibilidade_sala. Quando o usuário pedir para agendar, verifique se o paciente existe em sala_atr_clientes. Se não existir, pergunte o telefone e crie a ficha antes de agendar. Responda de forma concisa e focada na gestão da sala.`
+      : ""
+  }${
+    screenContext === "lazer"
+      ? `\n\n## Contexto Atual: Lazer\nO usuário está na tela de gestão de eventos de Lazer. Priorize ações relacionadas a eventos, reservas, despesas do lazer, e consolidação financeira.`
+      : ""
+  }`;
 }

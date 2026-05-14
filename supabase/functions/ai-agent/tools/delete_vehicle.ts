@@ -84,6 +84,44 @@ export const deleteVehicle: AtrTool = {
       return { ok: false, error: `Veículo ${v.placa} possui financiamento ativo. Quite ou remova o financiamento antes de excluir.` };
     }
 
+    // Verifica dependências em paralelo (todas as tabelas com FK para veículos)
+    const [
+      { count: manutCount },
+      { count: abastCount },
+      { count: despCount },
+      { count: hodoCount },
+      { count: ipvaCount },
+      { count: licCount },
+      { count: multaCount },
+      { count: seguroCount },
+    ] = await Promise.all([
+      (supabase as any).from("manutencoes").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("veiculo_id", v.id),
+      (supabase as any).from("abastecimentos").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).ilike("veiculo_placa", v.placa),
+      (supabase as any).from("despesas").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).ilike("veiculo_placa", v.placa),
+      (supabase as any).from("hodometros").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).ilike("veiculo_placa", v.placa),
+      (supabase as any).from("ipva").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("veiculo_id", v.id),
+      (supabase as any).from("licenciamento").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("veiculo_id", v.id),
+      (supabase as any).from("multas").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("veiculo_id", v.id),
+      (supabase as any).from("seguros").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("veiculo_id", v.id),
+    ]);
+
+    const dependencias: string[] = [];
+    if (manutCount) dependencias.push(`${manutCount} manutenção(ões)`);
+    if (abastCount) dependencias.push(`${abastCount} abastecimento(s)`);
+    if (despCount)  dependencias.push(`${despCount} despesa(s)`);
+    if (hodoCount)  dependencias.push(`${hodoCount} hodômetro(s)`);
+    if (ipvaCount)  dependencias.push(`${ipvaCount} registro(s) de IPVA`);
+    if (licCount)   dependencias.push(`${licCount} licenciamento(s)`);
+    if (multaCount) dependencias.push(`${multaCount} multa(s)`);
+    if (seguroCount) dependencias.push(`${seguroCount} seguro(s)`);
+
+    if (dependencias.length > 0) {
+      return {
+        ok: false,
+        error: `Veículo ${v.placa} possui registros vinculados: ${dependencias.join(", ")}. Remova esses registros antes de excluir o veículo.`,
+      };
+    }
+
     const display = `🗑️ Excluir veículo ${v.placa} (${v.modelo || "Veículo"})`;
     return { ok: true, data: { vehicle_id: v.id, plate: v.placa }, display };
   },

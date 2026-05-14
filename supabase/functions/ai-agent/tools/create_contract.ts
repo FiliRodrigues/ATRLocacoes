@@ -1,5 +1,19 @@
 import { AtrTool } from "../types.ts";
 
+function normalizeContractDate(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const brMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (brMatch) {
+    const [, dd, mm, yyyy] = brMatch;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return null;
+}
+
 async function resolveVehiclePlate(identifier: unknown, ctx: Record<string, unknown>) {
   const supabase = ctx.supabase as Record<string, unknown>;
   const tenantId = ctx.tenant_id as string;
@@ -14,7 +28,8 @@ export const createContract: AtrTool = {
   category: "write",
   description:
     "Cria um novo contrato de locação ATR. " +
-    "Use para: 'cria contrato para cliente XPTO, placa ABC-1234, vigência 01/06 a 01/12/2026, R$ 2500/mês'.",
+    "Use para: 'cria contrato para cliente XPTO, placa ABC-1234, vigência 01/06 a 01/12/2026, R$ 2500/mês'. " +
+    "A data final é obrigatória e não pode ficar em branco ou indeterminada.",
   input_schema: {
     type: "object",
     properties: {
@@ -22,8 +37,8 @@ export const createContract: AtrTool = {
       cliente_nome: { type: "string", description: "Nome do cliente (obrigatório)." },
       cliente_cnpj: { type: "string", description: "CNPJ do cliente (obrigatório)." },
       veiculo_placa: { type: "string", description: "Placa do veículo (obrigatório)." },
-      data_inicio: { type: "string", description: "Data de início YYYY-MM-DD." },
-      data_fim: { type: "string", description: "Data de fim YYYY-MM-DD." },
+      data_inicio: { type: "string", description: "Data de início YYYY-MM-DD ou DD/MM/AAAA." },
+      data_fim: { type: "string", description: "Data de fim obrigatória. Use YYYY-MM-DD ou DD/MM/AAAA. Não deixe em branco." },
       sla_km_mes: { type: "integer", description: "SLA de km por mês." },
       valor_mensal: { type: "number", description: "Valor mensal em R$." },
       observacoes: { type: "string", description: "Observações." },
@@ -45,10 +60,18 @@ export const createContract: AtrTool = {
     const veiculo = await resolveVehiclePlate(input.veiculo_placa, ctx);
     if (!veiculo) return { ok: false, error: `Veículo "${input.veiculo_placa}" não encontrado.` };
 
-    const dataInicio = String(input.data_inicio);
-    const dataFim = String(input.data_fim);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataInicio) || !/^\d{4}-\d{2}-\d{2}$/.test(dataFim)) {
-      return { ok: false, error: "Datas inválidas. Use YYYY-MM-DD." };
+    const dataInicio = normalizeContractDate(input.data_inicio);
+    if (!dataInicio) {
+      return { ok: false, error: "Data inicial inválida. Use YYYY-MM-DD ou DD/MM/AAAA." };
+    }
+
+    const dataFim = normalizeContractDate(input.data_fim);
+    if (!dataFim) {
+      return { ok: false, error: "Data final do contrato é obrigatória. Informe em YYYY-MM-DD ou DD/MM/AAAA." };
+    }
+
+    if (dataFim < dataInicio) {
+      return { ok: false, error: "Data final deve ser igual ou posterior à data inicial." };
     }
 
     const valor = Number(input.valor_mensal);
@@ -68,7 +91,7 @@ export const createContract: AtrTool = {
       cliente_contato: input.cliente_contato ? String(input.cliente_contato).trim() : "",
     };
 
-    const display = (await createContract.preview!(input, ctx)) ?? "";
+    const display = (await createContract.preview!(validatedData, ctx)) ?? "";
     return { ok: true, data: validatedData, display };
   },
 };

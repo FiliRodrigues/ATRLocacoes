@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../../../core/data/fleet_data.dart';
 import '../../../core/utils/app_logger.dart';
@@ -56,21 +57,38 @@ class AiChatProvider extends ChangeNotifier {
     _conversationMessageCounts[_activeConversationId!] = _messages.length;
   }
 
+  void _updatePendingActionStatus(
+    String actionId,
+    PendingActionStatus status,
+  ) {
+    for (int i = 0; i < _messages.length; i++) {
+      final msg = _messages[i];
+      if (msg.pendingActions == null) continue;
+
+      final updated = msg.pendingActions!
+          .map(
+            (a) => a.actionId == actionId ? a.copyWith(status: status) : a,
+          )
+          .toList();
+      _messages[i] = msg.copyWith(pendingActions: updated);
+    }
+  }
+
   Future<void> _refreshConversationCounts() async {
     final ids = _conversations.map((c) => c.id).toList();
-    for (final id in ids) {
+    await Future.wait(ids.map((id) async {
       if (_disposed) return;
       try {
         if (id == _activeConversationId) {
           _conversationMessageCounts[id] = _messages.length;
-          continue;
+          return;
         }
         final msgs = await _repo.loadMessages(id);
         _conversationMessageCounts[id] = msgs.length;
       } catch (_) {
         _conversationMessageCounts.putIfAbsent(id, () => 0);
       }
-    }
+    }));
   }
 
   Future<void> _loadState() async {
@@ -85,9 +103,21 @@ class AiChatProvider extends ChangeNotifier {
     }
   }
 
+  Completer<void>? _initCompleter;
+  
   Future<void> init() async {
     if (_initialized) return;
-    await _loadState();
+    if (_initCompleter != null) return _initCompleter!.future;
+    
+    _initCompleter = Completer<void>();
+    try { 
+      await _loadState(); 
+      if (!_initCompleter!.isCompleted) _initCompleter!.complete(); 
+    } catch (e) { 
+      if (!_initCompleter!.isCompleted) _initCompleter!.completeError(e); 
+      _initCompleter = null; 
+      rethrow; 
+    }
   }
 
   // ── Conversas ────────────────────────────────────────────────────────────
@@ -103,11 +133,11 @@ class AiChatProvider extends ChangeNotifier {
   Future<void> loadConversation(String id) async {
     try {
       _activeConversationId = id;
-      _messages.clear();
       _error = null;
       if (!_disposed) notifyListeners();
       final msgs = await _repo.loadMessages(id);
       if (!_disposed) {
+        _messages.clear();
         _messages.addAll(msgs);
         _syncActiveConversationCount();
         _sidebarOpen = false;
@@ -142,15 +172,22 @@ class AiChatProvider extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  String _generateMessageId() {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final r = Random().nextInt(999999);
+    return '${ts}_$r';
+  }
+
   // ── Envio de mensagens ───────────────────────────────────────────────────
 
-  Future<void> sendText(String text) async {
+  Future<void> sendText(String text, {String? screenContext}) async {
     if (_sending) return;
     _sending = true;
     _error = null;
 
-    final wasNew = _activeConversationId == null;
-    final userMsg = AiMessage.userText(text);
+    final conversationSnapshot = _activeConversationId;
+    final wasNew = conversationSnapshot == null;
+    final userMsg = AiMessage.userText(text, isPending: true);
     _messages.add(userMsg);
     _syncActiveConversationCount();
     if (!_disposed) notifyListeners();
@@ -159,19 +196,23 @@ class AiChatProvider extends ChangeNotifier {
     try {
       final response = await _repo.sendMessage(
         channel: 'web',
-        conversationId: _activeConversationId,
+        screenContext: screenContext,
+        conversationId: conversationSnapshot,
         content: [AiTextBlock(text)],
       );
+      
+      if (_activeConversationId != conversationSnapshot && !wasNew) {
+        return; // Descarta resposta se a conversa mudou durante a espera
+      }
+
       _activeConversationId = response.conversationId;
 
       final idx = _messages.indexWhere((m) => m.id == userMsg.id);
       if (idx != -1) {
-        _messages[idx] = AiMessage(
-          id: userMsg.id,
+        _messages[idx] = userMsg.copyWith(
           conversationId: response.conversationId,
-          role: AiMessageRole.user,
-          content: userMsg.content,
-          createdAt: userMsg.createdAt,
+          isPending: false,
+          hasFailed: false,
         );
       }
 
@@ -190,11 +231,16 @@ class AiChatProvider extends ChangeNotifier {
       if (wasNew) await loadConversations();
     } on AiChatException catch (e) {
       _error = e.message;
+      final idx = _messages.indexWhere((m) => m.id == userMsg.id);
+      if (idx != -1) _messages[idx] = userMsg.copyWith(isPending: false, hasFailed: true);
       if (!_disposed) notifyListeners();
-    } catch (e) {
+    } catch (e, st) {
+      AppLogger.error('AiChatProvider.sendText falhou', e, st);
       if (!responseReceived) {
         _error = 'Erro ao enviar mensagem. Tente novamente.';
       }
+      final idx = _messages.indexWhere((m) => m.id == userMsg.id);
+      if (idx != -1) _messages[idx] = userMsg.copyWith(isPending: false, hasFailed: true);
       if (!_disposed) notifyListeners();
     } finally {
       _sending = false;
@@ -206,6 +252,7 @@ class AiChatProvider extends ChangeNotifier {
     List<({String mimeType, String base64})> images,
     String? caption, {
     List<String>? contentHashes,
+    String? screenContext,
   }) async {
     if (_sending) return;
     _sending = true;
@@ -219,13 +266,15 @@ class AiChatProvider extends ChangeNotifier {
       content.add(AiImageBlock(mediaType: img.mimeType, data: img.base64));
     }
 
-    final wasNew = _activeConversationId == null;
+    final conversationSnapshot = _activeConversationId;
+    final wasNew = conversationSnapshot == null;
     final userMsg = AiMessage(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      conversationId: _activeConversationId ?? '',
+      id: _generateMessageId(),
+      conversationId: conversationSnapshot ?? '',
       role: AiMessageRole.user,
       content: content,
       createdAt: DateTime.now(),
+      isPending: true,
     );
     _messages.add(userMsg);
     _syncActiveConversationCount();
@@ -235,11 +284,27 @@ class AiChatProvider extends ChangeNotifier {
     try {
       final response = await _repo.sendMessage(
         channel: 'web',
-        conversationId: _activeConversationId,
+        screenContext: screenContext,
+        conversationId: conversationSnapshot,
         content: content,
         contentHashes: contentHashes,
       );
+
+      if (_activeConversationId != conversationSnapshot && !wasNew) {
+        return; // Descarta
+      }
+
       _activeConversationId = response.conversationId;
+
+      final idx = _messages.indexWhere((m) => m.id == userMsg.id);
+      if (idx != -1) {
+        _messages[idx] = userMsg.copyWith(
+          conversationId: response.conversationId,
+          isPending: false,
+          hasFailed: false,
+        );
+      }
+
       if (response.assistantMessage != null) {
         _messages.add(response.assistantMessage!);
         responseReceived = true;
@@ -248,12 +313,16 @@ class AiChatProvider extends ChangeNotifier {
       if (wasNew) await loadConversations();
     } on AiChatException catch (e) {
       _error = e.message;
+      final idx = _messages.indexWhere((m) => m.id == userMsg.id);
+      if (idx != -1) _messages[idx] = userMsg.copyWith(isPending: false, hasFailed: true);
       if (!_disposed) notifyListeners();
-    } catch (e) {
-      debugPrint('[sendImages] erro: $e');
+    } catch (e, st) {
+      AppLogger.error('AiChatProvider.sendImages falhou', e, st);
       if (!responseReceived) {
         _error = 'Erro ao processar imagens.';
       }
+      final idx = _messages.indexWhere((m) => m.id == userMsg.id);
+      if (idx != -1) _messages[idx] = userMsg.copyWith(isPending: false, hasFailed: true);
       if (!_disposed) notifyListeners();
     } finally {
       _sending = false;
@@ -266,6 +335,7 @@ class AiChatProvider extends ChangeNotifier {
     String pdfLabel,
     String? caption, {
     List<String>? contentHashes,
+    String? screenContext,
   }) async {
     if (_sending) return;
     _sending = true;
@@ -284,13 +354,15 @@ class AiChatProvider extends ChangeNotifier {
       AiTextBlock(pdfLabel),
     ];
 
-    final wasNew = _activeConversationId == null;
+    final conversationSnapshot = _activeConversationId;
+    final wasNew = conversationSnapshot == null;
     final userMsg = AiMessage(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      conversationId: _activeConversationId ?? '',
+      id: _generateMessageId(),
+      conversationId: conversationSnapshot ?? '',
       role: AiMessageRole.user,
       content: displayContent,
       createdAt: DateTime.now(),
+      isPending: true,
     );
     _messages.add(userMsg);
     _syncActiveConversationCount();
@@ -300,11 +372,27 @@ class AiChatProvider extends ChangeNotifier {
     try {
       final response = await _repo.sendMessage(
         channel: 'web',
-        conversationId: _activeConversationId,
+        screenContext: screenContext,
+        conversationId: conversationSnapshot,
         content: backendContent,
         contentHashes: contentHashes,
       );
+      
+      if (_activeConversationId != conversationSnapshot && !wasNew) {
+        return; // Descarta
+      }
+
       _activeConversationId = response.conversationId;
+      
+      final idx = _messages.indexWhere((m) => m.id == userMsg.id);
+      if (idx != -1) {
+        _messages[idx] = userMsg.copyWith(
+          conversationId: response.conversationId,
+          isPending: false,
+          hasFailed: false,
+        );
+      }
+
       if (response.assistantMessage != null) {
         _messages.add(response.assistantMessage!);
         responseReceived = true;
@@ -313,12 +401,16 @@ class AiChatProvider extends ChangeNotifier {
       if (wasNew) await loadConversations();
     } on AiChatException catch (e) {
       _error = e.message;
+      final idx = _messages.indexWhere((m) => m.id == userMsg.id);
+      if (idx != -1) _messages[idx] = userMsg.copyWith(isPending: false, hasFailed: true);
       if (!_disposed) notifyListeners();
-    } catch (e) {
-      debugPrint('[sendPdf] erro: $e');
+    } catch (e, st) {
+      AppLogger.error('AiChatProvider.sendPdf falhou', e, st);
       if (!responseReceived) {
         _error = 'Erro ao processar PDF. Tente novamente.';
       }
+      final idx = _messages.indexWhere((m) => m.id == userMsg.id);
+      if (idx != -1) _messages[idx] = userMsg.copyWith(isPending: false, hasFailed: true);
       if (!_disposed) notifyListeners();
     } finally {
       _sending = false;
@@ -329,26 +421,6 @@ class AiChatProvider extends ChangeNotifier {
   // ── Ações pendentes ──────────────────────────────────────────────────────
 
   Future<void> confirmAction(String actionId) async {
-    // Marca localmente como confirmado imediatamente para sumir o botão
-    for (int i = 0; i < _messages.length; i++) {
-      final msg = _messages[i];
-      if (msg.pendingActions != null) {
-        final updated = msg.pendingActions!
-            .map((a) => a.actionId == actionId
-                ? a.copyWith(status: PendingActionStatus.confirmed)
-                : a)
-            .toList();
-        _messages[i] = AiMessage(
-          id: msg.id,
-          conversationId: msg.conversationId,
-          role: msg.role,
-          content: msg.content,
-          pendingActions: updated,
-          createdAt: msg.createdAt,
-        );
-      }
-    }
-
     _sending = true;
     _error = null;
     if (!_disposed) notifyListeners();
@@ -361,17 +433,25 @@ class AiChatProvider extends ChangeNotifier {
         content: [const AiTextBlock('confirmar')],
         confirmActionId: actionId,
       );
+      _updatePendingActionStatus(
+        actionId,
+        response.confirmedAction?.ok == false
+            ? PendingActionStatus.failed
+            : PendingActionStatus.executed,
+      );
       if (response.assistantMessage != null) {
         _messages.add(response.assistantMessage!);
         responseReceived = true;
       }
       _syncActiveConversationCount();
-      unawaited(FleetRepository.instance.loadFromSupabase());
+      if (response.confirmedAction?.ok != false) {
+        unawaited(FleetRepository.instance.loadFromSupabase());
+      }
     } on AiChatException catch (e) {
       _error = e.message;
       if (!_disposed) notifyListeners();
-    } catch (e) {
-      debugPrint('[confirmAction] erro: $e');
+    } catch (e, st) {
+      AppLogger.error('AiChatProvider.confirmAction falhou', e, st);
       if (!responseReceived) {
         _error = 'Erro ao confirmar ação.';
       }
@@ -383,24 +463,7 @@ class AiChatProvider extends ChangeNotifier {
   }
 
   Future<void> cancelAction(String actionId) async {
-    for (int i = 0; i < _messages.length; i++) {
-      final msg = _messages[i];
-      if (msg.pendingActions != null) {
-        final updated = msg.pendingActions!
-            .map((a) => a.actionId == actionId
-                ? a.copyWith(status: PendingActionStatus.cancelled)
-                : a)
-            .toList();
-        _messages[i] = AiMessage(
-          id: msg.id,
-          conversationId: msg.conversationId,
-          role: msg.role,
-          content: msg.content,
-          pendingActions: updated,
-          createdAt: msg.createdAt,
-        );
-      }
-    }
+    _updatePendingActionStatus(actionId, PendingActionStatus.cancelled);
     _syncActiveConversationCount();
     if (!_disposed) notifyListeners();
 
@@ -420,5 +483,12 @@ class AiChatProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) {
+      super.notifyListeners();
+    }
   }
 }

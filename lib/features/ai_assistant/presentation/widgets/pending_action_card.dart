@@ -211,11 +211,11 @@ class _PendingActionCardState extends State<PendingActionCard> {
   void initState() {
     super.initState();
     _remaining = const Duration(minutes: 60);
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       setState(() {
         if (_remaining.inSeconds > 0) {
-          _remaining -= const Duration(seconds: 1);
+          _remaining -= const Duration(seconds: 30);
         }
       });
     });
@@ -410,9 +410,18 @@ class _PendingActionCardState extends State<PendingActionCard> {
 
   Widget _buildFinalStatus() {
     final success = widget.action.status == PendingActionStatus.confirmed ||
-        widget.action.status == PendingActionStatus.executed;
+      widget.action.status == PendingActionStatus.executed;
+    final failed = widget.action.status == PendingActionStatus.failed;
+    final cancelled = widget.action.status == PendingActionStatus.cancelled;
     final bg = success ? AppColors.glowSuccess : AppColors.glowError;
     final color = success ? AppColors.statusSuccess : AppColors.statusError;
+    final label = success
+      ? 'Registrado com sucesso'
+      : failed
+        ? 'Falha na execução'
+        : cancelled
+          ? 'Cancelado'
+          : 'Aguardando';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -427,7 +436,7 @@ class _PendingActionCardState extends State<PendingActionCard> {
           Icon(success ? LucideIcons.checkCircle2 : LucideIcons.xCircle, size: 14, color: color),
           const SizedBox(width: 6),
           Text(
-            success ? 'Registrado com sucesso' : 'Cancelado',
+            label,
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
           ),
         ],

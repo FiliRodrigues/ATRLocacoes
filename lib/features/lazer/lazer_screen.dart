@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/navigation/app_router.dart';
 import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/app_sidebar.dart';
+import '../../core/widgets/module_defs.dart';
+import '../../core/widgets/sidebar_models.dart';
+import '../../core/widgets/atr_top_bar.dart';
 import '../../core/widgets/bookable_area_shared.dart';
+import '../../core/services/auth_service.dart';
 
 import '../../core/utils/export_csv_stub.dart'
     if (dart.library.html) '../../core/utils/export_csv_html.dart'
@@ -164,8 +170,8 @@ class LazerScreen extends StatefulWidget {
   State<LazerScreen> createState() => _LazerScreenState();
 }
 
-class _LazerScreenState extends State<LazerScreen> {
-  int _tabIndex = 0;
+class _LazerScreenState extends State<LazerScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   DateTime _mesFiltro = DateTime(DateTime.now().year, DateTime.now().month);
   List<_EventoItem> _eventos = [];
   List<_DespesaItem> _despesas = [];
@@ -175,7 +181,14 @@ class _LazerScreenState extends State<LazerScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   // ── Tenant ──────────────────────────────────────────────────────────────
@@ -866,94 +879,146 @@ class _LazerScreenState extends State<LazerScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final mesAbrev = DateFormat('MMM/yyyy', 'pt_BR').format(_mesFiltro).toUpperCase();
+    final currentUser = context.read<AuthService>().currentUser;
+    final availableModules = currentUser == null ? <ModuleDef>[] : buildAvailableModules(currentUser);
+    final sidebarItems = <SidebarItemDef>[
+      SidebarItemDef(
+        icon: LucideIcons.layoutDashboard,
+        title: 'Dashboard',
+        route: AppRoutes.lazer,
+        feature: 'lazer',
+        isActiveOverride: _tabController.index == 0,
+        onTap: () => _tabController.animateTo(0),
+      ),
+      SidebarItemDef(
+        icon: LucideIcons.receipt,
+        title: 'Despesas',
+        route: AppRoutes.lazer,
+        feature: 'lazer',
+        isActiveOverride: _tabController.index == 1,
+        onTap: () => _tabController.animateTo(1),
+      ),
+      SidebarItemDef(
+        icon: LucideIcons.calendarDays,
+        title: 'Agendamentos',
+        route: AppRoutes.lazer,
+        feature: 'lazer',
+        isActiveOverride: _tabController.index == 2,
+        onTap: () => _tabController.animateTo(2),
+      ),
+      SidebarItemDef(
+        icon: LucideIcons.barChart3,
+        title: 'Consolidado',
+        route: AppRoutes.lazer,
+        feature: 'lazer',
+        isActiveOverride: _tabController.index == 3,
+        onTap: () => _tabController.animateTo(3),
+      ),
+    ];
 
-    return Scaffold(
-      body: AtrPageBackground(
-        grid: true,
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: isDark
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.backgroundDark,
-                      AppColors.atrNavyDarker,
-                      AppColors.backgroundDark,
-                    ],
-                    stops: [0, 0.5, 1],
-                  )
-                : null,
-            color: isDark ? null : AppColors.backgroundLight,
-          ),
-          child: SafeArea(
-            child: Row(
-              children: [
-                BookableAreaSidebar(
-                  title: 'Área de Lazer',
-                  subtitle: 'Gestão de Reservas',
-                  icon: LucideIcons.palmtree,
-                  tabIndex: _tabIndex,
-                  onTabChange: (i) => setState(() => _tabIndex = i),
-                  onBack: () => context.go('/selector'),
-                  isDark: isDark,
-                  showConsolidado: true,
-                ),
-                Expanded(
-                  child: Column(
-                    children: [
-                      BookableAreaHeader(
-                        mesFiltro: _mesFiltro,
-                        onPrev: () => _setMes(-1),
-                        onNext: () => _setMes(1),
-                        isDark: isDark,
-                      ),
-                      Expanded(
-                        child: _isLoading
-                            ? const Center(
-                                child: CircularProgressIndicator(
-                                    color: AppColors.atrOrange))
-                            : IndexedStack(
-                                index: _tabIndex,
-                                children: [
-                                  _LazerDashboard(
-                                    eventos: _eventos,
-                                    despesas: _despesas,
-                                    mes: _mesFiltro,
-                                    isDark: isDark,
-                                  ),
-                                  _LazerDespesas(
-                                    eventos: _eventos,
-                                    despesas: _despesas,
-                                    mes: _mesFiltro,
-                                    isDark: isDark,
-                                    onAddDespesa: _adicionarDespesa,
-                                    onTogglePago: _toggleDespesaPago,
-                                    onExportCsv: _exportDespesasCsv,
-                                  ),
-                                  _LazerAgendamentos(
-                                    eventos: _eventos,
-                                    mes: _mesFiltro,
-                                    isDark: isDark,
-                                    onAddEvento: _criarEvento,
-                                    onEditEvento: _editarEvento,
-                                    onDeleteEvento: _excluirEvento,
-                                    onExportCsv: _exportEventosCsv,
-                                  ),
-                                  _LazerConsolidado(
-                                    eventos: _eventos,
-                                    despesas: _despesas,
-                                    ano: _mesFiltro.year,
-                                    isDark: isDark,
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ],
+    return AppSidebar(
+      moduleName: 'Lazer',
+      moduleIcon: LucideIcons.dumbbell,
+      items: sidebarItems,
+      availableModules: availableModules,
+      child: Scaffold(
+        body: AtrPageBackground(
+          grid: true,
+          child: Column(
+            children: [
+              AtrTopBar(
+                title: 'Área de Lazer',
+                subtitle: 'Gestão de Reservas',
+                actions: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.surfaceHoverDark : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLightHex),
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(LucideIcons.chevronLeft, size: 18),
+                          onPressed: () => _setMes(-1),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            mesAbrev,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(LucideIcons.chevronRight, size: 18),
+                          onPressed: () => _setMes(1),
+                        ),
+                      ],
+                    ),
                   ),
+                ],
+              ),
+              Container(
+                color: isDark ? AppColors.atrNavyDarker : Colors.white,
+                child: TabBar(
+                  controller: _tabController,
+                  labelColor: AppColors.atrOrange,
+                  unselectedLabelColor: isDark ? AppColors.textSecondaryDark : Colors.black54,
+                  indicatorColor: AppColors.atrOrange,
+                  indicatorWeight: 3,
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                  tabs: const [
+                    Tab(icon: Icon(LucideIcons.layoutDashboard, size: 18), text: 'Dashboard'),
+                    Tab(icon: Icon(LucideIcons.receipt, size: 18), text: 'Despesas'),
+                    Tab(icon: Icon(LucideIcons.calendarDays, size: 18), text: 'Agendamentos'),
+                    Tab(icon: Icon(LucideIcons.barChart3, size: 18), text: 'Consolidado'),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.atrOrange))
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _LazerDashboard(
+                            eventos: _eventos,
+                            despesas: _despesas,
+                            mes: _mesFiltro,
+                            isDark: isDark,
+                          ),
+                          _LazerDespesas(
+                            eventos: _eventos,
+                            despesas: _despesas,
+                            mes: _mesFiltro,
+                            isDark: isDark,
+                            onAddDespesa: _adicionarDespesa,
+                            onTogglePago: _toggleDespesaPago,
+                            onExportCsv: _exportDespesasCsv,
+                          ),
+                          _LazerAgendamentos(
+                            eventos: _eventos,
+                            mes: _mesFiltro,
+                            isDark: isDark,
+                            onAddEvento: _criarEvento,
+                            onEditEvento: _editarEvento,
+                            onDeleteEvento: _excluirEvento,
+                            onExportCsv: _exportEventosCsv,
+                          ),
+                          _LazerConsolidado(
+                            eventos: _eventos,
+                            despesas: _despesas,
+                            ano: _mesFiltro.year,
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+              ),
+            ],
           ),
         ),
       ),

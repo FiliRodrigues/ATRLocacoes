@@ -105,47 +105,59 @@ class _AppLoaderState extends State<_AppLoader> {
     _initialize();
   }
 
+  String? _initError;
+
   Future<void> _initialize() async {
-    if (!kSupabaseConfigured) {
-      throw StateError(
-        'SUPABASE_URL e SUPABASE_ANON_KEY são obrigatórias. '
-        'Forneça-as via --dart-define no build/run (ex.: run_atr.local.bat).',
-      );
-    }
-
     try {
-      await initializeDateFormatting('pt_BR');
-    } catch (_) {}
-
-    try {
-      await AtrThemeState.init();
-    } catch (_) {}
-
-    try {
-      await FleetCache.init();
-      final cachedFrota = FleetCache.loadFrota();
-      if (cachedFrota != null) {
-        FleetRepository.instance.seedFromCache(cachedFrota);
+      if (!kSupabaseConfigured) {
+        if (mounted) {
+          setState(() => _initError =
+              'SUPABASE_URL / SUPABASE_ANON_KEY não configurados.\n'
+              'Execute o app via run_atr.bat ou run_atr_windows.bat.');
+        }
+        return;
       }
-    } catch (_) {}
 
-    try {
-      await Supabase.initialize(
-        url: kSupabaseUrl,
-        anonKey: kSupabaseAnonKey,
-      );
-    } catch (e) {
-      saveErrorLog('Supabase.initialize failed: $e');
+      try {
+        await initializeDateFormatting('pt_BR');
+      } catch (_) {}
+
+      try {
+        await AtrThemeState.init();
+      } catch (_) {}
+
+      try {
+        await FleetCache.init();
+        final cachedFrota = FleetCache.loadFrota();
+        if (cachedFrota != null) {
+          FleetRepository.instance.seedFromCache(cachedFrota);
+        }
+      } catch (_) {}
+
+      try {
+        await Supabase.initialize(
+          url: kSupabaseUrl,
+          anonKey: kSupabaseAnonKey,
+        );
+      } catch (e) {
+        saveErrorLog('Supabase.initialize failed: $e');
+      }
+
+      unawaited(FleetRepository.instance.loadFromSupabase());
+
+      _authService = AuthService();
+      if (mounted) setState(() => _ready = true);
+    } catch (e, st) {
+      saveErrorLog('_initialize() fatal: $e\n$st');
+      if (mounted) {
+        setState(() => _initError = 'Erro ao inicializar: $e');
+      }
     }
-
-    unawaited(FleetRepository.instance.loadFromSupabase());
-
-    _authService = AuthService();
-    if (mounted) setState(() => _ready = true);
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_initError != null) return _ErrorScreen(message: _initError!);
     if (!_ready) return const _SplashScreen();
 
     return MultiProvider(
@@ -209,6 +221,42 @@ class _SplashScreen extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorScreen extends StatelessWidget {
+  final String message;
+  const _ErrorScreen({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: AppColors.backgroundDark,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, color: Color(0xFFF87171), size: 48),
+                const SizedBox(height: 20),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Plus Jakarta Sans',
+                    color: Color(0xFFF1F5F9),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

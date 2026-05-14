@@ -19,10 +19,42 @@ import type {
 // Constantes
 // ================================================================
 const MAX_ITERATIONS = 15;
-const HISTORY_LIMIT = 80;
+const HISTORY_LIMIT = 40;
 const DEEPSEEK_MODEL = "deepseek-chat";
 const GPT_MODEL = "gpt-4o";
 const MAX_TOKENS = 4096;
+const MAX_HISTORY_CHARS = 80000;
+
+function trimHistoryToFit(msgs: ClaudeMessage[], maxChars: number): ClaudeMessage[] {
+  let jsonStr = JSON.stringify(msgs);
+  if (jsonStr.length <= maxChars) return msgs;
+
+  let trimmed = [...msgs];
+  while (trimmed.length > 2 && JSON.stringify(trimmed).length > maxChars) {
+    let safeIndex = -1;
+    for (let i = 1; i < trimmed.length - 1; i++) {
+      const m = trimmed[i];
+      if (m.role === "user" && Array.isArray(m.content)) {
+        const hasToolResult = m.content.some((b: any) => b.type === "tool_result");
+        if (!hasToolResult) {
+          safeIndex = i;
+          break;
+        }
+      } else if (m.role === "user" && typeof m.content === "string") {
+        safeIndex = i;
+        break;
+      }
+    }
+
+    if (safeIndex !== -1) {
+      trimmed = trimmed.slice(safeIndex);
+    } else {
+      trimmed = trimmed.slice(-2);
+      break;
+    }
+  }
+  return trimmed;
+}
 
 // ================================================================
 // Helper: detecta se mensagem contem imagens
@@ -221,6 +253,68 @@ function extractTextBlocks(content: ClaudeContentBlock[]): string {
     .trim();
 }
 
+function buildReplayAssistantToolCallMessage(message: AiMessage): ClaudeMessage | null {
+  const toolResultBlocks = (message.content as ClaudeContentBlock[]).filter(
+    (block): block is Extract<ClaudeContentBlock, { type: "tool_result" }> => block.type === "tool_result",
+  );
+
+  if (toolResultBlocks.length === 0) {
+    return null;
+  }
+
+  return {
+    role: "assistant",
+    content: toolResultBlocks.map((block, index) => ({
+      type: "tool_use" as const,
+      id: block.tool_use_id,
+      name: message.tool_calls?.[index] || `tool_${index + 1}`,
+      input: {},
+    })),
+  };
+}
+
+function assistantAlreadyReplaysToolCalls(
+  previousMessage: ClaudeMessage | undefined,
+  replayMessage: ClaudeMessage | null,
+): boolean {
+  if (!previousMessage || !replayMessage || previousMessage.role !== "assistant" || !Array.isArray(previousMessage.content) || !Array.isArray(replayMessage.content)) {
+    return false;
+  }
+
+  const previousToolUses = previousMessage.content.filter(
+    (block): block is Extract<ClaudeContentBlock, { type: "tool_use" }> => block.type === "tool_use",
+  );
+  const replayToolUses = replayMessage.content.filter(
+    (block): block is Extract<ClaudeContentBlock, { type: "tool_use" }> => block.type === "tool_use",
+  );
+
+  if (
+    previousToolUses.length === 0 ||
+    previousToolUses.length !== previousMessage.content.length ||
+    previousToolUses.length !== replayToolUses.length
+  ) {
+    return false;
+  }
+
+  return previousToolUses.every((block, index) => {
+    const replayBlock = replayToolUses[index];
+    return block.id === replayBlock.id && block.name === replayBlock.name;
+  });
+}
+
+function pushReplayMessage(messages: ClaudeMessage[], nextMessage: ClaudeMessage): void {
+  const previousMessage = messages[messages.length - 1];
+  if (
+    previousMessage?.role === "user" &&
+    nextMessage.role === "user" &&
+    JSON.stringify(previousMessage.content) === JSON.stringify(nextMessage.content)
+  ) {
+    return;
+  }
+
+  messages.push(nextMessage);
+}
+
 // ================================================================
 // runAgent: loop principal do agente
 // ================================================================
@@ -230,6 +324,7 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
     tenant_id,
     user_id,
     channel,
+    screen_context,
     conversation_id,
     message,
     confirm_action_id,
@@ -315,6 +410,11 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
       conversation_id: convId,
       message: { role: "assistant", content: responseContent },
       pending_actions: [],
+      confirmed_action: {
+        action_id: confirm_action_id,
+        ok: result.ok,
+        error: result.error,
+      },
     };
   }
 
@@ -399,21 +499,71 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
   // ----------------------------------------------------------
   // Passo 5: Constroi array de mensagens para Claude
   // ----------------------------------------------------------
-  // tool_result messages sao mantidas como "user" para preservar
-  // o pareamento com tool_use blocks do assistant. Sem isso,
-  // tool_use blocks ficam orfaos e o modelo perde o contexto.
-  const messages: ClaudeMessage[] = [];
+  // tool_result messages sao mapeadas para role "user" com blocos tool_result,
+  // pois toOpenAiMessages converte esses blocos para role "tool" do OpenAI.
+  // A nova mensagem do usuario e anexada ao ultimo bloco "user" se ele ja
+  // contiver apenas tool_results, evitando dois "user" consecutivos que
+  // causam erro 400 no DeepSeek.
+  let messages: ClaudeMessage[] = [];
   for (const m of history) {
-    const role = m.role === "tool_result" ? "user" as const : m.role as "user" | "assistant";
+    if (m.role === "tool_result") {
+      const replayAssistantMessage = buildReplayAssistantToolCallMessage(m);
+      if (!assistantAlreadyReplaysToolCalls(messages[messages.length - 1], replayAssistantMessage)) {
+        if (replayAssistantMessage) {
+          messages.push(replayAssistantMessage);
+        }
+      }
+
+      const content = stripImagesFromHistory(m.content as ClaudeContentBlock[]);
+      pushReplayMessage(messages, { role: "user", content });
+      continue;
+    }
+
+    const role = m.role as "user" | "assistant";
     const content = stripImagesFromHistory(m.content as ClaudeContentBlock[]);
-    messages.push({ role, content });
+    pushReplayMessage(messages, { role, content });
   }
-  messages.push({ role: "user" as const, content: message.content });
+
+  const historyCountBeforeTrim = messages.length;
+  messages = trimHistoryToFit(messages, MAX_HISTORY_CHARS);
+  const wasHistoryTrimmed = messages.length < historyCountBeforeTrim;
+
+  if (wasHistoryTrimmed) {
+    messages = [
+      {
+        role: "user",
+        content: [{
+          type: "text",
+          text: "[Nota interna: parte do histórico desta conversa foi omitida por limite de contexto. Baseie-se apenas nas mensagens abaixo e nas ferramentas disponíveis para consultar dados atuais.]",
+        }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Entendido." }],
+      },
+      ...messages,
+    ];
+  }
+
+  // Verifica se o ultimo bloco é tool_result (seria role "user" com tool_result blocks).
+  // Nesse caso, anexa a nova mensagem do usuario junto ao mesmo bloco "user"
+  // para evitar dois "user" consecutivos.
+  const lastMsg = messages[messages.length - 1];
+  const lastIsToolResult = lastMsg?.role === "user" &&
+    Array.isArray(lastMsg.content) &&
+    (lastMsg.content as ClaudeContentBlock[]).every((b) => b.type === "tool_result");
+
+  if (lastIsToolResult) {
+    const merged = [...(lastMsg.content as ClaudeContentBlock[]), ...message.content];
+    messages[messages.length - 1] = { ...lastMsg, content: merged };
+  } else {
+    messages.push({ role: "user" as const, content: message.content });
+  }
 
   // ----------------------------------------------------------
   // Passo 6: System prompt
   // ----------------------------------------------------------
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(screen_context);
 
   // ----------------------------------------------------------
   // Passo 7: Loop de tool use (max 10 iteracoes)
@@ -421,6 +571,7 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
   let finalAssistantMessage: ClaudeMessage | null = null;
   const allPendingActions: PendingAction[] = [];
   const forceGpt = messageHasImages(message.content);
+  const consecutiveToolErrors = new Map<string, number>();
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     // a. Chama modelo (GPT-4o se tiver imagens, DeepSeek se texto puro)
@@ -464,20 +615,32 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
       content: response.content,
     });
 
-    // d. Processa cada tool_use block
-    const toolResultBlocks: ClaudeContentBlock[] = [];
+    // d. Processa tool_use blocks (reads em paralelo, writes em sequencia)
+    const toolUseBlocks = response.content.filter(
+      (block): block is Extract<ClaudeContentBlock, { type: "tool_use" }> => block.type === "tool_use",
+    );
+    const toolResultById = new Map<string, Extract<ClaudeContentBlock, { type: "tool_result" }>>();
     const toolCallNames: string[] = [];
+    const readToolBlocks: Array<Extract<ClaudeContentBlock, { type: "tool_use" }>> = [];
+    const writeToolBlocks: Array<Extract<ClaudeContentBlock, { type: "tool_use" }>> = [];
     let hasWriteTool = false;
 
-    for (const block of response.content) {
-      if (block.type !== "tool_use") continue;
-
-      const tool = TOOLS_REGISTRY[block.name];
+    for (const block of toolUseBlocks) {
       toolCallNames.push(block.name);
+      const tool = TOOLS_REGISTRY[block.name];
 
       if (!tool) {
-        // Tool nao encontrada
-        toolResultBlocks.push({
+        const count = (consecutiveToolErrors.get(block.name) ?? 0) + 1;
+        consecutiveToolErrors.set(block.name, count);
+        if (count >= 3) {
+          finalAssistantMessage = {
+            role: "assistant",
+            content: [{ type: "text", text: `⚠️ Ação cancelada automaticamente. A ferramenta solicitada ("${block.name}") não existe no sistema.` }],
+          };
+          await saveMessage(convId, "assistant", finalAssistantMessage.content, null, serviceClient);
+          return { conversation_id: convId, message: finalAssistantMessage, pending_actions: [] };
+        }
+        toolResultById.set(block.id, {
           type: "tool_result",
           tool_use_id: block.id,
           content: JSON.stringify({
@@ -489,78 +652,134 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
         continue;
       }
 
+      consecutiveToolErrors.delete(block.name);
+
       if (tool.category === "write") {
         hasWriteTool = true;
+        writeToolBlocks.push(block);
+      } else {
+        readToolBlocks.push(block);
+      }
+    }
 
-        try {
-          // Gera preview (consulta veiculo, formata valores, etc.)
-          let preview = "";
-          const ctxPreview = createToolContext(tenant_id, user_id, convId, channel, userClient, serviceClient);
-          if (tool.preview) {
-            preview = await tool.preview(block.input, ctxPreview);
-          } else {
-            preview = `Acao: ${tool.name}\nDados: ${JSON.stringify(block.input, null, 2)}`;
-          }
+    const readResults = await Promise.all(readToolBlocks.map(async (block) => {
+      const tool = TOOLS_REGISTRY[block.name];
+      const ctx = createToolContext(tenant_id, user_id, convId, channel, userClient, serviceClient);
+      if (!tool) {
+        return {
+          block,
+          result: { ok: false, error: `Tool "${block.name}" nao encontrada no registro.` },
+        };
+      }
 
-          // Cria registro de auditoria (pending_confirmation)
-          const auditId = await createPendingAudit({
-            tenant_id,
-            user_id,
-            conversation_id: convId,
-            tool_name: block.name,
-            input: block.input,
-            content_hashes: contentHashes.length > 0 ? contentHashes : undefined,
-            serviceClient,
-          });
+      try {
+        const result = await tool.handler(block.input, ctx);
+        return { block, result };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { block, result: { ok: false, error: msg } };
+      }
+    }));
 
-          allPendingActions.push({
-            action_id: auditId,
-            tool_name: block.name,
-            preview,
-          });
+    for (const { block, result } of readResults) {
+      toolResultById.set(block.id, {
+        type: "tool_result",
+        tool_use_id: block.id,
+        content: JSON.stringify(result),
+        is_error: !result.ok,
+      });
+    }
 
-          // Retorna tool_result com metadados de confirmacao
-          toolResultBlocks.push({
-            type: "tool_result",
-            tool_use_id: block.id,
-            content: JSON.stringify({
-              requires_confirmation: true,
-              action_id: auditId,
-              tool_name: block.name,
-              preview,
-            }),
-          });
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          toolResultBlocks.push({
+    for (const block of writeToolBlocks) {
+      const tool = TOOLS_REGISTRY[block.name];
+
+      if (!tool) {
+        toolResultById.set(block.id, {
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: JSON.stringify({
+            ok: false,
+            error: `Tool "${block.name}" nao encontrada no registro.`,
+          }),
+          is_error: true,
+        });
+        continue;
+      }
+
+      try {
+        const ctxPreview = createToolContext(tenant_id, user_id, convId, channel, userClient, serviceClient);
+        const validationResult = await tool.handler(block.input, ctxPreview);
+        if (!validationResult.ok) {
+          toolResultById.set(block.id, {
             type: "tool_result",
             tool_use_id: block.id,
             content: JSON.stringify({
               ok: false,
-              error: `Erro ao preparar acao: ${msg}`,
+              error: validationResult.error || "Dados inválidos para a ação solicitada.",
             }),
             is_error: true,
           });
-        }
-      } else {
-        // Tool de leitura: executa imediatamente
-        const ctx = createToolContext(tenant_id, user_id, convId, channel, userClient, serviceClient);
-        let toolResult;
-        try {
-          toolResult = await tool.handler(block.input, ctx);
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          toolResult = { ok: false, error: msg };
+          continue;
         }
 
-        toolResultBlocks.push({
+        const auditInput = validationResult.data &&
+            typeof validationResult.data === "object" &&
+            !Array.isArray(validationResult.data)
+          ? validationResult.data as Record<string, unknown>
+          : block.input;
+
+        let preview = validationResult.display?.trim() || "";
+        if (!preview) {
+          if (tool.preview) {
+            preview = await tool.preview(auditInput, ctxPreview);
+          } else {
+            preview = `Acao: ${tool.name}\nDados: ${JSON.stringify(auditInput, null, 2)}`;
+          }
+        }
+
+        const auditId = await createPendingAudit({
+          tenant_id,
+          user_id,
+          conversation_id: convId,
+          tool_name: block.name,
+          input: auditInput,
+          content_hashes: contentHashes.length > 0 ? contentHashes : undefined,
+          serviceClient,
+        });
+
+        allPendingActions.push({
+          action_id: auditId,
+          tool_name: block.name,
+          preview,
+        });
+
+        toolResultById.set(block.id, {
           type: "tool_result",
           tool_use_id: block.id,
-          content: JSON.stringify(toolResult),
-          is_error: !toolResult.ok,
+          content: JSON.stringify({
+            requires_confirmation: true,
+            action_id: auditId,
+            tool_name: block.name,
+            preview,
+          }),
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toolResultById.set(block.id, {
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: JSON.stringify({
+            ok: false,
+            error: `Erro ao preparar acao: ${msg}`,
+          }),
+          is_error: true,
         });
       }
     }
+
+    const toolResultBlocks: ClaudeContentBlock[] = toolUseBlocks
+      .map((block) => toolResultById.get(block.id))
+      .filter((block): block is Extract<ClaudeContentBlock, { type: "tool_result" }> => Boolean(block));
 
     // e. Salva mensagem de tool_result
     if (toolCallNames.length > 0) {
@@ -587,9 +806,15 @@ export async function runAgent(params: AgentParams): Promise<AgentResponse> {
       }, forceGpt);
 
       // Se o modelo ainda retornar tool_use (improvável mas possível), filtra para só texto
-      const safeContent: ClaudeContentBlock[] = finalResponse.content.some(b => b.type === "tool_use")
+      const hasToolUse = finalResponse.content.some(b => b.type === "tool_use");
+      const safeContent: ClaudeContentBlock[] = hasToolUse
         ? finalResponse.content.filter(b => b.type !== "tool_use")
         : finalResponse.content;
+
+      if (hasToolUse) {
+        console.warn("[agent] Resposta final continha tool_use — descartado.");
+        safeContent.push({ type: "text", text: "\n\n*(Aviso: Algumas ações solicitadas não puderam ser processadas nesta mensagem.)*" });
+      }
 
       // Detecta duplicatas nos tool_results e injeta aviso visivel na resposta
       let duplicateWarning = "";

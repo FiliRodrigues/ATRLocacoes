@@ -8,9 +8,14 @@ import '../../core/widgets/app_sidebar.dart';
 import '../../core/widgets/bento_card.dart';
 import '../../core/widgets/atr_kpi_card.dart';
 import '../../core/widgets/atr_page_background.dart';
+import '../../core/widgets/frota_sidebar_items.dart';
+import '../../core/widgets/module_defs.dart';
+import '../../core/widgets/sidebar_models.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/data/fleet_data.dart';
 import '../../core/utils/app_logger.dart';
+import '../../core/services/auth_service.dart';
+import '../../core/services/notification_service.dart';
 import '../ai_assistant/presentation/widgets/ai_dashboard_search_bar.dart';
 import '../vehicles/vehicle_form_modal.dart';
 
@@ -103,13 +108,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<FleetRepository>();
+    final auth = context.watch<AuthService>();
+    final user = auth.currentUser;
     final metrics = _computeMetrics(repo);
     final alerts = repo.isLoading ? const <AlertItem>[] : repo.frotaAlertas;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final width = MediaQuery.of(context).size.width;
     final isCompact = width < 1100;
+    final unreadCount = context.watch<NotificationService>().unreadCount;
+    final sidebarItems = user == null
+      ? <SidebarItemDef>[]
+        : buildFrotaItems(
+            user,
+        notificationCount: unreadCount,
+          );
+    final modules = user == null
+      ? <ModuleDef>[]
+        : buildAvailableModules(user);
 
     return AppSidebar(
+      moduleName: 'Frota & Custos',
+      moduleIcon: LucideIcons.truck,
+      items: sidebarItems,
+      availableModules: modules,
       child: Scaffold(
         body: AtrPageBackground(
           grid: true,

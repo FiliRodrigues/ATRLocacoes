@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -140,12 +141,27 @@ class MessageBubble extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              _formatTime(message.createdAt),
-              style: const TextStyle(
-                fontSize: 10,
-                color: AppColors.textMutedDark,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (message.isPending)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 4),
+                    child: Icon(LucideIcons.clock, size: 12, color: AppColors.textMutedDark),
+                  ),
+                if (message.hasFailed)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 4),
+                    child: Icon(LucideIcons.alertCircle, size: 12, color: AppColors.statusError),
+                  ),
+                Text(
+                  _formatTime(message.createdAt),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textMutedDark,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -297,24 +313,35 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildImageBlock(String data) {
+    Uint8List? bytes;
+    try {
+      bytes = base64Decode(data);
+    } catch (_) {}
+
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: Image.memory(
-          base64Decode(data),
-          fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => Container(
-            height: 84,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceDarkAlt,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Center(
-              child: Icon(LucideIcons.imageOff, size: 24, color: AppColors.textMutedDark),
-            ),
-          ),
-        ),
+        child: bytes != null 
+          ? Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => _buildFallbackImage(),
+            )
+          : _buildFallbackImage(),
+      ),
+    );
+  }
+
+  Widget _buildFallbackImage() {
+    return Container(
+      height: 84,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceDarkAlt,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Center(
+        child: Icon(LucideIcons.imageOff, size: 24, color: AppColors.textMutedDark),
       ),
     );
   }

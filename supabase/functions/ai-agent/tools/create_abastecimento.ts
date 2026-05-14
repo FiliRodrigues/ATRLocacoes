@@ -52,6 +52,10 @@ export const createAbastecimento: AtrTool = {
 
     const valor_total = Number(input.valor_total);
     if (isNaN(valor_total) || valor_total <= 0) return { ok: false, error: "Valor total deve ser > 0." };
+    
+    const tipoRaw = input.tipo ? String(input.tipo).trim().toLowerCase() : "gasolina";
+    const COMBUSTIVEIS_VALIDOS = ["gasolina", "etanol", "diesel", "gnv"];
+    if (!COMBUSTIVEIS_VALIDOS.includes(tipoRaw)) return { ok: false, error: `Inválido: "${tipoRaw}". Tipos permitidos: ${COMBUSTIVEIS_VALIDOS.join(', ')}` };
 
     const v = veiculo as any;
     const validatedData = {
@@ -61,7 +65,7 @@ export const createAbastecimento: AtrTool = {
       litros,
       valor_total,
       km_odometro: input.km_odometro != null ? Number(input.km_odometro) : null,
-      tipo: input.tipo ? String(input.tipo).trim() : "gasolina",
+      tipo: tipoRaw,
       posto: input.posto ? String(input.posto).trim() : null,
     };
 

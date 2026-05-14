@@ -135,7 +135,8 @@ export async function executeConfirmedAction(
       audit.tool_name,
       handlerResult.data,
       supabase,
-      params.tenant_id
+      params.tenant_id,
+      params.user_id
     );
 
     // 7. Atualiza audit com o resultado final
@@ -208,8 +209,9 @@ async function executeWriteOperation(
   toolName: string,
   validatedData: unknown,
   supabase: SupabaseClient,
-  tenantId: string
-): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+  tenantId: string,
+  userId: string
+): Promise<{ ok: boolean; data?: unknown; error?: string; display?: string }> {
   switch (toolName) {
     // ----------------------------------------------------------
     // create_maintenance: INSERT em manutencoes
@@ -223,7 +225,7 @@ async function executeWriteOperation(
         veiculo_id: d.vehicle_id,
         veiculo_placa: d.plate || "",
         veiculo_nome: d.model || "",
-        titulo: d.type || "",
+        titulo: d.titulo || d.type || "",
         coluna: d.coluna || "concluidos",
         prioridade: d.prioridade || "media",
         odometro: d.odometro || 0,
@@ -234,10 +236,10 @@ async function executeWriteOperation(
         tipo: d.type || "",
         descricao: d.description || "",
         fornecedor: d.workshop_name || "",
-        custo: d.cost != null ? Number(d.cost) : 0,
+        custo: d.cost != null && Number(d.cost) > 0 ? Number(d.cost) : 0,
         km_no_servico: d.mileage != null ? Number(d.mileage) : null,
         status_pagamento: d.status_pagamento || "Pago",
-        data_conclusao: new Date().toISOString(),
+        data_conclusao: d.date ? new Date(String(d.date)).toISOString() : new Date().toISOString(),
       };
 
       const { data, error } = await supabase
@@ -287,29 +289,17 @@ async function executeWriteOperation(
     case "update_vehicle_mileage": {
       const d = validatedData as Record<string, unknown>;
 
-      // Atualiza km_atual na tabela veiculos
-      const { error: updErr } = await supabase
-        .from("veiculos")
-        .update({ km_atual: d.new_mileage })
-        .eq("id", d.vehicle_id)
-        .eq("tenant_id", tenantId);
-
-      if (updErr) return { ok: false, error: `Erro ao atualizar km: ${updErr.message}` };
-
-      // Registra entrada na tabela hodometros
+      // Atualiza km_atual e insere hodometro em transacao atomica
       const hodEntry = (d.hodometro_entry as Record<string, unknown>) || {};
-      const { data: hod, error: hodErr } = await supabase
-        .from("hodometros")
-        .insert({
-          tenant_id: tenantId,
-          veiculo_placa: d.plate || hodEntry.veiculo_placa,
-          km: d.new_mileage || hodEntry.km,
-          registrado_por: hodEntry.registrado_por || "ia_assistant",
-        })
-        .select("id, veiculo_placa, km, registrado_por")
-        .single();
+      const { error: rpcErr } = await supabase.rpc("update_vehicle_mileage", {
+        p_vehicle_id: d.vehicle_id,
+        p_km: d.new_mileage || hodEntry.km,
+        p_placa: d.plate || hodEntry.veiculo_placa,
+        p_registrado_por: userId,
+        p_tenant_id: tenantId
+      });
 
-      if (hodErr) return { ok: false, error: `Hodometro registrado mas com erro no historico: ${hodErr.message}` };
+      if (rpcErr) return { ok: false, error: `Erro ao atualizar km: ${rpcErr.message}` };
 
       return {
         ok: true,
@@ -317,7 +307,7 @@ async function executeWriteOperation(
           vehicle_plate: d.plate,
           old_mileage: d.old_mileage,
           new_mileage: d.new_mileage,
-          hodometro: hod,
+          hodometro: { km: d.new_mileage || hodEntry.km },
         },
       };
     }
@@ -344,7 +334,7 @@ async function executeWriteOperation(
           veiculo_id: item.vehicle_id,
           veiculo_placa: item.plate || "",
           veiculo_nome: item.model || "",
-          titulo: item.type || "",
+          titulo: item.titulo || item.type || "",
           coluna: item.coluna || "concluidos",
           prioridade: item.prioridade || "media",
           odometro: item.odometro || 0,
@@ -355,10 +345,10 @@ async function executeWriteOperation(
           tipo: item.type || "",
           descricao: item.description || "",
           fornecedor: item.workshop_name || "",
-          custo: item.cost != null ? Number(item.cost) : 0,
+          custo: item.cost != null && Number(item.cost) > 0 ? Number(item.cost) : 0,
           km_no_servico: item.mileage != null ? Number(item.mileage) : null,
           status_pagamento: item.status_pagamento || "Pago",
-          data_conclusao: new Date().toISOString(),
+          data_conclusao: item.date ? new Date(String(item.date)).toISOString() : new Date().toISOString(),
         };
 
         const { data: inserted, error: insErr } = await supabase
@@ -377,9 +367,15 @@ async function executeWriteOperation(
       }
 
       const allFailed = sucessos === 0;
+      
+      const failedDetails = falhas > 0 
+        ? results.filter((r) => !r.ok).map((r) => `• ${r.plate || "Desconhecido"}: ${r.error}`).join("\n")
+        : "";
+
       return {
         ok: !allFailed,
-        error: allFailed ? `Todas as ${falhas} inserções falharam.` : undefined,
+        error: allFailed ? `Todas as ${falhas} inserções falharam.\n${failedDetails}` : undefined,
+        display: `Inseridos: ${sucessos}\nFalharam: ${falhas}${failedDetails ? '\nDetalhes das falhas:\n' + failedDetails : ''}`,
         data: {
           total: items.length,
           sucessos,
@@ -771,6 +767,19 @@ async function executeWriteOperation(
     }
 
     // ----------------------------------------------------------
+    // execute_sql: DDL Seguro
+    // ----------------------------------------------------------
+    case "execute_sql": {
+      const d = validatedData as Record<string, unknown>;
+      const { data, error } = await supabase.rpc("execute_tenant_sql", {
+        p_sql: String(d.sql),
+        p_tenant_id: tenantId,
+      });
+      if (error) return { ok: false, error: `Erro SQL: ${error.message}` };
+      return { ok: true, data, display: `✅ SQL executado com sucesso.` };
+    }
+
+    // ----------------------------------------------------------
     // create_sala_atr_agendamento: INSERT em sala_atr_agendamentos
     // ----------------------------------------------------------
     case "create_sala_atr_agendamento": {
@@ -1090,6 +1099,151 @@ async function executeWriteOperation(
 
       if (error) return { ok: false, error: `Erro ao registrar hodômetro: ${error.message}` };
       return { ok: true, data };
+    }
+
+    // ----------------------------------------------------------
+    // create_ipva: INSERT em ipva
+    // ----------------------------------------------------------
+    case "create_ipva": {
+      const d = validatedData as Record<string, unknown>;
+      const statusValidos = ["Pendente", "Pago", "Vencido"];
+      const status = d.status_pagamento ? String(d.status_pagamento) : "Pendente";
+      if (!statusValidos.includes(status)) {
+        return { ok: false, error: `Status inválido: "${status}". Use: ${statusValidos.join(", ")}.` };
+      }
+
+      // Resolve veiculo_id a partir de vehicle_identifier (placa ou UUID)
+      const ident = String(d.vehicle_identifier || d.veiculo_id || "");
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ident);
+      let veiculoId: string;
+      let veiculoPlaca: string;
+      if (isUuid) {
+        const { data: v } = await supabase.from("veiculos").select("id, placa").eq("tenant_id", tenantId).eq("id", ident).single();
+        if (!v) return { ok: false, error: `Veículo não encontrado: "${ident}".` };
+        veiculoId = v.id; veiculoPlaca = v.placa;
+      } else {
+        const placa = ident.replace(/[\s\-\.]/g, "").toUpperCase();
+        const { data: v } = await supabase.from("veiculos").select("id, placa").eq("tenant_id", tenantId).ilike("placa", placa).single();
+        if (!v) return { ok: false, error: `Veículo não encontrado: "${ident}".` };
+        veiculoId = v.id; veiculoPlaca = v.placa;
+      }
+
+      const insert: Record<string, unknown> = {
+        id: crypto.randomUUID(),
+        tenant_id: tenantId,
+        veiculo_id: veiculoId,
+        ano_referencia: Number(d.ano_referencia),
+        valor_total: Number(d.valor_total),
+        data_vencimento: String(d.data_vencimento),
+        status_pagamento: status,
+      };
+      if (d.data_pagamento) insert.data_pagamento = String(d.data_pagamento);
+      if (d.observacoes) insert.observacoes = String(d.observacoes);
+
+      const { data, error } = await supabase.from("ipva").insert(insert).select("id, veiculo_id, ano_referencia, valor_total, status_pagamento").single();
+      if (error) return { ok: false, error: `Erro ao registrar IPVA: ${error.message}` };
+      return {
+        ok: true,
+        data,
+        display: `✅ IPVA ${d.ano_referencia} registrado para ${veiculoPlaca} — R$ ${Number(d.valor_total).toFixed(2)} (${status})`,
+      };
+    }
+
+    // ----------------------------------------------------------
+    // create_licenciamento: INSERT em licenciamento
+    // ----------------------------------------------------------
+    case "create_licenciamento": {
+      const d = validatedData as Record<string, unknown>;
+      const statusValidos = ["Pendente", "Pago", "Vencido"];
+      const status = d.status_pagamento ? String(d.status_pagamento) : "Pendente";
+      if (!statusValidos.includes(status)) {
+        return { ok: false, error: `Status inválido: "${status}". Use: ${statusValidos.join(", ")}.` };
+      }
+
+      const ident = String(d.vehicle_identifier || d.veiculo_id || "");
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ident);
+      let veiculoId: string;
+      let veiculoPlaca: string;
+      if (isUuid) {
+        const { data: v } = await supabase.from("veiculos").select("id, placa").eq("tenant_id", tenantId).eq("id", ident).single();
+        if (!v) return { ok: false, error: `Veículo não encontrado: "${ident}".` };
+        veiculoId = v.id; veiculoPlaca = v.placa;
+      } else {
+        const placa = ident.replace(/[\s\-\.]/g, "").toUpperCase();
+        const { data: v } = await supabase.from("veiculos").select("id, placa").eq("tenant_id", tenantId).ilike("placa", placa).single();
+        if (!v) return { ok: false, error: `Veículo não encontrado: "${ident}".` };
+        veiculoId = v.id; veiculoPlaca = v.placa;
+      }
+
+      const insert: Record<string, unknown> = {
+        id: crypto.randomUUID(),
+        tenant_id: tenantId,
+        veiculo_id: veiculoId,
+        ano_referencia: Number(d.ano_referencia),
+        valor_total: Number(d.valor_total),
+        data_vencimento: String(d.data_vencimento),
+        status_pagamento: status,
+      };
+      if (d.mes_vencimento) insert.mes_vencimento = String(d.mes_vencimento);
+      if (d.data_pagamento) insert.data_pagamento = String(d.data_pagamento);
+      if (d.observacoes) insert.observacoes = String(d.observacoes);
+
+      const { data, error } = await supabase.from("licenciamento").insert(insert).select("id, veiculo_id, ano_referencia, valor_total, status_pagamento").single();
+      if (error) return { ok: false, error: `Erro ao registrar licenciamento: ${error.message}` };
+      return {
+        ok: true,
+        data,
+        display: `✅ Licenciamento ${d.ano_referencia} registrado para ${veiculoPlaca} — R$ ${Number(d.valor_total).toFixed(2)} (${status})`,
+      };
+    }
+
+    // ----------------------------------------------------------
+    // create_multa: INSERT em multas
+    // ----------------------------------------------------------
+    case "create_multa": {
+      const d = validatedData as Record<string, unknown>;
+      const statusValidos = ["Pendente", "Pago", "Vencido"];
+      const status = d.status_pagamento ? String(d.status_pagamento) : "Pendente";
+      if (!statusValidos.includes(status)) {
+        return { ok: false, error: `Status inválido: "${status}". Use: ${statusValidos.join(", ")}.` };
+      }
+
+      const ident = String(d.vehicle_identifier || d.veiculo_id || "");
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ident);
+      let veiculoId: string;
+      let veiculoPlaca: string;
+      if (isUuid) {
+        const { data: v } = await supabase.from("veiculos").select("id, placa").eq("tenant_id", tenantId).eq("id", ident).single();
+        if (!v) return { ok: false, error: `Veículo não encontrado: "${ident}".` };
+        veiculoId = v.id; veiculoPlaca = v.placa;
+      } else {
+        const placa = ident.replace(/[\s\-\.]/g, "").toUpperCase();
+        const { data: v } = await supabase.from("veiculos").select("id, placa").eq("tenant_id", tenantId).ilike("placa", placa).single();
+        if (!v) return { ok: false, error: `Veículo não encontrado: "${ident}".` };
+        veiculoId = v.id; veiculoPlaca = v.placa;
+      }
+
+      const insert: Record<string, unknown> = {
+        id: crypto.randomUUID(),
+        tenant_id: tenantId,
+        veiculo_id: veiculoId,
+        ano_referencia: Number(d.ano_referencia),
+        mes: String(d.mes),
+        valor: Number(d.valor),
+        status_pagamento: status,
+      };
+      if (d.descricao) insert.descricao = String(d.descricao);
+      if (d.data_infracao) insert.data_infracao = String(d.data_infracao);
+      if (d.data_vencimento) insert.data_vencimento = String(d.data_vencimento);
+      if (d.data_pagamento) insert.data_pagamento = String(d.data_pagamento);
+
+      const { data, error } = await supabase.from("multas").insert(insert).select("id, veiculo_id, ano_referencia, mes, valor, status_pagamento").single();
+      if (error) return { ok: false, error: `Erro ao registrar multa: ${error.message}` };
+      return {
+        ok: true,
+        data,
+        display: `✅ Multa ${d.mes}/${d.ano_referencia} registrada para ${veiculoPlaca} — R$ ${Number(d.valor).toFixed(2)} (${status})`,
+      };
     }
 
     // ----------------------------------------------------------

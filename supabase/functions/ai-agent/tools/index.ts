@@ -48,6 +48,10 @@ import { createChecklistEvento, updateChecklistEvento } from "./manage_checklist
 import { createSeguro, updateSeguro } from "./manage_seguros.ts";
 import { createFinanciamento, updateFinanciamento } from "./manage_financiamento.ts";
 import { deleteFinanciamento, updateParcelaSeguro, createHodometro, updateIpva, updateLicenciamento, updateMulta, validateKmIntervalo } from "./manage_finance_extended.ts";
+import { createIpva } from "./create_ipva.ts";
+import { createLicenciamento } from "./create_licenciamento.ts";
+import { createMulta } from "./create_multa.ts";
+import { getHodometros } from "./get_hodometros.ts";
 
 // ── READ + WRITE — Sala ATR ───────────────────────────────────────
 import {
@@ -80,6 +84,8 @@ import {
   updateLazerDespesa,
   deleteLazerDespesa,
 } from "./manage_lazer.ts";
+
+import { executeSql } from "./execute_sql.ts";
 
 export const TOOLS_REGISTRY: Record<string, AtrTool> = {
   // ── READ — Frota (23 tools) ───────────────────────────────────
@@ -162,6 +168,10 @@ export const TOOLS_REGISTRY: Record<string, AtrTool> = {
   update_ipva: updateIpva,
   update_licenciamento: updateLicenciamento,
   update_multa: updateMulta,
+  create_ipva: createIpva,
+  create_licenciamento: createLicenciamento,
+  create_multa: createMulta,
+  get_hodometros: getHodometros,
 
   // ── READ + WRITE — Sala ATR (14) ──────────────────────────────
   list_sala_atr_agendamentos: listSalaAtrAgendamentos,
@@ -190,6 +200,9 @@ export const TOOLS_REGISTRY: Record<string, AtrTool> = {
   create_lazer_despesa: createLazerDespesa,
   update_lazer_despesa: updateLazerDespesa,
   delete_lazer_despesa: deleteLazerDespesa,
+
+  // ── ADMIN ─────────────────────────────────────────────────────────────
+  execute_sql: executeSql,
 };
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = Object.values(TOOLS_REGISTRY).map((t) => ({

@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/atr_page_background.dart';
 import '../../custos/custos_provider.dart';
+import '../../locacao/locacao_provider.dart';
 import '../data/models/ai_conversation.dart';
 import '../data/models/ai_message.dart';
 import '../domain/ai_chat_provider.dart';
@@ -37,6 +38,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   final List<ImageAttachment> _attachments = [];
+  int _lastMessageCount = 0;
 
   @override
   void initState() {
@@ -97,27 +99,30 @@ class _AiChatScreenState extends State<AiChatScreen> {
       try {
         final bytes = base64Decode(pdf.base64Data);
         final document = await PdfDocument.openData(bytes);
-        final pageCount = document.pages.length.clamp(0, maxPdfPages);
-        for (int i = 0; i < pageCount; i++) {
-          final page = document.pages[i];
-          final pdfImage = await page.render(
-            fullWidth: page.width,
-            fullHeight: page.height,
-          );
-          if (pdfImage == null) continue;
-          final uiImage = await pdfImage.createImage();
-          final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
-          uiImage.dispose();
-          pdfImage.dispose();
-          if (byteData == null) continue;
-          final pngBytes = byteData.buffer.asUint8List();
-          pdfPageImages.add(ImageAttachment(
-            mimeType: 'image/png',
-            base64Data: base64Encode(pngBytes),
-            thumbnailBytes: Uint8List.fromList(pngBytes.take(65536).toList()),
-          ));
+        try {
+          final pageCount = document.pages.length.clamp(0, maxPdfPages);
+          for (int i = 0; i < pageCount; i++) {
+            final page = document.pages[i];
+            final pdfImage = await page.render(
+              fullWidth: page.width,
+              fullHeight: page.height,
+            );
+            if (pdfImage == null) continue;
+            final uiImage = await pdfImage.createImage();
+            final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
+            uiImage.dispose();
+            pdfImage.dispose();
+            if (byteData == null) continue;
+            final pngBytes = byteData.buffer.asUint8List();
+            pdfPageImages.add(ImageAttachment(
+              mimeType: 'image/png',
+              base64Data: base64Encode(pngBytes),
+              thumbnailBytes: Uint8List.fromList(pngBytes.take(65536).toList()),
+            ));
+          }
+        } finally {
+          await document.dispose();
         }
-        await document.dispose();
       } catch (e) {
         pdfRenderErrors++;
         debugPrint('[PDF render] erro: $e');
@@ -142,7 +147,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       provider.sendPdf(backendImages, pdfLabel, messageText,
           contentHashes: pdfHashes.isNotEmpty ? pdfHashes : null);
       sent = true;
-      if (pdfRenderErrors > 0) {
+      if (pdfRenderErrors > 0 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -226,11 +231,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<AiChatProvider>();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (provider.messages.isNotEmpty) {
+    if (provider.messages.length > _lastMessageCount) {
+      _lastMessageCount = provider.messages.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollToBottom();
-      }
-    });
+      });
+    }
 
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
@@ -328,6 +334,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 onConfirm: () async {
                   await context.read<AiChatProvider>().confirmAction(action.actionId);
                   if (context.mounted) {
+                    await context.read<LocacaoProvider>().recarregarContratos();
                     await context.read<CustosProvider>().refresh();
                   }
                 },

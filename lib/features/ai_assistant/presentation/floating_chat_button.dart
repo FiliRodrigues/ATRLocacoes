@@ -36,7 +36,7 @@ class _FloatingChatButtonState extends State<FloatingChatButton> {
 
     try {
       final routeName = GoRouterState.of(context).uri.path;
-      const hiddenRoutes = ['/login', '/selector', '/trocar-senha', '/ai-chat'];
+      const hiddenRoutes = ['/login', '/selector', '/trocar-senha', '/ai-chat', '/sala-atr'];
       return !hiddenRoutes.contains(routeName);
     } catch (_) {
       return false;

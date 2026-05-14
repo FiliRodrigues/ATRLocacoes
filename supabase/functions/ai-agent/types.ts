@@ -101,6 +101,8 @@ export type AgentParams = {
   cancel_action_id?: string;
   /** Hashes SHA-256 de conteúdo para anti-reprocessamento (PDFs, imagens) */
   content_hashes?: string[];
+  /** Contexto de tela do frontend (ex: 'sala_atr') — não afeta channel/rate limit */
+  screen_context?: string;
   /** Client Supabase autenticado com JWT do usuário (respeita RLS) */
   userClient: SupabaseClient;
   /** Client Supabase service_role (bypass RLS, para auditoria e rate limits) */
@@ -114,6 +116,12 @@ export type AgentResponse = {
   message: ClaudeMessage | null;
   /** Ações de escrita que precisam de confirmação do usuário */
   pending_actions: PendingAction[];
+  /** Resultado estruturado de uma confirmação executada */
+  confirmed_action?: {
+    action_id: string;
+    ok: boolean;
+    error?: string;
+  };
 };
 
 /** Ação pendente de confirmação */

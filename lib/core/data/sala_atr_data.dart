@@ -19,6 +19,25 @@ extension TipoPagamentoNome on TipoPagamento {
     }
   }
 
+  String get toDb {
+    switch (this) {
+      case TipoPagamento.particular: return 'particular';
+      case TipoPagamento.convenio30: return 'convenio30';
+      case TipoPagamento.convenio60: return 'convenio60';
+      case TipoPagamento.convenio90: return 'convenio90';
+    }
+  }
+
+  static TipoPagamento fromDb(String? str) {
+    switch (str) {
+      case 'particular': return TipoPagamento.particular;
+      case 'convenio30': return TipoPagamento.convenio30;
+      case 'convenio60': return TipoPagamento.convenio60;
+      case 'convenio90': return TipoPagamento.convenio90;
+      default: return TipoPagamento.particular;
+    }
+  }
+
   int get diasAteRecebimento {
     switch (this) {
       case TipoPagamento.particular: return 0;
@@ -276,7 +295,85 @@ class DespesaSalaAtr {
 }
 
 // ═══════════════════════════════════════════════════
-// CRM
+// CLIENTE (FICHA COMPLETA)
+// ═══════════════════════════════════════════════════
+class SalaAtrCliente {
+  final String id;
+  final String nome;
+  final String telefone;
+  final String email;
+  final DateTime? dataNascimento;
+  final String endereco;
+  final String convenio;
+  final String responsavelNome;
+  final String responsavelTelefone;
+  final String anotacoes;
+  final bool ativo;
+  final DateTime createdAt;
+
+  SalaAtrCliente({
+    required this.id,
+    required this.nome,
+    this.telefone = '',
+    this.email = '',
+    this.dataNascimento,
+    this.endereco = '',
+    this.convenio = '',
+    this.responsavelNome = '',
+    this.responsavelTelefone = '',
+    this.anotacoes = '',
+    this.ativo = true,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  factory SalaAtrCliente.fromMap(Map<String, dynamic> m) => SalaAtrCliente(
+    id: m['id'] as String,
+    nome: m['nome'] as String? ?? '',
+    telefone: m['telefone'] as String? ?? '',
+    email: m['email'] as String? ?? '',
+    dataNascimento: m['data_nascimento'] != null ? DateTime.tryParse(m['data_nascimento'].toString()) : null,
+    endereco: m['endereco'] as String? ?? '',
+    convenio: m['convenio'] as String? ?? '',
+    responsavelNome: m['responsavel_nome'] as String? ?? '',
+    responsavelTelefone: m['responsavel_telefone'] as String? ?? '',
+    anotacoes: m['anotacoes'] as String? ?? '',
+    ativo: m['ativo'] as bool? ?? true,
+    createdAt: m['created_at'] != null ? DateTime.parse(m['created_at'].toString()) : null,
+  );
+
+  Map<String, dynamic> toMap() => {
+    'nome': nome,
+    'telefone': telefone,
+    'email': email,
+    if (dataNascimento != null) 'data_nascimento': _fmtDate(dataNascimento!),
+    'endereco': endereco,
+    'convenio': convenio,
+    'responsavel_nome': responsavelNome,
+    'responsavel_telefone': responsavelTelefone,
+    'anotacoes': anotacoes,
+    'ativo': ativo,
+  };
+
+  String get whatsappUrl {
+    final tel = telefone.replaceAll(RegExp(r'[^\d]'), '');
+    return 'https://wa.me/55$tel';
+  }
+
+  bool get isMinor => dataNascimento != null && _idade(dataNascimento!) < 18;
+
+  static int _idade(DateTime nasc) {
+    final hoje = DateTime.now();
+    int idade = hoje.year - nasc.year;
+    if (hoje.month < nasc.month || (hoje.month == nasc.month && hoje.day < nasc.day)) idade--;
+    return idade;
+  }
+
+  static String _fmtDate(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+}
+
+// ═══════════════════════════════════════════════════
+// CRM (RELATÓRIO AGREGADO)
 // ═══════════════════════════════════════════════════
 class RelatorioCliente {
   final String clienteId;
@@ -298,438 +395,3 @@ class RelatorioCliente {
       pacotesAtivos.where((p) => p.ativo).fold(0, (s, p) => s + p.sessoesRestantes);
 }
 
-// ═══════════════════════════════════════════════════
-// ESTADO GLOBAL DA SALA
-// ═══════════════════════════════════════════════════
-class SalaAtrState extends ChangeNotifier {
-  static final SalaAtrState instance = SalaAtrState._();
-  SalaAtrState._();
-
-  List<AgendamentoSalaAtr> _agendamentos = _gerarAgendamentosMock();
-  List<DespesaSalaAtr> _despesas = _gerarDespesasMock();
-  List<PacoteSessao> _pacotes = _gerarPacotesMock();
-
-  List<AgendamentoSalaAtr> get agendamentos => _agendamentos;
-  List<DespesaSalaAtr> get despesas => _despesas;
-  List<PacoteSessao> get pacotes => _pacotes;
-
-  // ═══════════════════════════════════════════════════
-  // PACOTES DE SESSÕES
-  // ═══════════════════════════════════════════════════
-  void criarPacote({
-    required String clienteId,
-    required String clienteNome,
-    required int totalSessoes,
-    required double valorPago,
-    required double valorAvulso,
-  }) {
-    final pacote = PacoteSessao(
-      id: 'pkg_${DateTime.now().millisecondsSinceEpoch}',
-      clienteId: clienteId,
-      clienteNome: clienteNome,
-      totalSessoes: totalSessoes,
-      valorPago: valorPago,
-      valorPorSessao: valorAvulso,
-      dataCriacao: DateTime.now(),
-    );
-    _pacotes.add(pacote);
-    notifyListeners();
-  }
-
-  PacoteSessao? pacoteAtivoDoCliente(String clienteId) {
-    final ativos = _pacotes
-        .where((p) => p.clienteId == clienteId && p.ativo && !p.isEsgotado)
-        .toList();
-    if (ativos.isEmpty) return null;
-    ativos.sort((a, b) => a.dataCriacao.compareTo(b.dataCriacao));
-    return ativos.first;
-  }
-
-  void _consumirSessaoPacote(String clienteId) {
-    final pacote = pacoteAtivoDoCliente(clienteId);
-    if (pacote == null) return;
-    final index = _pacotes.indexOf(pacote);
-    _pacotes[index] = pacote.copyWith(sessoesUsadas: pacote.sessoesUsadas + 1);
-    if (_pacotes[index].isEsgotado) {
-      _pacotes[index] = _pacotes[index].copyWith(ativo: false);
-    }
-    notifyListeners();
-  }
-
-  // ═══════════════════════════════════════════════════
-  // AGENDAMENTO & RECORRÊNCIA
-  // ═══════════════════════════════════════════════════
-  void adicionarAgendamento({
-    required DateTime inicio,
-    required int duracaoHoras,
-    required String clienteNome,
-    required String clienteTelefone,
-    required double valorPorHora,
-    TipoPagamento tipoPagamento = TipoPagamento.particular,
-    int? semanasRecorrencia,
-    int vezesRecorrencia = 1,
-    int diasIntervalo = 7,
-    bool lembrete24h = true,
-    bool lembrete1h = true,
-  }) {
-    final String cId = 'cli_${clienteNome.replaceAll(' ', '_').toLowerCase()}';
-    final totalOcorrencias = (semanasRecorrencia ?? vezesRecorrencia).clamp(1, 52);
-    final intervaloDias = diasIntervalo.clamp(1, 365);
-
-    for (int i = 0; i < totalOcorrencias; i++) {
-      final dataOcorrencia = inicio.add(Duration(days: intervaloDias * i));
-      final minutosSessao = (duracaoHoras * 60) - 10;
-
-      final novo = AgendamentoSalaAtr(
-        id: DateTime.now().microsecondsSinceEpoch.toString() + i.toString(),
-        clienteId: cId,
-        clienteNome: clienteNome,
-        clienteTelefone: clienteTelefone,
-        inicio: dataOcorrencia,
-        fim: dataOcorrencia.add(Duration(minutes: minutosSessao)),
-        valorTotal: valorPorHora * duracaoHoras,
-        status: StatusAgendamento.pendente,
-        tipoPagamento: tipoPagamento,
-        lembrete24h: lembrete24h,
-        lembrete1h: lembrete1h,
-      );
-      _agendamentos.add(novo);
-    }
-
-    _agendamentos.sort((a, b) => a.inicio.compareTo(b.inicio));
-    notifyListeners();
-  }
-
-  void atualizarStatus(String id, StatusAgendamento novoStatus) {
-    final index = _agendamentos.indexWhere((a) => a.id == id);
-    if (index != -1) {
-      final a = _agendamentos[index];
-      _agendamentos[index] = a.copyWith(status: novoStatus);
-
-      // Se marcou como pago/realizado, deduz do pacote ativo
-      if (novoStatus == StatusAgendamento.pago || novoStatus == StatusAgendamento.realizado) {
-        _consumirSessaoPacote(a.clienteId);
-      }
-      notifyListeners();
-    }
-  }
-
-  void adicionarNotaSessao(String agendamentoId, String texto) {
-    final index = _agendamentos.indexWhere((a) => a.id == agendamentoId);
-    if (index != -1 && texto.trim().isNotEmpty) {
-      _agendamentos[index] = _agendamentos[index].copyWith(
-        notaSessao: NotaSessao(texto: texto.trim(), dataCriacao: DateTime.now()),
-      );
-      notifyListeners();
-    }
-  }
-
-  void toggleLembrete24h(String agendamentoId) {
-    final index = _agendamentos.indexWhere((a) => a.id == agendamentoId);
-    if (index != -1) {
-      _agendamentos[index] = _agendamentos[index].copyWith(
-        lembrete24h: !_agendamentos[index].lembrete24h,
-      );
-      notifyListeners();
-    }
-  }
-
-  void adicionarDespesa({
-    required String descricao,
-    required CategoriaDespesa categoria,
-    required double valor,
-    required DateTime data,
-  }) {
-    _despesas.add(DespesaSalaAtr(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      descricao: descricao,
-      categoria: categoria,
-      valor: valor,
-      data: data,
-    ));
-    _despesas.sort((a, b) => b.data.compareTo(a.data));
-    notifyListeners();
-  }
-
-  // ═══════════════════════════════════════════════════
-  // RESUMO DIÁRIO
-  // ═══════════════════════════════════════════════════
-  ResumoDiario resumoDiario(DateTime dia) {
-    final sessoes = _agendamentos
-        .where((a) => a.inicio.year == dia.year &&
-            a.inicio.month == dia.month &&
-            a.inicio.day == dia.day &&
-            a.status != StatusAgendamento.cancelado_noshow)
-        .toList()
-      ..sort((a, b) => a.inicio.compareTo(b.inicio));
-
-    final confirmadas = sessoes
-        .where((a) => a.status == StatusAgendamento.confirmado || a.status == StatusAgendamento.pago)
-        .length;
-    final pendentes = sessoes.where((a) => a.status == StatusAgendamento.pendente).length;
-    final receitaParticular = sessoes
-        .where((a) => a.tipoPagamento == TipoPagamento.particular &&
-            a.status != StatusAgendamento.cancelado_noshow)
-        .fold(0.0, (s, a) => s + a.valorTotal);
-
-    final aniversariantes = <String>[];
-    final todosClientes = <String, String>{};
-    for (final a in _agendamentos) {
-      todosClientes[a.clienteId] = a.clienteNome;
-    }
-    // Aniversariantes mock (num sistema real viria do cadastro do paciente)
-    final nomesAniversario = ['Carlos Silva', 'Ana Oliveira'];
-    for (final nome in nomesAniversario) {
-      if (sessoes.any((a) => a.clienteNome == nome)) {
-        aniversariantes.add(nome);
-      }
-    }
-
-    return ResumoDiario(
-      data: dia,
-      agendamentos: sessoes,
-      totalSessoes: sessoes.length,
-      confirmadas: confirmadas,
-      pendentes: pendentes,
-      receitaParticularHoje: receitaParticular,
-      aniversariantes: aniversariantes,
-      proximaSessao: sessoes.isNotEmpty ? sessoes.first : null,
-    );
-  }
-
-  // ═══════════════════════════════════════════════════
-  // CRM
-  // ═══════════════════════════════════════════════════
-  List<RelatorioCliente> gerarCRM() {
-    final map = <String, RelatorioCliente>{};
-    for (var a in _agendamentos) {
-      if (!map.containsKey(a.clienteId)) {
-        map[a.clienteId] = RelatorioCliente(
-          clienteId: a.clienteId,
-          nome: a.clienteNome,
-          telefone: a.clienteTelefone,
-        );
-      }
-      final c = map[a.clienteId]!;
-      c.qtdeAgendamentos++;
-      if (a.status == StatusAgendamento.cancelado_noshow) c.qtdeNoShows++;
-      if (a.status == StatusAgendamento.pago || a.status == StatusAgendamento.realizado) {
-        c.totalGasto += a.valorTotal;
-      }
-      if (a.isPassado) {
-        if (c.ultimoAtendimento == null || a.inicio.isAfter(c.ultimoAtendimento!)) {
-          c.ultimoAtendimento = a.inicio;
-        }
-      }
-    }
-    // Adiciona pacotes ativos ao CRM
-    for (final p in _pacotes.where((p) => p.ativo && !p.isEsgotado)) {
-      if (map.containsKey(p.clienteId)) {
-        map[p.clienteId]!.pacotesAtivos.add(p);
-      }
-    }
-    final lista = map.values.toList();
-    lista.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
-    return lista;
-  }
-
-  // ═══════════════════════════════════════════════════
-  // DASHBOARD
-  // ═══════════════════════════════════════════════════
-  List<AgendamentoSalaAtr> agendamentosDoDia(DateTime dia) {
-    return _agendamentos
-        .where((a) => a.inicio.year == dia.year &&
-            a.inicio.month == dia.month &&
-            a.inicio.day == dia.day)
-        .toList()
-      ..sort((a, b) => a.inicio.compareTo(b.inicio));
-  }
-
-  AgendamentoSalaAtr? proximoCliente() {
-    final hoje = DateTime.now();
-    final futuros = _agendamentos
-        .where((a) => a.inicio.isAfter(hoje) && a.status != StatusAgendamento.cancelado_noshow)
-        .toList();
-    futuros.sort((a, b) => a.inicio.compareTo(b.inicio));
-    return futuros.isNotEmpty ? futuros.first : null;
-  }
-
-  double receitaBrutaMes(int mes, int ano) {
-    return _agendamentos
-        .where((a) => a.inicio.month == mes &&
-            a.inicio.year == ano &&
-            (a.status == StatusAgendamento.pago || a.status == StatusAgendamento.realizado))
-        .fold(0.0, (s, a) => s + a.valorTotal);
-  }
-
-  double inadimplenciaMes(int mes, int ano) {
-    return _agendamentos
-        .where((a) => a.inicio.month == mes &&
-            a.inicio.year == ano &&
-            a.status == StatusAgendamento.pendente &&
-            a.isPassado)
-        .fold(0.0, (s, a) => s + a.valorTotal);
-  }
-
-  double despesasMes(int mes, int ano) {
-    return _despesas
-        .where((d) => d.data.month == mes && d.data.year == ano)
-        .fold(0.0, (s, d) => s + d.valor);
-  }
-
-  double lucroLiquidoMes(int mes, int ano) {
-    return receitaBrutaMes(mes, ano) - despesasMes(mes, ano);
-  }
-
-  double lucroLiquidoMesAnterior(int mes, int ano) {
-    if (mes == 1) return lucroLiquidoMes(12, ano - 1);
-    return lucroLiquidoMes(mes - 1, ano);
-  }
-
-  double variacaoLucro(int mes, int ano) {
-    final anterior = lucroLiquidoMesAnterior(mes, ano);
-    if (anterior == 0) return 0;
-    return ((lucroLiquidoMes(mes, ano) - anterior) / anterior.abs()) * 100;
-  }
-
-  double ocupacaoPerc(int mes, int ano) {
-    final diasUteis = 22;
-    final horasNoMes = diasUteis * 12;
-    final horasOcupadas = _agendamentos
-        .where((a) => a.inicio.month == mes &&
-            a.inicio.year == ano &&
-            a.status != StatusAgendamento.cancelado_noshow)
-        .length;
-    return (horasOcupadas / horasNoMes * 100).clamp(0, 100);
-  }
-
-  double ocupacaoPercMesAnterior(int mes, int ano) {
-    if (mes == 1) return ocupacaoPerc(12, ano - 1);
-    return ocupacaoPerc(mes - 1, ano);
-  }
-
-  List<RecebimentoFuturoMes> gerarRecebimentosFuturos() {
-    final agora = DateTime.now();
-    final mapa = <String, List<AgendamentoSalaAtr>>{};
-
-    for (final a in _agendamentos) {
-      if (a.tipoPagamento == TipoPagamento.particular) continue;
-      if (a.status != StatusAgendamento.pago && a.status != StatusAgendamento.realizado) continue;
-      final receb = a.dataRecebimento;
-      if (receb.isBefore(agora)) continue;
-
-      final mesRef = DateTime(receb.year, receb.month);
-      final chave = '${mesRef.year}-${mesRef.month.toString().padLeft(2, '0')}';
-      mapa.putIfAbsent(chave, () => []).add(a);
-    }
-
-    final saida = <RecebimentoFuturoMes>[];
-    for (final entrada in mapa.entries) {
-      final partes = entrada.key.split('-');
-      final ano = int.parse(partes[0]);
-      final mes = int.parse(partes[1]);
-      final itens = entrada.value..sort((x, y) => x.dataRecebimento.compareTo(y.dataRecebimento));
-      saida.add(RecebimentoFuturoMes(mes: DateTime(ano, mes), itens: itens));
-    }
-    saida.sort((a, b) => a.mes.compareTo(b.mes));
-    return saida;
-  }
-
-  double totalRecebidoPacotes() {
-    return _pacotes.fold(0.0, (s, p) => s + p.valorPago);
-  }
-
-  int totalSessoesPacotesAtivas() {
-    return _pacotes
-        .where((p) => p.ativo)
-        .fold(0, (s, p) => s + p.sessoesRestantes);
-  }
-
-  // ═══════════════════════════════════════════════════
-  // MOCKS
-  // ═══════════════════════════════════════════════════
-  static List<AgendamentoSalaAtr> _gerarAgendamentosMock() {
-    final rng = Random(123);
-    final lista = <AgendamentoSalaAtr>[];
-    final hoje = DateTime.now();
-    final nomes = ['Carlos Silva', 'Ana Oliveira', 'Marcos Paulo', 'Fernanda Lima', 'Dr. João Mendes'];
-
-    for (int i = -10; i <= 30; i++) {
-      final data = hoje.add(Duration(days: i));
-      if (data.weekday == DateTime.sunday) continue;
-
-      for (int h = 8; h <= 19; h++) {
-        if (rng.nextDouble() > 0.7) {
-          final duracao = rng.nextDouble() > 0.8 ? 2 : 1;
-          final nome = nomes[rng.nextInt(nomes.length)];
-          final inicio = DateTime(data.year, data.month, data.day, h, 0);
-          final fim = inicio.add(Duration(minutes: (duracao * 60) - 10));
-
-          if (fim.hour > 20) continue;
-
-          final isPast = fim.isBefore(hoje);
-
-          StatusAgendamento status;
-          if (isPast) {
-            status = rng.nextDouble() > 0.1 ? StatusAgendamento.realizado : StatusAgendamento.cancelado_noshow;
-          } else if (i <= 2 && i >= 0) {
-            status = rng.nextDouble() > 0.5 ? StatusAgendamento.confirmado : StatusAgendamento.pendente;
-          } else {
-            status = rng.nextDouble() > 0.4 ? StatusAgendamento.pago : StatusAgendamento.pendente;
-          }
-
-          lista.add(AgendamentoSalaAtr(
-            id: 'mock_${data.millisecondsSinceEpoch}_$h',
-            clienteId: 'cli_${nome.replaceAll(' ', '_').toLowerCase()}',
-            clienteNome: nome,
-            clienteTelefone: '551199999${rng.nextInt(9000) + 1000}',
-            inicio: inicio,
-            fim: fim,
-            valorTotal: 150.0 * duracao,
-            status: status,
-            tipoPagamento: TipoPagamento.values[rng.nextInt(TipoPagamento.values.length)],
-            lembrete24h: rng.nextDouble() > 0.2,
-            lembrete1h: rng.nextDouble() > 0.3,
-          ));
-          h += (duracao - 1);
-        }
-      }
-    }
-    lista.sort((a, b) => a.inicio.compareTo(b.inicio));
-    return lista;
-  }
-
-  static List<DespesaSalaAtr> _gerarDespesasMock() {
-    final hoje = DateTime.now();
-    return [
-      DespesaSalaAtr(id: 'd1', descricao: 'Energia Elétrica', categoria: CategoriaDespesa.energia, valor: 350.0, data: hoje.subtract(const Duration(days: 5))),
-      DespesaSalaAtr(id: 'd2', descricao: 'Limpeza Semanal', categoria: CategoriaDespesa.limpeza, valor: 150.0, data: hoje.subtract(const Duration(days: 2))),
-      DespesaSalaAtr(id: 'd3', descricao: 'Internet Fibra', categoria: CategoriaDespesa.internet, valor: 99.90, data: DateTime(hoje.year, hoje.month, 10)),
-    ];
-  }
-
-  static List<PacoteSessao> _gerarPacotesMock() {
-    return [
-      PacoteSessao(
-        id: 'pkg_mock_1',
-        clienteId: 'cli_carlos_silva',
-        clienteNome: 'Carlos Silva',
-        totalSessoes: 10,
-        sessoesUsadas: 4,
-        valorPago: 1200.00,
-        valorPorSessao: 150.00,
-        dataCriacao: DateTime.now().subtract(const Duration(days: 45)),
-      ),
-      PacoteSessao(
-        id: 'pkg_mock_2',
-        clienteId: 'cli_ana_oliveira',
-        clienteNome: 'Ana Oliveira',
-        totalSessoes: 4,
-        sessoesUsadas: 1,
-        valorPago: 500.00,
-        valorPorSessao: 150.00,
-        dataCriacao: DateTime.now().subtract(const Duration(days: 15)),
-      ),
-    ];
-  }
-}

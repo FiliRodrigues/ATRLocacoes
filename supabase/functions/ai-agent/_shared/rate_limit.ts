@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const RATE_LIMITS = {
-  minute: 10,
-  hour: 50,
-  day: 200,
+  minute: 30,
+  hour: 300,
+  day: 1500,
 };
 
 export class RateLimitExceeded extends Error {
@@ -18,19 +18,26 @@ export class RateLimitExceeded extends Error {
 export async function checkRateLimit(
   tenantId: string,
   userId: string,
+  channel: string,
   serviceClient: SupabaseClient,
 ): Promise<void> {
   const now = new Date();
 
-  const { data, error } = await serviceClient
+  let query = serviceClient
     .from("ai_rate_limits")
-    .select("minute_count, hour_count, day_count, minute_window_start, hour_window_start, day_window_start")
-    .eq("phone", userId)
-    .maybeSingle();
+    .select("minute_count, hour_count, day_count, minute_window_start, hour_window_start, day_window_start");
+
+  if (channel === 'whatsapp') {
+    query = query.eq("phone", userId);
+  } else {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
-    console.warn("[rate_limit] Erro ao consultar limites, permitindo:", error.message);
-    return;
+    console.error("[rate_limit] Falha CRÍTICA ao consultar limites:", error.message);
+    throw new Error(`Rate limit check falhou: ${error.message}`);
   }
 
   const row = data as Record<string, unknown> | null;
@@ -50,27 +57,30 @@ export async function checkRateLimit(
   const effectiveDay = dayWindow < dayAgo ? 0 : dayCount;
 
   if (effectiveMinute >= RATE_LIMITS.minute) {
-    const retryAfter = Math.ceil((minuteWindow.getTime() + 60_000 - now.getTime()) / 1000);
-    throw new RateLimitExceeded("Limite de requisições por minuto excedido (10/min).", retryAfter);
+    const retryAfter = Math.max(1, Math.ceil((minuteWindow.getTime() + 60_000 - now.getTime()) / 1000));
+    throw new RateLimitExceeded(`Limite de requisições por minuto excedido (${RATE_LIMITS.minute}/min).`, retryAfter);
   }
   if (effectiveHour >= RATE_LIMITS.hour) {
-    const retryAfter = Math.ceil((hourWindow.getTime() + 3_600_000 - now.getTime()) / 1000);
-    throw new RateLimitExceeded("Limite de requisições por hora excedido (50/hora).", retryAfter);
+    const retryAfter = Math.max(1, Math.ceil((hourWindow.getTime() + 3_600_000 - now.getTime()) / 1000));
+    throw new RateLimitExceeded(`Limite de requisições por hora excedido (${RATE_LIMITS.hour}/hora).`, retryAfter);
   }
   if (effectiveDay >= RATE_LIMITS.day) {
-    const retryAfter = Math.ceil((dayWindow.getTime() + 86_400_000 - now.getTime()) / 1000);
-    throw new RateLimitExceeded("Limite de requisições por dia excedido (200/dia).", retryAfter);
+    const retryAfter = Math.max(1, Math.ceil((dayWindow.getTime() + 86_400_000 - now.getTime()) / 1000));
+    throw new RateLimitExceeded(`Limite de requisições por dia excedido (${RATE_LIMITS.day}/dia).`, retryAfter);
   }
 }
 
 export async function incrementRateLimit(
   tenantId: string,
   userId: string,
+  channel: string,
   serviceClient: SupabaseClient,
 ): Promise<void> {
   try {
     await serviceClient.rpc("increment_rate_limit", {
-      p_phone: userId,
+      p_phone: channel === 'whatsapp' ? userId : null,
+      p_user_id: channel === 'web' ? userId : null,
+      p_channel: channel,
     });
   } catch (err: unknown) {
     console.warn("[rate_limit] Erro ao incrementar contador:", err instanceof Error ? err.message : String(err));

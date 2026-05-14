@@ -151,6 +151,13 @@ serve(async (req: Request) => {
           });
         }
 
+        const { data: resetTarget } = await admin.from('app_users').select('tenant_id').eq('id', user_id).maybeSingle();
+        if (!resetTarget || resetTarget.tenant_id !== callerTenant) {
+          return new Response(JSON.stringify({ error: 'Usuário não encontrado.' }), {
+            status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         await admin.auth.admin.updateUserById(user_id, { password });
         await admin.from('app_users').update({ must_change_password: true }).eq('id', user_id);
 

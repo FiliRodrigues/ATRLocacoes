@@ -697,3 +697,180 @@ export const relatorioOcupacaoSala: AtrTool = {
     };
   },
 };
+
+// ================================================================
+// Listar pacientes da Sala ATR
+// ================================================================
+export const listSalaAtrClientes: AtrTool = {
+  name: "list_sala_atr_clientes",
+  category: "read",
+  description:
+    "Lista pacientes da Sala ATR. Use para buscar pacientes por nome ou telefone.",
+  input_schema: {
+    type: "object",
+    properties: {
+      busca: { type: "string", description: "Texto para buscar no nome ou telefone." },
+    },
+    required: [],
+  },
+
+  preview: async (input, _ctx) => {
+    const busca = input.busca ? ` "${input.busca}"` : "";
+    return `Listar pacientes Sala ATR${busca}`;
+  },
+
+  handler: async (input, ctx) => {
+    const supabase = ctx.supabase as Record<string, unknown>;
+    const tenantId = ctx.tenant_id as string;
+
+    let query = (supabase as any).from("sala_atr_clientes")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("nome");
+
+    if (input.busca) {
+      const termo = String(input.busca);
+      query = query.or(`nome.ilike.%${termo}%,telefone.ilike.%${termo}%`);
+    }
+
+    const { data, error } = await query.limit(20);
+    if (error) return { ok: false, error: `Erro ao listar pacientes: ${error.message}` };
+
+    return {
+      ok: true,
+      data,
+      display: data?.length
+        ? `Encontrei ${(data as Array<unknown>).length} paciente(s).`
+        : "Nenhum paciente encontrado.",
+    };
+  },
+};
+
+// ================================================================
+// Obter detalhes do paciente com histórico de sessões
+// ================================================================
+export const getSalaAtrCliente: AtrTool = {
+  name: "get_sala_atr_cliente",
+  category: "read",
+  description: "Obtém detalhes de um paciente e seu histórico de sessões.",
+  input_schema: {
+    type: "object",
+    properties: {
+      cliente_id: { type: "string", description: "UUID do paciente." },
+    },
+    required: ["cliente_id"],
+  },
+
+  preview: async (input, _ctx) => `Obter paciente Sala ATR: ${input.cliente_id}`,
+
+  handler: async (input, ctx) => {
+    const supabase = ctx.supabase as Record<string, unknown>;
+    const tenantId = ctx.tenant_id as string;
+    const clienteId = String(input.cliente_id);
+
+    const { data: cliente } = await (supabase as any).from("sala_atr_clientes")
+      .select("*")
+      .eq("id", clienteId)
+      .eq("tenant_id", tenantId)
+      .single();
+
+    const { data: agendamentos } = await (supabase as any).from("sala_atr_agendamentos")
+      .select("*")
+      .eq("cliente_id", clienteId)
+      .eq("tenant_id", tenantId)
+      .order("data", { ascending: false })
+      .limit(50);
+
+    const { data: pacotes } = await (supabase as any).from("sala_atr_pacotes")
+      .select("*")
+      .eq("cliente_id", clienteId)
+      .eq("tenant_id", tenantId);
+
+    return {
+      ok: true,
+      data: { cliente, agendamentos, pacotes },
+      display: `Paciente: ${cliente?.nome}. ${(agendamentos as Array<unknown>)?.length || 0} sessões, ${(pacotes as Array<unknown>)?.length || 0} pacotes.`,
+    };
+  },
+};
+
+// ================================================================
+// Criar ficha de paciente (pending confirmation)
+// ================================================================
+export const createSalaAtrCliente: AtrTool = {
+  name: "create_sala_atr_cliente",
+  category: "write",
+  description: "Cria uma ficha de paciente na Sala ATR.",
+  input_schema: {
+    type: "object",
+    properties: {
+      nome: { type: "string", description: "Nome completo." },
+      telefone: { type: "string", description: "Telefone com DDD." },
+      email: { type: "string", description: "Email (opcional)." },
+      data_nascimento: { type: "string", description: "Data de nascimento AAAA-MM-DD (opcional)." },
+      convenio: { type: "string", description: "Convênio (opcional)." },
+      anotacoes: { type: "string", description: "Anotações gerais (opcional)." },
+    },
+    required: ["nome", "telefone"],
+  },
+
+  preview: async (input, _ctx) => `Criar ficha de paciente: ${input.nome}`,
+
+  handler: async (input, ctx) => {
+    const validatedData: Record<string, unknown> = {
+      nome: String(input.nome).trim(),
+      telefone: String(input.telefone).trim(),
+      email: input.email ? String(input.email).trim() : null,
+      data_nascimento: input.data_nascimento ? String(input.data_nascimento) : null,
+      convenio: input.convenio ? String(input.convenio).trim() : null,
+      anotacoes: input.anotacoes ? String(input.anotacoes).trim() : null,
+    };
+
+    const display = (await createSalaAtrCliente.preview!(input, ctx)) ?? "";
+    return { ok: true, data: validatedData, display };
+  },
+};
+
+// ================================================================
+// Atualizar dados do paciente (pending confirmation)
+// ================================================================
+export const updateSalaAtrCliente: AtrTool = {
+  name: "update_sala_atr_cliente",
+  category: "write",
+  description: "Atualiza dados de um paciente da Sala ATR.",
+  input_schema: {
+    type: "object",
+    properties: {
+      cliente_id: { type: "string", description: "UUID do paciente." },
+      nome: { type: "string", description: "Novo nome (opcional)." },
+      telefone: { type: "string", description: "Novo telefone (opcional)." },
+      email: { type: "string", description: "Novo email (opcional)." },
+      convenio: { type: "string", description: "Novo convênio (opcional)." },
+      anotacoes: { type: "string", description: "Novas anotações (opcional)." },
+    },
+    required: ["cliente_id"],
+  },
+
+  preview: async (input, _ctx) => `Atualizar paciente Sala ATR: ${input.cliente_id}`,
+
+  handler: async (input, ctx) => {
+    const supabase = ctx.supabase as Record<string, unknown>;
+    const tenantId = ctx.tenant_id as string;
+    const id = String(input.cliente_id).trim();
+
+    const { data } = await (supabase as any).from("sala_atr_clientes")
+      .select("id").eq("tenant_id", tenantId).eq("id", id).single();
+    if (!data) return { ok: false, error: "Paciente não encontrado." };
+
+    const updates: Record<string, unknown> = {};
+    if (input.nome !== undefined) updates.nome = String(input.nome).trim();
+    if (input.telefone !== undefined) updates.telefone = String(input.telefone).trim();
+    if (input.email !== undefined) updates.email = String(input.email).trim();
+    if (input.convenio !== undefined) updates.convenio = String(input.convenio).trim();
+    if (input.anotacoes !== undefined) updates.anotacoes = String(input.anotacoes).trim();
+
+    if (Object.keys(updates).length === 0) return { ok: false, error: "Nenhum campo para atualizar." };
+    const display = (await updateSalaAtrCliente.preview!(input, ctx)) ?? "";
+    return { ok: true, data: { cliente_id: id, updates }, display };
+  },
+};

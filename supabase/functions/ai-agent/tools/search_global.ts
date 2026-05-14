@@ -27,6 +27,55 @@ export const searchGlobal: AtrTool = {
 
     const results: Record<string, unknown> = {};
     const like = `%${query}%`;
+    const queryNormalized = query.replace(/[\s\-.]/g, "").toUpperCase();
+    const normalizedLike = `%${queryNormalized}%`;
+    const extendedLimit = Math.min(limit, 5);
+    const isYearQuery = /^\d{4}$/.test(query);
+    const yearQuery = isYearQuery ? Number(query) : null;
+
+    const uniqueById = <T extends { id: string }>(rows: T[]): T[] => {
+      const map = new Map<string, T>();
+      for (const row of rows) map.set(row.id, row);
+      return Array.from(map.values());
+    };
+
+    const placaByVeiculoId = new Map<string, string>();
+    const { data: veiculosMatchByPlaca } = await (supabase as any)
+      .from("veiculos")
+      .select("id, placa")
+      .eq("tenant_id", tenantId)
+      .or(`placa.ilike.${like},placa.ilike.${normalizedLike}`)
+      .limit(50);
+
+    const matchedVehicleIds = (veiculosMatchByPlaca || []).map((v: any) => v.id as string);
+    for (const v of veiculosMatchByPlaca || []) {
+      placaByVeiculoId.set(v.id, v.placa);
+    }
+
+    const attachVehiclePlate = async <T extends { veiculo_id: string | null }>(rows: T[]) => {
+      const missingIds = Array.from(new Set(
+        rows
+          .map((row) => row.veiculo_id)
+          .filter((id): id is string => Boolean(id) && !placaByVeiculoId.has(id)),
+      ));
+
+      if (missingIds.length > 0) {
+        const { data: missingVehicles } = await (supabase as any)
+          .from("veiculos")
+          .select("id, placa")
+          .eq("tenant_id", tenantId)
+          .in("id", missingIds);
+
+        for (const v of missingVehicles || []) {
+          placaByVeiculoId.set(v.id, v.placa);
+        }
+      }
+
+      return rows.map((row) => ({
+        ...row,
+        veiculo_placa: row.veiculo_id ? placaByVeiculoId.get(row.veiculo_id) || null : null,
+      }));
+    };
 
     // 1. Veículos (placa, modelo, marca)
     const { data: veiculos } = await (supabase as any)
@@ -83,6 +132,167 @@ export const searchGlobal: AtrTool = {
       .or(`titulo.ilike.${like},tipo.ilike.${like}`)
       .limit(limit);
     if (regras) results.regras_manutencao = regras;
+
+    // 7. Abastecimentos (placa, posto, tipo)
+    const { data: abastecimentos } = await (supabase as any)
+      .from("abastecimentos")
+      .select("id, veiculo_placa, data, litros, valor_total, km_odometro, tipo, posto, registrado_por")
+      .eq("tenant_id", tenantId)
+      .or(`veiculo_placa.ilike.${like},veiculo_placa.ilike.${normalizedLike},posto.ilike.${like},tipo.ilike.${like}`)
+      .order("data", { ascending: false })
+      .limit(extendedLimit);
+    if (abastecimentos) results.abastecimentos = abastecimentos;
+
+    // 8. IPVA (placa via veiculo_id, ano_referencia, status_pagamento)
+    const ipvaRows: any[] = [];
+    if (matchedVehicleIds.length > 0) {
+      const { data } = await (supabase as any)
+        .from("ipva")
+        .select("id, veiculo_id, ano_referencia, valor_total, data_vencimento, data_pagamento, status_pagamento, observacoes")
+        .eq("tenant_id", tenantId)
+        .in("veiculo_id", matchedVehicleIds)
+        .order("ano_referencia", { ascending: false })
+        .limit(extendedLimit);
+      if (data) ipvaRows.push(...data);
+    }
+    if (isYearQuery && yearQuery !== null) {
+      const { data } = await (supabase as any)
+        .from("ipva")
+        .select("id, veiculo_id, ano_referencia, valor_total, data_vencimento, data_pagamento, status_pagamento, observacoes")
+        .eq("tenant_id", tenantId)
+        .eq("ano_referencia", yearQuery)
+        .order("ano_referencia", { ascending: false })
+        .limit(extendedLimit);
+      if (data) ipvaRows.push(...data);
+    }
+    const { data: ipvaByStatus } = await (supabase as any)
+      .from("ipva")
+      .select("id, veiculo_id, ano_referencia, valor_total, data_vencimento, data_pagamento, status_pagamento, observacoes")
+      .eq("tenant_id", tenantId)
+      .ilike("status_pagamento", like)
+      .order("ano_referencia", { ascending: false })
+      .limit(extendedLimit);
+    if (ipvaByStatus) ipvaRows.push(...ipvaByStatus);
+    const ipvaMerged = uniqueById(ipvaRows).slice(0, extendedLimit);
+    if (ipvaMerged.length > 0) results.ipva = await attachVehiclePlate(ipvaMerged);
+
+    // 9. Licenciamento (placa via veiculo_id, ano_referencia, status_pagamento)
+    const licenciamentoRows: any[] = [];
+    if (matchedVehicleIds.length > 0) {
+      const { data } = await (supabase as any)
+        .from("licenciamento")
+        .select("id, veiculo_id, ano_referencia, mes_vencimento, valor_total, data_vencimento, data_pagamento, status_pagamento, observacoes")
+        .eq("tenant_id", tenantId)
+        .in("veiculo_id", matchedVehicleIds)
+        .order("ano_referencia", { ascending: false })
+        .limit(extendedLimit);
+      if (data) licenciamentoRows.push(...data);
+    }
+    if (isYearQuery && yearQuery !== null) {
+      const { data } = await (supabase as any)
+        .from("licenciamento")
+        .select("id, veiculo_id, ano_referencia, mes_vencimento, valor_total, data_vencimento, data_pagamento, status_pagamento, observacoes")
+        .eq("tenant_id", tenantId)
+        .eq("ano_referencia", yearQuery)
+        .order("ano_referencia", { ascending: false })
+        .limit(extendedLimit);
+      if (data) licenciamentoRows.push(...data);
+    }
+    const { data: licenciamentoByStatus } = await (supabase as any)
+      .from("licenciamento")
+      .select("id, veiculo_id, ano_referencia, mes_vencimento, valor_total, data_vencimento, data_pagamento, status_pagamento, observacoes")
+      .eq("tenant_id", tenantId)
+      .ilike("status_pagamento", like)
+      .order("ano_referencia", { ascending: false })
+      .limit(extendedLimit);
+    if (licenciamentoByStatus) licenciamentoRows.push(...licenciamentoByStatus);
+    const licenciamentoMerged = uniqueById(licenciamentoRows).slice(0, extendedLimit);
+    if (licenciamentoMerged.length > 0) results.licenciamento = await attachVehiclePlate(licenciamentoMerged);
+
+    // 10. Multas (placa via veiculo_id, mes, descricao, status_pagamento)
+    const multasRows: any[] = [];
+    if (matchedVehicleIds.length > 0) {
+      const { data } = await (supabase as any)
+        .from("multas")
+        .select("id, veiculo_id, ano_referencia, mes, valor, descricao, status_pagamento, data_infracao, data_vencimento, data_pagamento")
+        .eq("tenant_id", tenantId)
+        .in("veiculo_id", matchedVehicleIds)
+        .order("data_infracao", { ascending: false })
+        .limit(extendedLimit);
+      if (data) multasRows.push(...data);
+    }
+    if (isYearQuery && yearQuery !== null) {
+      const { data } = await (supabase as any)
+        .from("multas")
+        .select("id, veiculo_id, ano_referencia, mes, valor, descricao, status_pagamento, data_infracao, data_vencimento, data_pagamento")
+        .eq("tenant_id", tenantId)
+        .eq("ano_referencia", yearQuery)
+        .order("data_infracao", { ascending: false })
+        .limit(extendedLimit);
+      if (data) multasRows.push(...data);
+    }
+    const { data: multasByText } = await (supabase as any)
+      .from("multas")
+      .select("id, veiculo_id, ano_referencia, mes, valor, descricao, status_pagamento, data_infracao, data_vencimento, data_pagamento")
+      .eq("tenant_id", tenantId)
+      .or(`mes.ilike.${like},descricao.ilike.${like},status_pagamento.ilike.${like}`)
+      .order("data_infracao", { ascending: false })
+      .limit(extendedLimit);
+    if (multasByText) multasRows.push(...multasByText);
+    const multasMerged = uniqueById(multasRows).slice(0, extendedLimit);
+    if (multasMerged.length > 0) results.multas = await attachVehiclePlate(multasMerged);
+
+    // 11. Seguros (placa via veiculo_id, empresa, numero_apolice, status_pagamento)
+    const segurosRows: any[] = [];
+    if (matchedVehicleIds.length > 0) {
+      const { data } = await (supabase as any)
+        .from("seguros")
+        .select("id, veiculo_id, ano_referencia, empresa, numero_apolice, valor_apolice, num_parcelas, data_inicio, data_renovacao, valor_total_pago, status_pagamento, observacoes")
+        .eq("tenant_id", tenantId)
+        .in("veiculo_id", matchedVehicleIds)
+        .order("ano_referencia", { ascending: false })
+        .limit(extendedLimit);
+      if (data) segurosRows.push(...data);
+    }
+    if (isYearQuery && yearQuery !== null) {
+      const { data } = await (supabase as any)
+        .from("seguros")
+        .select("id, veiculo_id, ano_referencia, empresa, numero_apolice, valor_apolice, num_parcelas, data_inicio, data_renovacao, valor_total_pago, status_pagamento, observacoes")
+        .eq("tenant_id", tenantId)
+        .eq("ano_referencia", yearQuery)
+        .order("ano_referencia", { ascending: false })
+        .limit(extendedLimit);
+      if (data) segurosRows.push(...data);
+    }
+    const { data: segurosByText } = await (supabase as any)
+      .from("seguros")
+      .select("id, veiculo_id, ano_referencia, empresa, numero_apolice, valor_apolice, num_parcelas, data_inicio, data_renovacao, valor_total_pago, status_pagamento, observacoes")
+      .eq("tenant_id", tenantId)
+      .or(`empresa.ilike.${like},numero_apolice.ilike.${like},status_pagamento.ilike.${like}`)
+      .order("ano_referencia", { ascending: false })
+      .limit(extendedLimit);
+    if (segurosByText) segurosRows.push(...segurosByText);
+    const segurosMerged = uniqueById(segurosRows).slice(0, extendedLimit);
+    if (segurosMerged.length > 0) results.seguros = await attachVehiclePlate(segurosMerged);
+
+    // 12. Hodometros (último km por placa)
+    const { data: hodometrosRaw } = await (supabase as any)
+      .from("hodometros")
+      .select("id, veiculo_placa, km, registrado_por, created_at")
+      .eq("tenant_id", tenantId)
+      .or(`veiculo_placa.ilike.${like},veiculo_placa.ilike.${normalizedLike}`)
+      .order("created_at", { ascending: false })
+      .limit(extendedLimit * 5);
+
+    const latestByPlaca = new Map<string, any>();
+    for (const row of hodometrosRaw || []) {
+      const placa = String(row.veiculo_placa || "");
+      if (!placa || latestByPlaca.has(placa)) continue;
+      latestByPlaca.set(placa, row);
+      if (latestByPlaca.size >= extendedLimit) break;
+    }
+    const hodometros = Array.from(latestByPlaca.values());
+    if (hodometros.length > 0) results.hodometros = hodometros;
 
     const totalCount = Object.values(results).reduce((sum: number, arr: any) => sum + (arr?.length || 0), 0);
 
