@@ -12,32 +12,43 @@ class UpdateInfo {
 }
 
 class UpdateService {
-  static const _versionJsonUrl =
-      'https://raw.githubusercontent.com/filippe534/ATR/main/releases/version.json';
+  static const _releasesApiUrl =
+      'https://api.github.com/repos/FiliRodrigues/ATRLocacoes/releases/latest';
 
   /// Retorna UpdateInfo se há versão nova, null caso contrário.
   static Future<UpdateInfo?> checkForUpdate() async {
     try {
       final response = await http
-          .get(Uri.parse(_versionJsonUrl))
+          .get(
+            Uri.parse(_releasesApiUrl),
+            headers: {'Accept': 'application/vnd.github+json'},
+          )
           .timeout(const Duration(seconds: 5));
       if (response.statusCode != 200) return null;
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final remoteVersion = data['version'] as String;
-      final info = await PackageInfo.fromPlatform();
-      final localVersion = info.version;
+      final tagName = data['tag_name'] as String?;
+      if (tagName == null) return null;
+      final remoteVersion =
+          tagName.startsWith('v') ? tagName.substring(1) : tagName;
 
-      if (_isNewer(remoteVersion, localVersion)) {
-        return UpdateInfo(
-          version: remoteVersion,
-          url: data['url'] as String,
-          notes: data['notes'] as String? ?? '',
-        );
-      }
-      return null;
+      final assets = (data['assets'] as List?) ?? const [];
+      final msixAsset = assets.cast<Map<String, dynamic>>().firstWhere(
+            (a) => (a['name'] as String).toLowerCase().endsWith('.msix'),
+            orElse: () => const {},
+          );
+      if (msixAsset.isEmpty) return null;
+
+      final info = await PackageInfo.fromPlatform();
+      if (!_isNewer(remoteVersion, info.version)) return null;
+
+      return UpdateInfo(
+        version: remoteVersion,
+        url: msixAsset['browser_download_url'] as String,
+        notes: (data['body'] as String?) ?? '',
+      );
     } catch (_) {
-      return null; // sem internet ou erro — ignora silenciosamente
+      return null;
     }
   }
 
@@ -67,12 +78,16 @@ class UpdateService {
   }
 
   static bool _isNewer(String remote, String local) {
-    final r = remote.split('.').map(int.parse).toList();
-    final l = local.split('.').map(int.parse).toList();
-    for (var i = 0; i < r.length && i < l.length; i++) {
-      if (r[i] > l[i]) return true;
-      if (r[i] < l[i]) return false;
+    try {
+      final r = remote.split('.').map(int.parse).toList();
+      final l = local.split('.').map(int.parse).toList();
+      for (var i = 0; i < r.length && i < l.length; i++) {
+        if (r[i] > l[i]) return true;
+        if (r[i] < l[i]) return false;
+      }
+      return r.length > l.length;
+    } catch (_) {
+      return false;
     }
-    return r.length > l.length;
   }
 }

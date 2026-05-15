@@ -12,8 +12,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: subosito/flutter-action@v2
         with:
@@ -41,40 +39,12 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Update version.json
-        run: |
-          $version = "${{ steps.version.outputs.VERSION }}"
-          $obj = [ordered]@{
-            version      = $version
-            url          = "https://github.com/${{ github.repository }}/releases/download/v$version/ATR-Setup.msix"
-            notes        = "Versão $version"
-            published_at = (Get-Date -Format "yyyy-MM-dd")
-          }
-          $obj | ConvertTo-Json | Out-File -FilePath "releases/version.json" -Encoding utf8NoBOM
-        shell: pwsh
-
-      - name: Commit and push version.json
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          # Salva o version.json atualizado fora do worktree
-          mkdir -p /tmp/release-backup
-          cp releases/version.json /tmp/release-backup/version.json
-          # Faz checkout limpo do main descartando arquivos gerados pelo build
-          git fetch origin main
-          git checkout -f main
-          # Garante que a pasta releases existe no main e restaura o version.json
-          mkdir -p releases
-          cp /tmp/release-backup/version.json releases/version.json
-          git add releases/version.json
-          git diff --staged --quiet || git commit -m "chore: bump version.json to ${{ steps.version.outputs.VERSION }}"
-          git push origin main
-        shell: bash
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: build/windows/x64/runner/Release/ATR-Setup.msix
           name: ATR Locações v${{ steps.version.outputs.VERSION }}
+          body: |
+            Versão ${{ steps.version.outputs.VERSION }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
