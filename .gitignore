@@ -82,3 +82,8 @@ index-premium.html
 frota-premium-mockup.html
 dashboard-premium*.html
 veiculo-dossier-premium-mockup.html
+
+# Certificados de assinatura (NUNCA commitar)
+*.pfx
+*.cer
+atr-cert*

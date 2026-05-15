@@ -2,7 +2,7 @@ name: fleet_app
 description: "Plataforma de Gestão de Frotas (High-end B2B)"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.2+3
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -57,7 +57,7 @@ flutter:
 msix_config:
   display_name: ATR Locações
   publisher_display_name: ATR
+  publisher: CN=ATR Locacoes, O=ATR, C=BR
   identity_name: com.atr.locacoes
-  msix_version: 1.0.0.0
-
+  msix_version: 1.0.2.0
   capabilities: internetClient

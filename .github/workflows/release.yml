@@ -23,8 +23,23 @@ jobs:
       - name: Build Windows Release
         run: flutter build windows --release --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
 
-      - name: Create MSIX
-        run: flutter pub run msix:create --install-certificate false
+      - name: Decode signing certificate and export public .cer
+        run: |
+          $b64 = "${{ secrets.MSIX_CERT_PFX_BASE64 }}"
+          $bytes = [System.Convert]::FromBase64String($b64)
+          $pfxPath = "$env:GITHUB_WORKSPACE\atr-cert.pfx"
+          $cerPath = "$env:GITHUB_WORKSPACE\atr-cert.cer"
+          [System.IO.File]::WriteAllBytes($pfxPath, $bytes)
+          $pwd = ConvertTo-SecureString -String "${{ secrets.MSIX_CERT_PASSWORD }}" -Force -AsPlainText
+          $cert = Get-PfxCertificate -FilePath $pfxPath -Password $pwd
+          Export-Certificate -Cert $cert -FilePath $cerPath | Out-Null
+          Write-Host "PFX: $pfxPath"
+          Write-Host "CER: $cerPath"
+        shell: pwsh
+
+      - name: Create signed MSIX
+        run: flutter pub run msix:create --certificate-path="$env:GITHUB_WORKSPACE\atr-cert.pfx" --certificate-password="${{ secrets.MSIX_CERT_PASSWORD }}" --install-certificate false
+        shell: pwsh
 
       - name: Rename MSIX to fixed name
         run: |
@@ -42,9 +57,15 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/windows/x64/runner/Release/ATR-Setup.msix
+          files: |
+            build/windows/x64/runner/Release/ATR-Setup.msix
+            ${{ github.workspace }}/atr-cert.cer
           name: ATR Locações v${{ steps.version.outputs.VERSION }}
           body: |
-            Versão ${{ steps.version.outputs.VERSION }}
+            ## Versão ${{ steps.version.outputs.VERSION }}
+
+            **Primeira instalação:** baixe `atr-cert.cer` e instale como "Trusted Root Certification Authority" (uma vez), depois baixe e instale `ATR-Setup.msix`.
+
+            **Atualizações:** o app verifica novas versões automaticamente.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
