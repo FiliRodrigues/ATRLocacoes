@@ -38,6 +38,7 @@ dependencies:
   package_info_plus: ^8.0.0
   http: ^1.1.0
   path_provider: ^2.1.0
+  msix: ^3.16.7
 
 
 dev_dependencies:
@@ -47,7 +48,6 @@ dev_dependencies:
     sdk: flutter
   golden_toolkit: ^0.15.0
   flutter_lints: ^4.0.0
-  msix: ^3.16.7
 
 flutter:
   uses-material-design: true
