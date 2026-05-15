@@ -38,7 +38,7 @@ jobs:
         shell: pwsh
 
       - name: Create signed MSIX
-        run: flutter pub run msix:create --certificate-path="$env:GITHUB_WORKSPACE\atr-cert.pfx" --certificate-password="${{ secrets.MSIX_CERT_PASSWORD }}" --install-certificate false
+        run: flutter pub run msix:create --build-windows false --certificate-path="$env:GITHUB_WORKSPACE\atr-cert.pfx" --certificate-password="${{ secrets.MSIX_CERT_PASSWORD }}" --install-certificate false
         shell: pwsh
 
       - name: Rename MSIX to fixed name
