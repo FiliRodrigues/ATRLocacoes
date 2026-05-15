@@ -32,6 +32,8 @@ import 'features/ai_assistant/data/ai_chat_repository.dart';
 import 'features/ai_assistant/domain/ai_chat_provider.dart';
 import 'features/ai_assistant/presentation/floating_chat_button.dart';
 import 'l10n/app_localizations.dart';
+import 'core/services/update_service.dart';
+import 'core/widgets/update_dialog.dart';
 
 export 'core/services/auth_service.dart' show AuthService;
 
@@ -276,6 +278,39 @@ class _ATRAppState extends State<ATRApp> {
   late final AppRouter _appRouter;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _checkForUpdateOnce();
+  }
+
+  bool _updateChecked = false;
+  void _checkForUpdateOnce() {
+    if (_updateChecked) return;
+    _updateChecked = true;
+    Future.delayed(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      final update = await _tryCheckUpdate();
+      if (update != null && mounted) {
+        // ignore: use_build_context_synchronously
+        showDialog(
+          context: context,
+          builder: (_) => UpdateDialog(info: update),
+          barrierDismissible: false,
+        );
+      }
+    });
+  }
+
+  Future<dynamic> _tryCheckUpdate() async {
+    try {
+      final update = await UpdateService.checkForUpdate();
+      return update;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
     widget.authService.checkAuth();
@@ -313,13 +348,13 @@ class _ATRAppState extends State<ATRApp> {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           builder: (context, child) {
-            return Stack(
-              children: [
-                EscapeKeyGuard(child: child ?? const SizedBox.shrink()),
-                _AdminCircleButton(authService: widget.authService),
-                const FloatingChatButton(),
-              ],
-            );
+              return Stack(
+                children: [
+                  EscapeKeyGuard(child: child ?? const SizedBox.shrink()),
+                  _AdminCircleButton(authService: widget.authService),
+                  const FloatingChatButton(),
+                ],
+              );
           },
           routerConfig: _appRouter.router,
         );

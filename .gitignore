@@ -67,3 +67,18 @@ free-claude-code/
 *.txt
 !erros_encontrados.txt
 test/golden/failures/
+
+# Ferramentas de IA locais
+.claude/
+.agents/
+.superpowers/
+skills-lock.json
+
+# Arquivos temporários / mockups HTML
+erros_encontrados.txt
+*-mockup.html
+*-premium*.html
+index-premium.html
+frota-premium-mockup.html
+dashboard-premium*.html
+veiculo-dossier-premium-mockup.html
